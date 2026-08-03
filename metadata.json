@@ -1,0 +1,6 @@
+{
+  "name": "Phone Farm Platform",
+  "description": "Plataforma unificada de gestión de Phone Farm, generación de contenido con IA y automatización de engagement para Instagram.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
