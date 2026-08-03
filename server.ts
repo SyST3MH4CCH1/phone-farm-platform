@@ -16,14 +16,19 @@ const SESSION_COOKIE = "pf_session";
 const SESSION_MAX_AGE_SECONDS = 86400; // 24h
 
 // Credenciales vía entorno. En producción el arranque falla sin ellas.
+// En desarrollo se usan credenciales de demo con un WARN explícito.
+const IS_DEV = process.env.NODE_ENV !== "production";
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (IS_DEV ? "admin123" : "");
 const OPERATOR_USERNAME = process.env.OPERATOR_USERNAME || "operator";
-const OPERATOR_PASSWORD = process.env.OPERATOR_PASSWORD || "";
+const OPERATOR_PASSWORD = process.env.OPERATOR_PASSWORD || (IS_DEV ? "operator123" : "");
 
 if (process.env.NODE_ENV === "production" && (!ADMIN_PASSWORD || !OPERATOR_PASSWORD)) {
   console.error("[FATAL] En producción debe definir ADMIN_PASSWORD y OPERATOR_PASSWORD (ver .env.example).");
   process.exit(1);
+}
+if (IS_DEV && process.env.ADMIN_PASSWORD === undefined) {
+  console.warn("[WARN] Desarrollo: usando credenciales de demo admin/admin123. Define ADMIN_PASSWORD para cambiarlas.");
 }
 
 // Lazy initialization of Gemini API
