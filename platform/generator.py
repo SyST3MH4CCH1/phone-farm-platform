@@ -162,9 +162,10 @@ def _generate_demo_video(keyword: str, dest: Path) -> Path:
     font = next((f for f in _FONT_CANDIDATES if Path(f).exists()), None)
     dest.parent.mkdir(parents=True, exist_ok=True)
     safe_keyword = (keyword or "demo")[:40].replace("'", "")
-    drawtext = (
-        f"drawtext=fontfile='{font.replace(':', '\\:')}':" if font else "drawtext="
-    ) + f"text='{safe_keyword}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2"
+    # Python 3.11: los f-strings no admiten backslash en la expresión
+    escaped_font = font.replace(":", "\\:") if font else ""
+    drawtext = f"drawtext=fontfile='{escaped_font}':" if font else "drawtext="
+    drawtext += f"text='{safe_keyword}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2"
     cmd = [
         ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
         "-f", "lavfi",

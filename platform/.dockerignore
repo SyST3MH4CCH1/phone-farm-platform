@@ -1,8 +1,11 @@
-# Contexto de build de la imagen platform: excluir datos y terceros
-# (taktik-bot se copia explícitamente en el Dockerfile; el contexto de MPT
-# es su propia carpeta en docker-compose.yml)
-third_party
+# Contexto de build de la imagen platform: excluir datos de runtime y el repo
+# MPT (taktik-bot SÍ entra en el contexto: el Dockerfile lo copia explícitamente;
+# el contexto de MPT es su propia carpeta en docker-compose.yml)
+third_party/MoneyPrinterTurbo
 data
+videos
+sessions
+logs
 .git
 *.log
 .env

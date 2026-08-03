@@ -11,18 +11,5 @@
     "status": "offline",
     "ip": "",
     "latency_ms": null
-  },
-  {
-    "id": "proxy_02",
-    "provider": "DataImpulse",
-    "type": "socks5",
-    "host": "gw.dataimpulse.com",
-    "port": 10001,
-    "user": "u",
-    "pass": "p",
-    "assigned_account": "",
-    "status": "offline",
-    "ip": null,
-    "latency_ms": null
   }
 ]

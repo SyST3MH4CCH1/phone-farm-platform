@@ -92,7 +92,12 @@ try {
     Pop-Location
 }
 
+# Puerto del dashboard (compatible PowerShell 5.1)
+$flaskPort = "5000"
+$envLine = Get-Content (Join-Path $Root '.env') -ErrorAction SilentlyContinue | Select-String '^FLASK_PORT='
+if ($envLine) { $flaskPort = ($envLine.ToString() -split '=', 2)[1].Trim() }
+
 Write-Host "`n=== Listo ===" -ForegroundColor Green
-Write-Host "  Dashboard:   http://127.0.0.1:$((Get-Content (Join-Path $Root '.env') | Select-String '^FLASK_PORT' | ForEach-Object { ($_ -split '=')[1] }) ?? '5000')"
+Write-Host "  Dashboard:   http://127.0.0.1:$flaskPort"
 Write-Host "  MPT API:     http://127.0.0.1:8080/docs (solo loopback)"
 Write-Host "  Logs:        docker compose -f $Root\docker-compose.yml logs -f"

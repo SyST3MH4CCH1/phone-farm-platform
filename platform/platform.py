@@ -561,5 +561,8 @@ def videos(filename: str):
 if __name__ == "__main__":
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    logger.info("Phone Farm Platform arrancando en http://127.0.0.1:%d", PORT)
-    app.run(host="127.0.0.1", port=PORT, threaded=True, debug=False, use_reloader=False)
+    # En Docker, Flask escucha en 0.0.0.0 (el loopback lo garantiza el bind
+    # "127.0.0.1:5000:5000" del compose). Local: solo 127.0.0.1.
+    bind_host = "0.0.0.0" if os.getenv("IN_DOCKER") == "1" else "127.0.0.1"
+    logger.info("Phone Farm Platform arrancando en http://%s:%d", bind_host, PORT)
+    app.run(host=bind_host, port=PORT, threaded=True, debug=False, use_reloader=False)
