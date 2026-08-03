@@ -34,6 +34,9 @@ VIDEOS_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", BASE_DIR)) / "videos"
 MPT_API_URL = os.getenv("MPT_API_URL", "http://127.0.0.1:8080").rstrip("/")
 # Prefix real de la API de MoneyPrinterTurbo (verificado contra su openapi.json)
 MPT_API_PREFIX = "/api/v1"
+# BGM: "random" (por defecto) o "" para desactivarlo. La mezcla de BGM con
+# MoviePy puede deadlockear en Mini PCs — "" evita el paso por completo.
+MPT_BGM_TYPE = os.getenv("MPT_BGM_TYPE", "random")
 VIDEO_ASPECT = os.getenv("MPT_VIDEO_ASPECT", "9:16")  # "9:16" | "16:9" | "1:1"
 VOICE_NAME = os.getenv("MPT_VOICE_NAME", "es-ES-AlvaroNeural")
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
@@ -73,6 +76,7 @@ def _submit_task(keyword: str, script: str = "", terms: list[str] | None = None)
         "video_concat_mode": "random",
         "voice_name": VOICE_NAME,
         "subtitle_enabled": True,
+        "bgm_type": MPT_BGM_TYPE,
         "bgm_volume": 0.2,
     }
     try:
@@ -89,8 +93,15 @@ def _submit_task(keyword: str, script: str = "", terms: list[str] | None = None)
 
 
 def _poll_task(task_id: str) -> tuple[int, list[str], str | None]:
-    """Espera a que la tarea termine. Retorna (progress, uris_video, failed_stage)."""
+    """Espera a que la tarea termine. Retorna (progress, uris_video, failed_stage).
+
+    Workaround MPT v1.3.3: tras generar los vídeos, MoviePy a veces deadlockea
+    y el estado nunca flipea a success. Desde los 3 min se comprueba además si
+    final-1.mp4 ya es descargable (GET /download/<task_id>/final-1.mp4) y, si
+    existe, se usa como resultado.
+    """
     deadline = time.monotonic() + TASK_TIMEOUT_S
+    started = time.monotonic()
     while time.monotonic() < deadline:
         try:
             response = requests.get(f"{MPT_API_URL}{MPT_API_PREFIX}/tasks/{task_id}", timeout=10)
@@ -111,15 +122,45 @@ def _poll_task(task_id: str) -> tuple[int, list[str], str | None]:
             return progress, [], failed_stage
         if videos:
             return 100, videos, None
+
+        # Workaround: ¿el vídeo final ya existe aunque el estado no flipeó?
+        if time.monotonic() - started > 180 and progress >= 50:
+            probe = requests.get(
+                f"{MPT_API_URL}{MPT_API_PREFIX}/download/{task_id}/final-1.mp4",
+                timeout=10, stream=True,
+            )
+            if probe.ok and int(probe.headers.get("Content-Length", "0") or 0) > 100_000:
+                logger.warning(
+                    "MPT estado colgado post-generación; usando final-1.mp4 detectado por archivo"
+                )
+                probe.close()
+                return 100, [f"/download/{task_id}/final-1.mp4"], None
+
         logger.info("MPT task %s: progreso %d%%", task_id, progress)
         time.sleep(TASK_POLL_INTERVAL_S)
 
     raise GeneratorError(f"Timeout esperando tarea MPT {task_id} ({TASK_TIMEOUT_S}s)")
 
 
+def _normalize_download_uri(uri: str) -> str:
+    """Normaliza la URI de descarga que devuelve MPT a la ruta real de descarga.
+
+    MPT devuelve p.ej. "/tasks/<id>/combined-1.mp4" pero el endpoint real es
+    GET /api/v1/download/<ruta-relativa-al-storage> (sin prefijo "tasks/").
+    """
+    if uri.startswith(("http://", "https://")):
+        return uri
+    path = uri.lstrip("/")
+    if path.startswith("tasks/"):
+        path = path[len("tasks/"):]
+    if not path.startswith("download/"):
+        path = f"download/{path}"
+    return f"{MPT_API_URL}{MPT_API_PREFIX}/{path}"
+
+
 def _download_video(uri: str, dest: Path) -> None:
-    """Descarga el MP4 de MPT (URI tipo /download/<ruta>) hacia videos/<job_id>.mp4."""
-    url = uri if uri.startswith("http") else f"{MPT_API_URL}{uri}"
+    """Descarga el MP4 de MPT hacia videos/<job_id>.mp4."""
+    url = _normalize_download_uri(uri)
     response = requests.get(url, timeout=120, stream=True)
     if not response.ok:
         raise GeneratorError(f"Descarga MPT falló (HTTP {response.status_code}): {url[:200]}")

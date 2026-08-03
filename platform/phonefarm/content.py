@@ -26,12 +26,16 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", Path(__file__).resolve().parent.parent))
 PROFILES_FILE = DATA_DIR / "content_profiles.json"
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "kimi").lower()  # kimi | openai
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "kimi").lower()  # kimi | openai | minimax
 KIMI_API_KEY = os.getenv("KIMI_API_KEY", "")
 KIMI_BASE_URL = os.getenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1")
 KIMI_MODEL = os.getenv("KIMI_MODEL", "moonshot-v1-8k")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+# MiniMax International (minimax.io) — API compatible con OpenAI
+MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
+MINIMAX_BASE_URL = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1")
+MINIMAX_MODEL = os.getenv("MINIMAX_MODEL", "MiniMax-M2.7")
 
 SCRIPT_TIMEOUT_S = 60
 
@@ -116,11 +120,15 @@ def generate_terms(keyword: str, profile: dict[str, Any], limit: int = 5) -> lis
 # ---------------------------------------------------------------------------
 
 def _llm_chat(system: str, prompt: str) -> str | None:
-    """Chat completions directo (Kimi Moonshot u OpenAI). None si no hay key."""
+    """Chat completions directo (Kimi Moonshot, OpenAI o MiniMax). None si no hay key."""
     if LLM_PROVIDER == "openai" and OPENAI_API_KEY:
         url = "https://api.openai.com/v1/chat/completions"
         headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
         model = OPENAI_MODEL
+    elif LLM_PROVIDER == "minimax" and MINIMAX_API_KEY:
+        url = f"{MINIMAX_BASE_URL}/chat/completions"
+        headers = {"Authorization": f"Bearer {MINIMAX_API_KEY}"}
+        model = MINIMAX_MODEL
     elif KIMI_API_KEY:
         url = f"{KIMI_BASE_URL}/chat/completions"
         headers = {"Authorization": f"Bearer {KIMI_API_KEY}"}
@@ -146,10 +154,17 @@ def _llm_chat(system: str, prompt: str) -> str | None:
         if not response.ok:
             logger.warning("LLM HTTP %s: %s", response.status_code, response.text[:200])
             return None
-        return response.json()["choices"][0]["message"]["content"].strip()
+        content = response.json()["choices"][0]["message"]["content"].strip()
+        return _strip_reasoning(content)
     except (requests.exceptions.RequestException, KeyError, IndexError) as exc:
         logger.warning("LLM falló (%s): %s", LLM_PROVIDER, type(exc).__name__)
         return None
+
+
+def _strip_reasoning(text: str) -> str:
+    """Elimina bloques <think>...</think> de modelos de razonamiento (MiniMax M2.x)."""
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    return cleaned or text
 
 
 _SCRIPT_FALLBACK = (

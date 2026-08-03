@@ -76,6 +76,23 @@ keyword + nicho ──► [scripting] guión+caption+hashtags (LLM o plantilla)
 - **auto_approve=true** salta la revisión (full-auto).
 - **Sin LLM en MPT**: el guión y los terms se generan en la plataforma y se pasan a MPT (`video_script` + `video_terms`) — MPT solo necesita `pexels_api_keys`.
 
+## Requisitos del Mini PC (importante)
+
+- **RAM:** la composición de vídeo de MPT (MoviePy + ffmpeg 1080×1920) necesita
+  ~4-5 GB dentro de Docker. En máquinas de 8 GB, sube la VM de WSL2:
+  ```ini
+  # C:\Users\<tu_usuario>\.wslconfig  →  wsl --shutdown
+  [wsl2]
+  memory=6GB
+  processors=4
+  ```
+- **ffmpeg del sistema:** `gen_mpt_config.py` fija `ffmpeg_path="/usr/bin/ffmpeg"`
+  (el binario estático de imageio consume más memoria).
+- **BGM:** la mezcla de música de MoviePy puede deadlockear tras generar el vídeo.
+  `MPT_BGM_TYPE=` (vacío) en `.env` la desactiva (la voz y subtítulos se mantienen).
+- **Workaround MPT v1.3.3:** si el estado de la tarea se cuelga tras escribir los
+  vídeos, `generator.py` detecta `final-1.mp4` por archivo y continúa el pipeline.
+
 ## MCP server (agentes) — puerto 5001
 
 La plataforma real expone **14 tools MCP** en `http://127.0.0.1:5001/mcp` (Streamable HTTP): `create_content_job`, `list_jobs`, `get_drafts`, `approve_job`, `reject_job`, `generate_script_preview`, `list_content_profiles`, `create_content_profile`, `get_stats`, `list_accounts`, `start_bot`, `stop_bot`, `list_proxies`, `get_logs`.

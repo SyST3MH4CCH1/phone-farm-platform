@@ -32,6 +32,9 @@ tls_verify = true
 video_source = "pexels"
 pexels_api_keys = [{pexels_keys}]
 pixabay_api_keys = []
+# ffmpeg del sistema (apt) en vez del binario estático de imageio: menos
+# memoria por proceso (evita OOM en Mini PCs de 8GB durante la composición)
+ffmpeg_path = "/usr/bin/ffmpeg"
 
 [llm]
 llm_provider = "{llm_provider}"
