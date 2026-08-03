@@ -602,12 +602,12 @@ export default function App() {
       {/* Stack Docker: contenedores de la farm + salud de MPT/Flask */}
       <div className="flex items-center gap-4 px-6 py-1.5 border-b border-[#1E2C42] bg-[#0B1220] text-[11px] font-mono overflow-x-auto whitespace-nowrap">
         <span className="font-bold tracking-wider text-[#00E5BE] flex items-center gap-1.5">
-          <Boxes className="w-3.5 h-3.5" /> STACK DOCKER
+          <Boxes className="w-3.5 h-3.5" /> {stack.mode === 'native' ? 'STACK NATIVO' : 'STACK DOCKER'}
         </span>
-        {stack.containers.length === 0 && (
+        {stack.mode !== 'native' && stack.containers.length === 0 && (
           <span className="text-[#F87171]">🐳 docker no disponible o sin contenedores phonefarm</span>
         )}
-        {stack.containers.map((c) => {
+        {stack.mode !== 'native' && stack.containers.map((c) => {
           const up = c.status.startsWith('Up');
           return (
             <span key={c.name} className="flex items-center gap-1.5 bg-[#0F1829] border border-[#1E2C42] rounded px-2 py-0.5">
@@ -618,6 +618,15 @@ export default function App() {
             </span>
           );
         })}
+        {stack.mode === 'native' && (stack.native?.length ? stack.native.map((p) => (
+          <span key={p} className="flex items-center gap-1.5 bg-[#0F1829] border border-[#1E2C42] rounded px-2 py-0.5">
+            <span className="w-2 h-2 rounded-full bg-[#00E5BE] shadow-[0_0_5px_#00E5BE]" />
+            <span className="text-[#94A3B8]">{p.includes('phonefarm.platform') ? 'platform' : 'moneyprinter'}</span>
+            <span className="text-[#00E5BE]">NATIVO</span>
+          </span>
+        )) : (
+          <span className="text-[#F87171]">procesos nativos no detectados</span>
+        ))}
         <span className={`flex items-center gap-1.5 ${stack.mpt_online ? 'text-[#00E5BE]' : 'text-[#F87171]'}`}>
           <span className={`w-2 h-2 rounded-full ${stack.mpt_online ? 'bg-[#00E5BE]' : 'bg-[#F87171]'}`} />
           MPT API {stack.mpt_online ? 'online' : 'offline'}

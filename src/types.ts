@@ -108,7 +108,9 @@ export interface StackContainer {
 }
 
 export interface StackInfo {
+  mode?: 'docker' | 'native';
   containers: StackContainer[];
+  native?: string[];
   mpt_online: boolean;
   flask_online: boolean;
   drafts: number;

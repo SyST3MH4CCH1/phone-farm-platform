@@ -32,14 +32,36 @@ tls_verify = true
 video_source = "pexels"
 pexels_api_keys = [{pexels_keys}]
 pixabay_api_keys = []
-# ffmpeg del sistema (apt) en vez del binario estático de imageio: menos
-# memoria por proceso (evita OOM en Mini PCs de 8GB durante la composición)
-ffmpeg_path = "/usr/bin/ffmpeg"
-
+{ffmpeg_line}
 [llm]
 llm_provider = "{llm_provider}"
 {llm_keys}
 """
+
+
+def _ffmpeg_line() -> str:
+    """Ruta de ffmpeg según plataforma.
+
+    Linux (Docker): el ffmpeg del sistema (apt) — el binario estático de
+    imageio consume más memoria.
+    Windows: el shim de WinGet (ffmpeg.exe en Links/) crashea (0xC0000005);
+    se busca el binario REAL del paquete Gyan.FFmpeg. Si no se encuentra,
+    se deja vacío y MPT usa su ffmpeg bundled (imageio).
+    """
+    import glob
+    import sys
+
+    if sys.platform == "win32":
+        home = Path.home()
+        for pattern in (
+            str(home / "AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg*/*full_build/bin/ffmpeg.exe"),
+            str(home / "AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg*/*essentials_build/bin/ffmpeg.exe"),
+        ):
+            for candidate in sorted(glob.glob(pattern)):
+                # Barras / : las \ de Windows son escapes inválidos en TOML
+                return f'ffmpeg_path = "{candidate.replace(chr(92), "/")}"'
+        return ""
+    return 'ffmpeg_path = "/usr/bin/ffmpeg"'
 
 
 def _toml_string_list(value: str) -> str:
@@ -66,6 +88,7 @@ def main() -> None:
             llm_provider=llm_provider,
             llm_keys=llm_keys,
             pexels_keys=pexels_keys,
+            ffmpeg_line=_ffmpeg_line(),
         ),
         encoding="utf-8",
     )

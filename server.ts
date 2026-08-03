@@ -245,8 +245,9 @@ async function startServer() {
     res.json(engine.getStats());
   });
 
-  // 0.5 Stack Docker: estado de los contenedores de la farm (solo lectura).
-  // El Express corre en el host -> puede consultar `docker ps` directamente.
+  // 0.5 Stack: contenedores Docker O procesos nativos de la farm (solo lectura).
+  // El Express corre en el host -> consulta `docker ps` o los procesos locales
+  // (modo nativo, sin Docker).
   app.get("/api/stack", async (req, res) => {
     const run = (cmd: string) =>
       new Promise<string>((resolve) => {
@@ -263,6 +264,18 @@ async function startServer() {
       })
       .filter((c) => c.name.includes("phonefarm"));
 
+    // Modo nativo: procesos python de la farm (sin Docker)
+    let native: string[] = [];
+    if (containers.length === 0) {
+      const ps = await run(
+        'powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"Name=\'python.exe\'\\" | ForEach-Object { $_.CommandLine }"'
+      );
+      native = ps
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.includes("phonefarm.platform") || l.includes("MoneyPrinterTurbo"));
+    }
+
     let mptOnline = false;
     let flaskOnline = false;
     let drafts = 0;
@@ -278,7 +291,14 @@ async function startServer() {
       }
     } catch { /* Flask apagado */ }
 
-    res.json({ containers, mpt_online: mptOnline, flask_online: flaskOnline, drafts });
+    res.json({
+      mode: containers.length > 0 ? "docker" : "native",
+      containers,
+      native,
+      mpt_online: mptOnline,
+      flask_online: flaskOnline,
+      drafts,
+    });
   });
 
   // 2. Accounts
