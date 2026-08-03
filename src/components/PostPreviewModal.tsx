@@ -82,7 +82,7 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
                   {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5 fill-[#00E5BE]" />}
                 </button>
 
-                <div className="absolute top-8 left-3 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-full border border-[#1E2C42] text-[10px] text-[#38BDF8] flex items-center gap-1 z-20 font-mono">
+                <div className="absolute top-8 left-3 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-full border border-[#1E2C42] text-[10px] text-[#4DFFE0] flex items-center gap-1 z-20 font-mono">
                   <Sparkles className="w-3 h-3 text-[#00E5BE]" />
                   <span>{draft.aspect_ratio || '9:16'} HD</span>
                 </div>
@@ -118,7 +118,7 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
                 <p className="text-[10px] text-neutral-200 line-clamp-2 font-sans leading-snug">
                   {caption}
                 </p>
-                <div className="text-[9px] text-[#38BDF8] font-mono truncate">
+                <div className="text-[9px] text-[#4DFFE0] font-mono truncate">
                   {hashtagsStr}
                 </div>
               </div>
@@ -133,7 +133,7 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
             <div className="space-y-4">
               {/* Target Platform Selection */}
               <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-2">
-                <label className="block text-[#38BDF8] font-bold uppercase text-[10px] tracking-wide">
+                <label className="block text-[#4DFFE0] font-bold uppercase text-[10px] tracking-wide">
                   Red Social de Publicación Destino
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -154,7 +154,7 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
                     onClick={() => setPlatform('tiktok')}
                     className={`px-3 py-2 rounded-lg border font-bold flex items-center justify-center gap-1.5 transition-all ${
                       platform === 'tiktok'
-                        ? 'bg-[#38BDF8]/20 border-[#38BDF8] text-[#38BDF8] shadow-md'
+                        ? 'bg-[#4DFFE0]/20 border-[#4DFFE0] text-[#4DFFE0] shadow-md'
                         : 'bg-[#101A2D] border-[#1E2C42] text-[#94A3B8] hover:text-white'
                     }`}
                   >
@@ -178,7 +178,7 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
               {/* Caption & Description Editor */}
               <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-[#38BDF8] font-bold uppercase text-[10px] tracking-wide flex items-center gap-1.5">
+                  <label className="text-[#4DFFE0] font-bold uppercase text-[10px] tracking-wide flex items-center gap-1.5">
                     <Edit3 className="w-3.5 h-3.5 text-[#00E5BE]" /> Texto de Publicación / Caption
                   </label>
                   <span className="text-[10px] text-[#64748B]">{caption.length} caracteres</span>
@@ -200,14 +200,14 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
                     type="text"
                     value={hashtagsStr}
                     onChange={(e) => setHashtagsStr(e.target.value)}
-                    className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-2 text-[#38BDF8] focus:outline-none focus:border-[#00E5BE] text-xs font-mono"
+                    className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-2 text-[#4DFFE0] focus:outline-none focus:border-[#00E5BE] text-xs font-mono"
                   />
                 </div>
               </div>
 
               {/* Generated Script Summary */}
               <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-3 space-y-1">
-                <span className="text-[10px] text-[#38BDF8] font-bold uppercase tracking-wider block">
+                <span className="text-[10px] text-[#4DFFE0] font-bold uppercase tracking-wider block">
                   Guión Generado por IA (VoiceTTS: {draft.voice_tts || 'es-ES-AlvaroNeural'}):
                 </span>
                 <p className="text-[11px] text-[#94A3B8] italic font-sans bg-[#101A2D] p-2.5 rounded border border-[#1E2C42] line-clamp-3">

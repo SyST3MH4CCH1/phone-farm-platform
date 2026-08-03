@@ -57,7 +57,7 @@ export const ProxyModal: React.FC<ProxyModalProps> = ({
             <div key={p.id} className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-3 flex items-center justify-between text-xs">
               <div>
                 <div className="flex items-center gap-2 font-bold text-white">
-                  {p.id} ({p.provider}) — <span className="text-[#38BDF8] font-semibold">{p.type.toUpperCase()}</span>
+                  {p.id} ({p.provider}) — <span className="text-[#4DFFE0] font-semibold">{p.type.toUpperCase()}</span>
                 </div>
                 <div className="text-[#94A3B8] text-[11px] mt-0.5">
                   Host: {p.host}:{p.port} | Auth: {p.user ? `${p.user.slice(0, 6)}***` : 'No auth'}
@@ -77,7 +77,7 @@ export const ProxyModal: React.FC<ProxyModalProps> = ({
                 </span>
                 <button
                   onClick={() => onVerifyProxy(p.id)}
-                  className="bg-[#1E293B] hover:bg-[#334155] text-[#00E5BE] border border-[#38BDF8]/30 px-2.5 py-1 rounded-lg text-xs flex items-center gap-1 transition-colors"
+                  className="bg-[#1E293B] hover:bg-[#334155] text-[#00E5BE] border border-[#4DFFE0]/30 px-2.5 py-1 rounded-lg text-xs flex items-center gap-1 transition-colors"
                 >
                   <RefreshCw className="w-3 h-3 text-[#00E5BE]" /> Test IP
                 </button>

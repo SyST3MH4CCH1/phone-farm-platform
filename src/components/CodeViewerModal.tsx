@@ -63,13 +63,13 @@ export const CodeViewerModal: React.FC<CodeViewerModalProps> = ({
           {/* Main Code View */}
           <div className="flex-1 flex flex-col bg-[#0F1829] overflow-hidden">
             <div className="bg-[#0B1320] px-4 py-2.5 border-b border-[#1E2C42] flex items-center justify-between text-xs">
-              <span className="text-[#38BDF8] font-bold">{selectedFile}</span>
+              <span className="text-[#4DFFE0] font-bold">{selectedFile}</span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleCopy}
                   className="bg-[#1E293B] hover:bg-[#334155] text-neutral-200 border border-[#1E2C42] px-2.5 py-1 rounded-lg flex items-center gap-1"
                 >
-                  {copied ? <Check className="w-3.5 h-3.5 text-[#00E5BE]" /> : <Copy className="w-3.5 h-3.5 text-[#38BDF8]" />}
+                  {copied ? <Check className="w-3.5 h-3.5 text-[#00E5BE]" /> : <Copy className="w-3.5 h-3.5 text-[#4DFFE0]" />}
                   {copied ? 'Copiado!' : 'Copiar Código'}
                 </button>
                 <button

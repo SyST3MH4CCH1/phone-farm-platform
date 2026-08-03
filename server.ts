@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { exec } from "child_process";
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -242,6 +243,42 @@ async function startServer() {
   // 1. Stats
   app.get("/api/stats", (req, res) => {
     res.json(engine.getStats());
+  });
+
+  // 0.5 Stack Docker: estado de los contenedores de la farm (solo lectura).
+  // El Express corre en el host -> puede consultar `docker ps` directamente.
+  app.get("/api/stack", async (req, res) => {
+    const run = (cmd: string) =>
+      new Promise<string>((resolve) => {
+        exec(cmd, { timeout: 8000 }, (err, stdout) => resolve(err ? "" : stdout));
+      });
+
+    const raw = await run('docker ps --format "{{.Names}}|{{.Status}}|{{.Ports}}"');
+    const containers = raw
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [name, status, ports] = line.split("|");
+        return { name, status, ports: ports || "" };
+      })
+      .filter((c) => c.name.includes("phonefarm"));
+
+    let mptOnline = false;
+    let flaskOnline = false;
+    let drafts = 0;
+    try {
+      mptOnline = (await fetch("http://127.0.0.1:8080/openapi.json", { signal: AbortSignal.timeout(3000) })).ok;
+    } catch { /* MPT apagado */ }
+    try {
+      const r = await fetch("http://127.0.0.1:5000/api/drafts", { signal: AbortSignal.timeout(3000) });
+      flaskOnline = r.ok;
+      if (r.ok) {
+        const list = await r.json();
+        drafts = Array.isArray(list) ? list.length : 0;
+      }
+    } catch { /* Flask apagado */ }
+
+    res.json({ containers, mpt_online: mptOnline, flask_online: flaskOnline, drafts });
   });
 
   // 2. Accounts

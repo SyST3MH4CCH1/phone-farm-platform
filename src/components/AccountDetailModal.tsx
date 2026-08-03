@@ -50,18 +50,18 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
                 <span className={`text-[10px] px-2 py-0.5 rounded-full border uppercase font-bold ${
                   account.status === 'active'
                     ? 'bg-[#00E5BE]/10 text-[#00E5BE] border-[#00E5BE]/30'
-                    : 'bg-[#38BDF8]/10 text-[#38BDF8] border-[#38BDF8]/30'
+                    : 'bg-[#4DFFE0]/10 text-[#4DFFE0] border-[#4DFFE0]/30'
                 }`}>
                   {account.status}
                 </span>
                 {account.bot_active && (
-                  <span className="text-[10px] bg-[#38BDF8]/10 text-[#38BDF8] border border-[#38BDF8]/30 px-2 py-0.5 rounded-full animate-pulse">
+                  <span className="text-[10px] bg-[#4DFFE0]/10 text-[#4DFFE0] border border-[#4DFFE0]/30 px-2 py-0.5 rounded-full animate-pulse">
                     Bot Taktik Activo
                   </span>
                 )}
               </div>
               <p className="text-xs text-[#94A3B8] font-sans mt-0.5 flex items-center gap-2">
-                <span>Nicho: <strong className="text-[#38BDF8]">{niche}</strong></span> •
+                <span>Nicho: <strong className="text-[#4DFFE0]">{niche}</strong></span> •
                 <span>Plataforma: <strong className="text-[#00E5BE]">{account.platform || 'Instagram Reels & TikTok'}</strong></span>
               </p>
             </div>
@@ -103,7 +103,7 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
                 : 'border-transparent text-[#94A3B8] hover:text-white'
             }`}
           >
-            <Video className="w-4 h-4 text-[#38BDF8]" /> Publicaciones ({accountJobs.length})
+            <Video className="w-4 h-4 text-[#4DFFE0]" /> Publicaciones ({accountJobs.length})
           </button>
           <button
             onClick={() => setActiveTab('warmup')}
@@ -143,7 +143,7 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
 
                 <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-3.5 space-y-1">
                   <span className="text-[10px] text-[#94A3B8] uppercase tracking-wider block">Engagement Rate</span>
-                  <div className="text-lg font-bold text-[#38BDF8] flex items-center justify-between">
+                  <div className="text-lg font-bold text-[#4DFFE0] flex items-center justify-between">
                     <span>{engagementRate}%</span>
                     <span className="text-[10px] font-sans text-[#00E5BE]">Alto</span>
                   </div>
@@ -159,9 +159,9 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
 
                 <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-3.5 space-y-1">
                   <span className="text-[10px] text-[#94A3B8] uppercase tracking-wider block">Follows / Comments</span>
-                  <div className="text-lg font-bold text-[#38BDF8] flex items-center justify-between">
+                  <div className="text-lg font-bold text-[#4DFFE0] flex items-center justify-between">
                     <span>{account.follows_today || 12} / {account.comments_today || 5}</span>
-                    <UserPlus className="w-4 h-4 text-[#38BDF8]" />
+                    <UserPlus className="w-4 h-4 text-[#4DFFE0]" />
                   </div>
                 </div>
               </div>
@@ -191,14 +191,14 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
 
               {/* Account Technical Details */}
               <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
-                <h4 className="text-xs font-bold text-[#38BDF8] uppercase tracking-wide">
+                <h4 className="text-xs font-bold text-[#4DFFE0] uppercase tracking-wide">
                   Ficha Técnica & Configuración de Sesión ADB
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[#94A3B8] font-mono text-[11px]">
                   <div>• ID Cuenta Interno: <strong className="text-white">{account.id}</strong></div>
-                  <div>• Dispositivo Serial ADB: <strong className="text-[#38BDF8]">{account.device_serial}</strong></div>
+                  <div>• Dispositivo Serial ADB: <strong className="text-[#4DFFE0]">{account.device_serial}</strong></div>
                   <div>• Archivo Sesión instagrapi: <strong className="text-[#00E5BE]">{account.session_file}</strong></div>
-                  <div>• Proxy SOCKS5 Asignado: <strong className="text-[#38BDF8]">{proxy.host}:{proxy.port}</strong></div>
+                  <div>• Proxy SOCKS5 Asignado: <strong className="text-[#4DFFE0]">{proxy.host}:{proxy.port}</strong></div>
                   <div>• IP Salida Dedicada: <strong className="text-[#00E5BE]">{proxy.ip || '185.220.101.42'}</strong></div>
                   <div>• Latencia de Respuesta: <strong className="text-white">{proxy.latency_ms || 42} ms</strong></div>
                 </div>
@@ -215,7 +215,7 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
 
               {accountJobs.length === 0 ? (
                 <div className="p-8 text-center bg-[#0B1320] border border-[#1E2C42] rounded-xl text-[#94A3B8] space-y-2">
-                  <Video className="w-8 h-8 text-[#38BDF8] mx-auto opacity-50" />
+                  <Video className="w-8 h-8 text-[#4DFFE0] mx-auto opacity-50" />
                   <p>No hay publicaciones registradas para esta cuenta todavía.</p>
                   <button
                     onClick={() => onOpenMoneyPrinterForAccount(account)}
@@ -242,12 +242,12 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
 
                       <div className="flex items-center gap-3">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full border uppercase font-bold ${
-                          j.status === 'published' ? 'bg-[#00E5BE]/10 text-[#00E5BE] border-[#00E5BE]/30' : 'bg-[#38BDF8]/10 text-[#38BDF8] border-[#38BDF8]/30'
+                          j.status === 'published' ? 'bg-[#00E5BE]/10 text-[#00E5BE] border-[#00E5BE]/30' : 'bg-[#4DFFE0]/10 text-[#4DFFE0] border-[#4DFFE0]/30'
                         }`}>
                           {j.status}
                         </span>
                         {j.media_id && (
-                          <span className="text-[10px] text-[#38BDF8] font-mono hidden sm:inline">
+                          <span className="text-[10px] text-[#4DFFE0] font-mono hidden sm:inline">
                             Media ID: {j.media_id.substring(0, 10)}...
                           </span>
                         )}
@@ -296,7 +296,7 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
                   <div>• Proveedor: <strong className="text-white">{proxy.provider}</strong></div>
                   <div>• Protocolo: <strong className="text-white">{proxy.type.toUpperCase()}</strong></div>
                   <div>• Host & Puerto: <strong className="text-white">{proxy.host}:{proxy.port}</strong></div>
-                  <div>• IP Pública Exit: <strong className="text-[#38BDF8]">{proxy.ip || '185.220.101.42'}</strong></div>
+                  <div>• IP Pública Exit: <strong className="text-[#4DFFE0]">{proxy.ip || '185.220.101.42'}</strong></div>
                   <div>• Estado Proxy: <strong className="text-[#00E5BE]">{proxy.status.toUpperCase()}</strong></div>
                   <div>• Latencia de Respuesta: <strong className="text-white">{proxy.latency_ms || 42} ms</strong></div>
                 </div>

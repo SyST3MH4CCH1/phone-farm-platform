@@ -42,7 +42,7 @@ export const AccountsPanel: React.FC<AccountsPanelProps> = ({
   };
 
   const getWarmupLimit = (day: number) => {
-    if (day <= 7) return { limit: 30, color: 'text-[#38BDF8] bg-[#38BDF8]/10 border-[#38BDF8]/30' };
+    if (day <= 7) return { limit: 30, color: 'text-[#4DFFE0] bg-[#4DFFE0]/10 border-[#4DFFE0]/30' };
     if (day <= 14) return { limit: 50, color: 'text-cyan-300 bg-cyan-950/40 border-cyan-800/40' };
     return { limit: 100, color: 'text-[#00E5BE] bg-[#00E5BE]/10 border-[#00E5BE]/30' };
   };
@@ -74,7 +74,7 @@ export const AccountsPanel: React.FC<AccountsPanelProps> = ({
           return (
             <div
               key={acc.id}
-              className={`bg-[#0B1320] border border-[#1E2C42] rounded-xl p-3.5 transition-all hover:border-[#38BDF8]/40 ${
+              className={`bg-[#0B1320] border border-[#1E2C42] rounded-xl p-3.5 transition-all hover:border-[#4DFFE0]/40 ${
                 acc.bot_active ? 'border-[#00E5BE]/40 bg-[#00E5BE]/5' : ''
               }`}
             >
@@ -93,10 +93,10 @@ export const AccountsPanel: React.FC<AccountsPanelProps> = ({
                   </div>
                   <div className="text-xs text-[#94A3B8] mt-1.5 space-y-1 font-mono">
                     <div className="flex items-center gap-1.5">
-                      <Smartphone className="w-3 h-3 text-[#38BDF8]" /> Serial: <span className="text-white">{acc.device_serial}</span>
+                      <Smartphone className="w-3 h-3 text-[#4DFFE0]" /> Serial: <span className="text-white">{acc.device_serial}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <ShieldCheck className="w-3 h-3 text-[#00E5BE]" /> Proxy: <span className="text-[#38BDF8]">{acc.proxy_id}</span> <span className="text-[#64748B]">({proxy ? proxy.ip : 'DataImpulse SOCKS5'})</span>
+                      <ShieldCheck className="w-3 h-3 text-[#00E5BE]" /> Proxy: <span className="text-[#4DFFE0]">{acc.proxy_id}</span> <span className="text-[#64748B]">({proxy ? proxy.ip : 'DataImpulse SOCKS5'})</span>
                     </div>
                   </div>
                 </div>
@@ -104,7 +104,7 @@ export const AccountsPanel: React.FC<AccountsPanelProps> = ({
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => onSelectAccountForDetail && onSelectAccountForDetail(acc)}
-                    className="text-[10px] bg-[#1E293B] hover:bg-[#334155] text-[#38BDF8] border border-[#38BDF8]/30 px-2 py-1 rounded-lg font-mono font-bold"
+                    className="text-[10px] bg-[#1E293B] hover:bg-[#334155] text-[#4DFFE0] border border-[#4DFFE0]/30 px-2 py-1 rounded-lg font-mono font-bold"
                     title="Consultar datos completos de la cuenta"
                   >
                     Datos
@@ -125,7 +125,7 @@ export const AccountsPanel: React.FC<AccountsPanelProps> = ({
                 className="mt-3 pt-2 border-t border-[#1E2C42] grid grid-cols-3 gap-1 text-[11px] text-[#94A3B8] font-mono bg-[#0F172A] p-2 rounded-lg cursor-pointer"
               >
                 <div>Likes: <strong className="text-[#00E5BE] font-bold">{acc.likes_today || 0}</strong></div>
-                <div>Follows: <strong className="text-[#38BDF8] font-bold">{acc.follows_today || 0}</strong></div>
+                <div>Follows: <strong className="text-[#4DFFE0] font-bold">{acc.follows_today || 0}</strong></div>
                 <div>Comms: <strong className="text-pink-400 font-bold">{acc.comments_today || 0}</strong></div>
               </div>
 

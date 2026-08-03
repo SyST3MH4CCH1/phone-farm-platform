@@ -40,6 +40,22 @@ powershell -ExecutionPolicy Bypass -File platform\scripts\deploy.ps1
 
 El script: verifica Docker → clona `taktik-bot` y `MoneyPrinterTurbo` → crea `.env` y la config segura de MPT → materializa `C:\phone-farm\` → `docker compose up -d --build`.
 
+### Alternativa NATIVA (sin Docker) — Mini PCs de 8 GB
+
+En máquinas con poca RAM (donde Docker Desktop + la VM de WSL2 consumen 2-3 GB
+y MPT puede sufrir OOM), la ejecución nativa aprovecha toda la RAM y usa ADB
+directo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File platform\scripts\run-native.ps1
+# detener:
+powershell -ExecutionPolicy Bypass -File platform\scripts\run-native.ps1 -Stop
+```
+
+Arranca: plataforma (Flask :5000 + MCP :5001) en `platform\.venv` y
+MoneyPrinterTurbo (`python main.py`, solo 127.0.0.1) en su propio venv.
+Los Dockerfile/compose siguen disponibles para otras máquinas.
+
 1. **Edita `platform/.env`**: `KIMI_API_KEY` (o `OPENAI_API_KEY`), `DATAIMPULSE_USER/PASS`, `FLASK_PORT`.
 2. **Pexels**: pega tus keys en `C:\phone-farm\mpt-config.toml` (`pexels_api_keys = ["..."]`).
 3. Conecta los teléfonos al hub USB; en el host: `adb devices` → `adb -s <serial> tcpip 5555`.

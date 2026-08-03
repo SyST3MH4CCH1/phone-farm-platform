@@ -101,6 +101,20 @@ export interface CodeFile {
   content: string;
 }
 
+export interface StackContainer {
+  name: string;
+  status: string;
+  ports: string;
+}
+
+export interface StackInfo {
+  containers: StackContainer[];
+  mpt_online: boolean;
+  flask_online: boolean;
+  drafts: number;
+  error?: string;
+}
+
 export interface MoneyPrinterConfig {
   repo_url: string;
   bind_address: string;

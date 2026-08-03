@@ -133,7 +133,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={handleExportBackupJson}
-                className="px-3 py-1.5 bg-[#1E293B] hover:bg-[#334155] border border-[#38BDF8]/30 text-[#38BDF8] rounded-lg font-bold flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-[#1E293B] hover:bg-[#334155] border border-[#4DFFE0]/30 text-[#4DFFE0] rounded-lg font-bold flex items-center gap-1.5"
               >
                 <Archive className="w-3.5 h-3.5" /> Snapshot JSON
               </button>
@@ -159,7 +159,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
                   className={`bg-[#0B1320] border rounded-xl p-4 transition-all ${
                     selectedVersion === ver.id
                       ? 'border-[#00E5BE] bg-[#00E5BE]/5 shadow-lg'
-                      : 'border-[#1E2C42] hover:border-[#38BDF8]/40'
+                      : 'border-[#1E2C42] hover:border-[#4DFFE0]/40'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
@@ -194,7 +194,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
                         </>
                       ) : (
                         <>
-                          <RefreshCw className="w-3 h-3 text-[#38BDF8]" /> Cambiar a esta versión
+                          <RefreshCw className="w-3 h-3 text-[#4DFFE0]" /> Cambiar a esta versión
                         </>
                       )}
                     </button>

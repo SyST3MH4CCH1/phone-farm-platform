@@ -128,7 +128,7 @@ export const AdbBridgeModal: React.FC<AdbBridgeModalProps> = ({ onClose, onRefre
           {activeTab === 'config' && (
             <form onSubmit={handleTestConnection} className="space-y-4">
               <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#38BDF8] uppercase tracking-wide flex items-center gap-2">
+                <div className="text-xs font-bold text-[#4DFFE0] uppercase tracking-wide flex items-center gap-2">
                   <Server className="w-4 h-4 text-[#00E5BE]" /> Endpoint del Servidor Python Flask (Mini PC)
                 </div>
                 <div className="grid grid-cols-3 gap-3">
@@ -204,7 +204,7 @@ export const AdbBridgeModal: React.FC<AdbBridgeModalProps> = ({ onClose, onRefre
           {activeTab === 'pairing' && (
             <div className="space-y-4">
               <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#38BDF8] uppercase tracking-wide flex items-center gap-2">
+                <div className="text-xs font-bold text-[#4DFFE0] uppercase tracking-wide flex items-center gap-2">
                   <Wifi className="w-4 h-4 text-[#00E5BE]" /> Conectar Teléfono Físico por ADB Wi-Fi
                 </div>
                 <p className="text-[#94A3B8] font-sans text-xs leading-relaxed">
@@ -224,7 +224,7 @@ export const AdbBridgeModal: React.FC<AdbBridgeModalProps> = ({ onClose, onRefre
                       alert(`Ejecutando: adb connect ${wifiAdbAddress}`);
                       handleTestConnection();
                     }}
-                    className="bg-[#1E293B] hover:bg-[#334155] text-[#38BDF8] border border-[#38BDF8]/40 font-bold px-4 py-2 rounded-lg flex items-center gap-1.5"
+                    className="bg-[#1E293B] hover:bg-[#334155] text-[#4DFFE0] border border-[#4DFFE0]/40 font-bold px-4 py-2 rounded-lg flex items-center gap-1.5"
                   >
                     <Wifi className="w-3.5 h-3.5 text-[#00E5BE]" /> adb connect
                   </button>
@@ -270,13 +270,13 @@ curl -X GET http://127.0.0.1:5000/api/stats`}
             <div className={`p-4 rounded-xl border font-mono ${
               testResult.flask_server_online 
                 ? 'bg-[#00E5BE]/10 border-[#00E5BE]/30 text-[#00E5BE]'
-                : 'bg-[#38BDF8]/10 border-[#38BDF8]/30 text-[#38BDF8]'
+                : 'bg-[#4DFFE0]/10 border-[#4DFFE0]/30 text-[#4DFFE0]'
             }`}>
               <div className="flex items-center gap-2 font-bold mb-1">
                 {testResult.flask_server_online ? (
                   <CheckCircle2 className="w-4 h-4 text-[#00E5BE]" />
                 ) : (
-                  <AlertCircle className="w-4 h-4 text-[#38BDF8]" />
+                  <AlertCircle className="w-4 h-4 text-[#4DFFE0]" />
                 )}
                 <span>{testResult.message}</span>
               </div>

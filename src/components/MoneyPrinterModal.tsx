@@ -143,7 +143,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                   href="https://github.com/harry0703/MoneyPrinterTurbo/blob/main/README-en.md"
                   target="_blank"
                   rel="noreferrer"
-                  className="text-[10px] text-[#38BDF8] hover:underline flex items-center gap-1 font-sans"
+                  className="text-[10px] text-[#4DFFE0] hover:underline flex items-center gap-1 font-sans"
                 >
                   GitHub Repo <ExternalLink className="w-3 h-3 text-[#00E5BE]" />
                 </a>
@@ -178,7 +178,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                 : 'border-transparent text-[#94A3B8] hover:text-white'
             }`}
           >
-            <Sliders className="w-3.5 h-3.5 text-[#38BDF8]" /> Motores IA & API Keys
+            <Sliders className="w-3.5 h-3.5 text-[#4DFFE0]" /> Motores IA & API Keys
           </button>
           <button
             onClick={() => setActiveTab('subtitles')}
@@ -198,7 +198,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
             <form onSubmit={handleGenerateVideo} className="space-y-4">
               <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
                 <div className="text-xs font-bold text-[#00E5BE] uppercase tracking-wide flex items-center gap-2">
-                  <Video className="w-4 h-4 text-[#38BDF8]" /> Generar Reel 9:16 con MoneyPrinterTurbo Pipeline
+                  <Video className="w-4 h-4 text-[#4DFFE0]" /> Generar Reel 9:16 con MoneyPrinterTurbo Pipeline
                 </div>
 
                 <div className="space-y-3">
@@ -307,7 +307,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
           {activeTab === 'engine' && (
             <form onSubmit={handleSaveConfig} className="space-y-4">
               <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#38BDF8] uppercase tracking-wide flex items-center gap-2">
+                <div className="text-xs font-bold text-[#4DFFE0] uppercase tracking-wide flex items-center gap-2">
                   <Key className="w-4 h-4 text-[#00E5BE]" /> Configuración de Pexels API Key & Clips de Vídeo Stock
                 </div>
                 <div>
@@ -344,7 +344,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
 
               <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
                 <div className="text-xs font-bold text-[#00E5BE] uppercase tracking-wide flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-[#38BDF8]" /> Proveedor de Modelo de Lenguaje (LLM Script Generator)
+                  <Layers className="w-4 h-4 text-[#4DFFE0]" /> Proveedor de Modelo de Lenguaje (LLM Script Generator)
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -392,7 +392,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
             <form onSubmit={handleSaveConfig} className="space-y-4">
               <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
                 <div className="text-xs font-bold text-[#00E5BE] uppercase tracking-wide flex items-center gap-2">
-                  <Volume2 className="w-4 h-4 text-[#38BDF8]" /> Motor de Síntesis de Voz (Text-to-Speech)
+                  <Volume2 className="w-4 h-4 text-[#4DFFE0]" /> Motor de Síntesis de Voz (Text-to-Speech)
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -429,7 +429,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
               </div>
 
               <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#38BDF8] uppercase tracking-wide flex items-center gap-2">
+                <div className="text-xs font-bold text-[#4DFFE0] uppercase tracking-wide flex items-center gap-2">
                   <Type className="w-4 h-4 text-[#00E5BE]" /> Estilo de Subtítulos FFmpeg SRT
                 </div>
 

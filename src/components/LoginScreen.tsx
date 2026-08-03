@@ -172,7 +172,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 className="bg-[#0B1320] hover:bg-[#1E293B] border border-[#1E2C42] rounded-lg px-3 py-2 text-left flex flex-col transition-colors"
               >
                 <span className="text-white font-bold flex items-center justify-between">
-                  Técnico ADB <Cpu className="w-3 h-3 text-[#38BDF8]" />
+                  Técnico ADB <Cpu className="w-3 h-3 text-[#4DFFE0]" />
                 </span>
                 <span className="text-[10px] text-[#64748B]">operator / operator123</span>
               </button>
@@ -185,7 +185,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       <footer className="max-w-6xl w-full mx-auto z-10 flex flex-col md:flex-row items-center justify-between gap-2 text-[11px] text-[#64748B] border-t border-[#1E2C42] pt-4">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-[#00E5BE]" /> SSL / SSH Security Protocol Active</span>
-          <span className="flex items-center gap-1.5"><Terminal className="w-3.5 h-3.5 text-[#38BDF8]" /> Express REST API Session Engine</span>
+          <span className="flex items-center gap-1.5"><Terminal className="w-3.5 h-3.5 text-[#4DFFE0]" /> Express REST API Session Engine</span>
         </div>
         <div>
           <span>Phone Farm Automation Control Center &copy; 2026</span>

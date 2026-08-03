@@ -41,7 +41,8 @@ VIDEO_ASPECT = os.getenv("MPT_VIDEO_ASPECT", "9:16")  # "9:16" | "16:9" | "1:1"
 VOICE_NAME = os.getenv("MPT_VOICE_NAME", "es-ES-AlvaroNeural")
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 TASK_POLL_INTERVAL_S = 5
-TASK_TIMEOUT_S = int(os.getenv("MPT_TASK_TIMEOUT_S", "1800"))
+# Mini PCs lentos: la composición de 11+ clips puede tardar 30-40 min.
+TASK_TIMEOUT_S = int(os.getenv("MPT_TASK_TIMEOUT_S", "3600"))
 
 
 class GeneratorError(RuntimeError):
@@ -124,22 +125,36 @@ def _poll_task(task_id: str) -> tuple[int, list[str], str | None]:
             return 100, videos, None
 
         # Workaround: ¿el vídeo final ya existe aunque el estado no flipeó?
-        if time.monotonic() - started > 180 and progress >= 50:
-            probe = requests.get(
-                f"{MPT_API_URL}{MPT_API_PREFIX}/download/{task_id}/final-1.mp4",
-                timeout=10, stream=True,
-            )
-            if probe.ok and int(probe.headers.get("Content-Length", "0") or 0) > 100_000:
-                logger.warning(
-                    "MPT estado colgado post-generación; usando final-1.mp4 detectado por archivo"
-                )
-                probe.close()
-                return 100, [f"/download/{task_id}/final-1.mp4"], None
+        # Solo en la fase final (progress>=75); se exige tamaño ESTABLE entre
+        # dos muestras (15 s) y la descarga se valida después con ffprobe.
+        if time.monotonic() - started > 180 and progress >= 75:
+            probe_url = f"{MPT_API_URL}{MPT_API_PREFIX}/download/{task_id}/final-1.mp4"
+            size1 = _probe_file_size(probe_url)
+            if size1 > 200_000:
+                time.sleep(15)
+                size2 = _probe_file_size(probe_url)
+                if size1 == size2:
+                    logger.warning(
+                        "MPT estado colgado post-generación; final-1.mp4 estable "
+                        "(%d bytes) — usando detección por archivo", size2,
+                    )
+                    return 100, [f"/download/{task_id}/final-1.mp4"], None
 
         logger.info("MPT task %s: progreso %d%%", task_id, progress)
         time.sleep(TASK_POLL_INTERVAL_S)
 
     raise GeneratorError(f"Timeout esperando tarea MPT {task_id} ({TASK_TIMEOUT_S}s)")
+
+
+def _probe_file_size(url: str) -> int:
+    """HEAD/GET parcial para conocer el tamaño actual del archivo en MPT."""
+    try:
+        probe = requests.get(url, timeout=10, stream=True)
+        size = int(probe.headers.get("Content-Length", "0") or 0)
+        probe.close()
+        return size
+    except requests.exceptions.RequestException:
+        return 0
 
 
 def _normalize_download_uri(uri: str) -> str:
@@ -158,16 +173,72 @@ def _normalize_download_uri(uri: str) -> str:
     return f"{MPT_API_URL}{MPT_API_PREFIX}/{path}"
 
 
+def _validate_mp4(path: Path, min_duration_s: float = 5.0) -> bool:
+    """Valida un MP4 descargado con ffprobe (duración real > mínimo).
+
+    La descarga puede truncarse si el archivo de MPT aún se estaba escribiendo
+    (el tamaño estable no basta: ffmpeg escribe en ráfagas). Un MP4 truncado
+    no tiene el atom moov y ffprobe lo detecta al instante.
+    """
+    ffprobe = _find_ffprobe()
+    if not ffprobe:
+        return path.stat().st_size > 1_000_000  # sin ffprobe: umbral de tamaño
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            return False
+        duration = float(result.stdout.strip())
+        return duration > min_duration_s
+    except (ValueError, subprocess.TimeoutExpired):
+        return False
+
+
+def _find_ffprobe() -> str | None:
+    """ffprobe del sistema (acompaña a ffmpeg)."""
+    if os.getenv("FFPROBE_PATH"):
+        return os.getenv("FFPROBE_PATH")
+    found = shutil.which("ffprobe")
+    if found:
+        return found
+    ffmpeg = _find_ffmpeg()
+    if ffmpeg:
+        sibling = Path(ffmpeg).with_name("ffprobe" + (".exe" if ffmpeg.endswith(".exe") else ""))
+        if sibling.exists():
+            return str(sibling)
+    return None
+
+
 def _download_video(uri: str, dest: Path) -> None:
-    """Descarga el MP4 de MPT hacia videos/<job_id>.mp4."""
+    """Descarga el MP4 de MPT hacia videos/<job_id>.mp4 y lo valida con ffprobe.
+
+    Si la descarga queda truncada (MP4 inválido), reintenta hasta 3 veces con
+    espera — el archivo de MPT puede seguir escribiéndose.
+    """
     url = _normalize_download_uri(uri)
-    response = requests.get(url, timeout=120, stream=True)
-    if not response.ok:
-        raise GeneratorError(f"Descarga MPT falló (HTTP {response.status_code}): {url[:200]}")
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with open(dest, "wb") as fh:
-        shutil.copyfileobj(response.raw, fh)
-    logger.info("Vídeo descargado: %s (%d bytes)", dest.name, dest.stat().st_size)
+    for attempt in range(1, 4):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        response = requests.get(url, timeout=180, stream=True)
+        if not response.ok:
+            raise GeneratorError(f"Descarga MPT falló (HTTP {response.status_code}): {url[:200]}")
+        with open(dest, "wb") as fh:
+            shutil.copyfileobj(response.raw, fh)
+
+        if _validate_mp4(dest):
+            logger.info("Vídeo descargado y VALIDADO: %s (%d bytes)", dest.name, dest.stat().st_size)
+            return
+
+        logger.warning(
+            "Descarga %s inválida/truncada (intento %d/3, %d bytes) — reintentando",
+            dest.name, attempt, dest.stat().st_size,
+        )
+        dest.unlink(missing_ok=True)
+        time.sleep(20)
+
+    raise GeneratorError(f"MP4 truncado tras 3 intentos: {dest.name}")
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import JSZip from 'jszip';
-import { Account, ProxyItem, QueueJob, LogEntry, SystemStats, AuthUser } from './types';
+import { Account, ProxyItem, QueueJob, LogEntry, SystemStats, AuthUser, StackInfo } from './types';
 import { INITIAL_ACCOUNTS, INITIAL_PROXIES, INITIAL_QUEUE, CODE_FILES } from './data';
 import { Header } from './components/Header';
 import { AccountsPanel } from './components/AccountsPanel';
@@ -15,6 +15,7 @@ import { MoneyPrinterModal } from './components/MoneyPrinterModal';
 import { PostPreviewModal } from './components/PostPreviewModal';
 import { AccountDetailModal } from './components/AccountDetailModal';
 import { VersionControlModal } from './components/VersionControlModal';
+import { Boxes } from 'lucide-react';
 import { DraftPost } from './types';
 
 export default function App() {
@@ -50,6 +51,11 @@ export default function App() {
     active_bots: 1,
     active_proxies: 2,
     panda_grid_status: 'Connected'
+  });
+
+  // Stack Docker real (contenedores + salud MPT/Flask) — ver /api/stack
+  const [stack, setStack] = useState<StackInfo>({
+    containers: [], mpt_online: false, flask_online: false, drafts: 0
   });
 
   const [isProcessingJob, setIsProcessingJob] = useState(false);
@@ -125,6 +131,20 @@ export default function App() {
     if (!currentUser) return;
     refreshBackendData();
     const interval = setInterval(refreshBackendData, 5000);
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
+  // Estado del stack Docker (contenedores, MPT, Flask) — 5 s
+  useEffect(() => {
+    if (!currentUser) return;
+    const fetchStack = async () => {
+      try {
+        const res = await fetch('/api/stack');
+        if (res.ok) setStack(await res.json());
+      } catch (e) { /* docker no disponible */ }
+    };
+    fetchStack();
+    const interval = setInterval(fetchStack, 5000);
     return () => clearInterval(interval);
   }, [currentUser]);
 
@@ -579,6 +599,38 @@ export default function App() {
       />
 
       {/* Main Grid Workspace */}
+      {/* Stack Docker: contenedores de la farm + salud de MPT/Flask */}
+      <div className="flex items-center gap-4 px-6 py-1.5 border-b border-[#1E2C42] bg-[#0B1220] text-[11px] font-mono overflow-x-auto whitespace-nowrap">
+        <span className="font-bold tracking-wider text-[#00E5BE] flex items-center gap-1.5">
+          <Boxes className="w-3.5 h-3.5" /> STACK DOCKER
+        </span>
+        {stack.containers.length === 0 && (
+          <span className="text-[#F87171]">🐳 docker no disponible o sin contenedores phonefarm</span>
+        )}
+        {stack.containers.map((c) => {
+          const up = c.status.startsWith('Up');
+          return (
+            <span key={c.name} className="flex items-center gap-1.5 bg-[#0F1829] border border-[#1E2C42] rounded px-2 py-0.5">
+              <span className={`w-2 h-2 rounded-full ${up ? 'bg-[#00E5BE] shadow-[0_0_5px_#00E5BE]' : 'bg-[#F87171]'}`} />
+              <span className="text-[#94A3B8]">{c.name.replace('phonefarm-', '')}</span>
+              <span className={up ? 'text-[#00E5BE]' : 'text-[#F87171]'}>{up ? 'UP' : 'DOWN'}</span>
+              {c.ports && <span className="text-[#64748B]">[{c.ports.split('->')[0].trim()}]</span>}
+            </span>
+          );
+        })}
+        <span className={`flex items-center gap-1.5 ${stack.mpt_online ? 'text-[#00E5BE]' : 'text-[#F87171]'}`}>
+          <span className={`w-2 h-2 rounded-full ${stack.mpt_online ? 'bg-[#00E5BE]' : 'bg-[#F87171]'}`} />
+          MPT API {stack.mpt_online ? 'online' : 'offline'}
+        </span>
+        <span className={`flex items-center gap-1.5 ${stack.flask_online ? 'text-[#00E5BE]' : 'text-[#F87171]'}`}>
+          <span className={`w-2 h-2 rounded-full ${stack.flask_online ? 'bg-[#00E5BE]' : 'bg-[#F87171]'}`} />
+          Flask {stack.flask_online ? 'online' : 'offline'}
+        </span>
+        <span className="text-[#94A3B8]">
+          Drafts <b className={stack.drafts > 0 ? 'text-[#4DFFE0]' : 'text-[#64748B]'}>{stack.drafts}</b>
+        </span>
+      </div>
+
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 grid-rows-[1fr_240px] gap-3 p-4 overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(0,229,190,0.04),transparent_70%)]">
         {/* Left Column: Accounts & ADB Devices (4 cols) */}
         <div className="lg:col-span-4 h-full overflow-hidden">

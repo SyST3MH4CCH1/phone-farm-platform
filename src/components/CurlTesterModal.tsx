@@ -185,7 +185,7 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
               >
                 <div className="flex items-center gap-2">
                   <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                    ep.method === 'GET' ? 'bg-[#38BDF8]/10 text-[#38BDF8] border border-[#38BDF8]/30' :
+                    ep.method === 'GET' ? 'bg-[#4DFFE0]/10 text-[#4DFFE0] border border-[#4DFFE0]/30' :
                     ep.method === 'POST' ? 'bg-[#00E5BE]/10 text-[#00E5BE] border border-[#00E5BE]/30' : 'bg-red-950/40 text-red-400 border border-red-500/30'
                   }`}>
                     {ep.method}
@@ -213,7 +213,7 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
                 onClick={() => handleCopyCurl(activeTab, currentEndpoint.curl)}
                 className="absolute top-2 right-2 bg-[#0B1320] hover:bg-[#1E293B] text-white border border-[#1E2C42] px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 font-bold"
               >
-                {copiedIndex === activeTab ? <Check className="w-3 h-3 text-[#00E5BE]" /> : <Copy className="w-3 h-3 text-[#38BDF8]" />}
+                {copiedIndex === activeTab ? <Check className="w-3 h-3 text-[#00E5BE]" /> : <Copy className="w-3 h-3 text-[#4DFFE0]" />}
                 {copiedIndex === activeTab ? 'Copiado' : 'Copiar cURL'}
               </button>
               <pre className="pr-24 whitespace-pre-wrap">{currentEndpoint.curl}</pre>
@@ -234,7 +234,7 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
             {responseOutput && (
               <div className="flex-1 flex flex-col">
                 <span className="text-xs font-mono text-[#94A3B8] mb-1">Respuesta HTTP 200 (JSON):</span>
-                <pre className="bg-[#101A2D] border border-[#1E2C42] rounded-xl p-3 font-mono text-xs text-[#38BDF8] overflow-auto flex-1 max-h-60">
+                <pre className="bg-[#101A2D] border border-[#1E2C42] rounded-xl p-3 font-mono text-xs text-[#4DFFE0] overflow-auto flex-1 max-h-60">
                   {responseOutput}
                 </pre>
               </div>

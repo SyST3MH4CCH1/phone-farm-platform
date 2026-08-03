@@ -26,7 +26,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
   const getLevelColor = (level: LogEntry['level']) => {
     switch (level) {
       case 'ERROR': return 'text-red-400 font-bold';
-      case 'WARN': return 'text-[#38BDF8] font-bold';
+      case 'WARN': return 'text-[#4DFFE0] font-bold';
       case 'DEBUG': return 'text-zinc-500';
       default: return 'text-[#00E5BE] font-bold';
     }
@@ -41,7 +41,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
         <div className="flex items-center gap-2 cursor-pointer" onClick={onToggleMinimize}>
           <TerminalIcon className="w-4 h-4 text-[#00E5BE]" />
           <span className="font-bold text-white uppercase text-xs tracking-wider">Consola de Logs en Vivo — SSE Stream</span>
-          <span className="text-[10px] text-[#38BDF8] bg-[#0B1320] px-2 py-0.5 rounded-full border border-[#1E2C42]">
+          <span className="text-[10px] text-[#4DFFE0] bg-[#0B1320] px-2 py-0.5 rounded-full border border-[#1E2C42]">
             0.0.0.0:3000 / server.log
           </span>
           <span className="text-[10px] text-[#64748B] ml-2 font-sans hidden sm:inline">
@@ -75,10 +75,10 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
       {/* Terminal Content Body */}
       {!isMinimized && (
         <div className="p-3 flex-1 overflow-y-auto space-y-1 bg-[#0B1320] text-[#94A3B8]">
-          <div className="text-[#38BDF8]/70 text-[11px]">
+          <div className="text-[#4DFFE0]/70 text-[11px]">
             [ANTIGRAVITY ENGINE] Sistema sincronizado exitosamente con MoneyPrinterTurbo, proxies y ADB Bridge...
           </div>
-          <div className="text-[#38BDF8]/70 text-[11px]">
+          <div className="text-[#4DFFE0]/70 text-[11px]">
             [SECURITY AUDIT OK] MoneyPrinterTurbo & taktik-bot listos para generación 9:16 y previsualización.
           </div>
           
