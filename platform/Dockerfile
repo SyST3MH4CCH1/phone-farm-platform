@@ -23,6 +23,7 @@ ENV PYTHONPATH=/app:/app/taktik-bot
 ENV IN_DOCKER=1
 
 COPY . .
+COPY phonefarm/ /app/phonefarm/
 RUN chmod +x /app/scripts/docker-entrypoint.sh
 
 EXPOSE 5000

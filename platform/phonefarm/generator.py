@@ -28,7 +28,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 VIDEOS_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", BASE_DIR)) / "videos"
 
 MPT_API_URL = os.getenv("MPT_API_URL", "http://127.0.0.1:8080").rstrip("/")
@@ -58,11 +58,16 @@ def mpt_health() -> bool:
         return False
 
 
-def _submit_task(keyword: str, script: str = "") -> str:
-    """Crea una tarea de vídeo en MPT y devuelve el task_id."""
+def _submit_task(keyword: str, script: str = "", terms: list[str] | None = None) -> str:
+    """Crea una tarea de vídeo en MPT y devuelve el task_id.
+
+    Si se proveen script y/o terms, MPT NO necesita su LLM propio
+    (evita depender de la api_key del config.toml de MPT).
+    """
     payload = {
         "video_subject": keyword,
         "video_script": script,
+        "video_terms": terms or [],
         "video_aspect": VIDEO_ASPECT,
         "video_count": 1,
         "video_concat_mode": "random",
@@ -184,13 +189,14 @@ def _generate_demo_video(keyword: str, dest: Path) -> Path:
 # API pública
 # ---------------------------------------------------------------------------
 
-def generate_reel(keyword: str, job_id: str, script: str = "") -> str:
+def generate_reel(keyword: str, job_id: str, script: str = "", terms: list[str] | None = None) -> str:
     """Genera un Reel 9:16 con MoneyPrinterTurbo y retorna la ruta absoluta del MP4.
 
     Args:
         keyword: tema del vídeo (video_subject).
         job_id:  identificador del job de la cola (nombre del archivo de salida).
         script:  guión opcional (si vacío, MPT usa su LLM configurado).
+        terms:   términos de materiales (si se proveen, MPT omite su generación).
 
     Returns:
         Ruta absoluta del MP4 en videos/<job_id>.mp4.
@@ -206,7 +212,7 @@ def generate_reel(keyword: str, job_id: str, script: str = "") -> str:
     if DEMO_MODE and not mpt_health():
         return str(_generate_demo_video(keyword, dest))
 
-    task_id = _submit_task(keyword, script)
+    task_id = _submit_task(keyword, script, terms)
     logger.info("Tarea MPT creada: %s (keyword=%r)", task_id, keyword)
 
     _progress, uris, failed_stage = _poll_task(task_id)

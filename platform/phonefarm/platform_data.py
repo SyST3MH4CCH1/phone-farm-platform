@@ -15,7 +15,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", Path(__file__).resolve().parent))
+DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", Path(__file__).resolve().parent.parent))
 
 ACCOUNTS_FILE = DATA_DIR / "accounts.json"
 PROXIES_FILE = DATA_DIR / "proxies.json"

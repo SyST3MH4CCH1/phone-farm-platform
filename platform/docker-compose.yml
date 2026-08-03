@@ -46,11 +46,14 @@ services:
       # se conectan por USB al Mini PC y se exponen vía "adb tcpip 5555".
       ADB_HOST: host.docker.internal
       ADB_PORT: "5037"
+      MCP_ENABLED: "1"
+      MCP_PORT: "5001"
     volumes:
       - ./data:/app/data          # accounts.json, sessions/, videos/, logs/
       - ./templates:/app/templates
     ports:
-      - "127.0.0.1:${FLASK_PORT:-5000}:5000"
+      - "127.0.0.1:${FLASK_PORT:-5000}:5000"   # dashboard + API
+      - "127.0.0.1:${MCP_PORT:-5001}:5001"     # MCP server (agentes)
     restart: unless-stopped
 
 volumes:

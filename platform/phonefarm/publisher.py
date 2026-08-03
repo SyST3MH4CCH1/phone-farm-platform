@@ -31,11 +31,11 @@ from instagrapi.exceptions import (
     PleaseWaitFewMinutes,
 )
 
-from proxy_manager import find_proxy, get_proxy_dict
+from phonefarm.proxy_manager import find_proxy, get_proxy_dict
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", BASE_DIR))
 SESSIONS_DIR = DATA_DIR / "sessions"
 VIDEOS_DIR = DATA_DIR / "videos"
@@ -143,7 +143,7 @@ def _register_manual_fallback(account_id: str, video_path: str, reason: str) -> 
 
     # 1) adb push del vídeo al teléfono
     try:
-        from proxy_manager import _is_placeholder_serial, adb_cmd_prefix
+        from phonefarm.proxy_manager import _is_placeholder_serial, adb_cmd_prefix
 
         account = _find_account(account_id)
         serial = account.get("device_serial", "") if account else ""
@@ -178,7 +178,7 @@ def _register_manual_fallback(account_id: str, video_path: str, reason: str) -> 
 
 def _find_account(account_id: str) -> dict[str, Any] | None:
     """Busca la cuenta en accounts.json (import perezoso para evitar ciclos)."""
-    from platform_data import load_accounts
+    from phonefarm.platform_data import load_accounts
 
     return next((a for a in load_accounts() if a.get("id") == account_id), None)
 

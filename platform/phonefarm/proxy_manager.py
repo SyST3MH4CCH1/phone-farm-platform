@@ -21,11 +21,11 @@ from typing import Any
 
 import requests
 
-from platform_data import find_proxy, save_proxies
+from phonefarm.platform_data import find_proxy, save_proxies
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", BASE_DIR))
 PROXIES_FILE = DATA_DIR / "proxies.json"
 
@@ -40,7 +40,7 @@ DI_PASS = os.getenv("DATAIMPULSE_PASS", "")
 
 def load_proxies() -> list[dict[str, Any]]:
     """Lee proxies.json. Devuelve lista vacía si el archivo no existe o está corrupto."""
-    from platform_data import load_proxies as _load
+    from phonefarm.platform_data import load_proxies as _load
 
     return _load()
 

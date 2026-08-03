@@ -54,9 +54,20 @@
   .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border); }
   .badge.active { color: var(--green); border-color: var(--green); }
   .badge.warmup { color: var(--yellow); border-color: var(--yellow); }
-  .badge.error, .badge.failed { color: var(--red); border-color: var(--red); }
+  .badge.error, .badge.failed, .badge.rejected { color: var(--red); border-color: var(--red); }
   .badge.pending { color: var(--dim); }
-  .badge.published, .badge.publishing { color: var(--blue); border-color: var(--blue); }
+  .badge.scripting, .badge.published, .badge.publishing { color: var(--blue); border-color: var(--blue); }
+  .badge.awaiting_approval { color: var(--yellow); border-color: var(--yellow); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 50% { opacity: .55; } }
+  .btn.approve { background: #065f46; border-color: var(--green); color: var(--green); }
+  .btn.reject { background: #7f1d1d; border-color: var(--red); color: var(--red); }
+  .caption-preview {
+    display: none; position: absolute; z-index: 20; background: #1a1a1a;
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+    max-width: 380px; font-size: 11px; color: var(--text); white-space: pre-wrap;
+    box-shadow: 0 4px 16px rgba(0,0,0,.6);
+  }
+  .has-caption { cursor: help; text-decoration: underline dotted; }
   .acct .actions { margin-top: 8px; display: flex; gap: 6px; }
   .btn {
     background: #3d3d3d; border: 1px solid var(--border); color: var(--text);
@@ -129,10 +140,11 @@
       <div class="queue-form">
         <input id="kwInput" placeholder="Keyword / nicho (ej: decoracion sala minimalista)" />
         <select id="acctSelect"></select>
+        <select id="nicheSelect"></select>
         <button class="btn primary" onclick="addJob()">Agregar Keyword</button>
       </div>
       <table>
-        <thead><tr><th>ID</th><th>Keyword</th><th>Cuenta</th><th>Estado</th><th>Progreso</th><th>Vídeo</th></tr></thead>
+        <thead><tr><th>ID</th><th>Keyword</th><th>Cuenta</th><th>Estado</th><th>Progreso</th><th>Vídeo</th><th>Acciones</th></tr></thead>
         <tbody id="queueBody"></tbody>
       </table>
       <div style="margin-top:12px;display:flex;justify-content:flex-end">
@@ -193,6 +205,7 @@ async function refreshAccounts() {
     const prev = sel.value;
     sel.innerHTML = accounts.map(a => `<option value="${a.id}">${a.username} (${a.id})</option>`).join('');
     if (prev) sel.value = prev;
+    if (!accounts.length) sel.innerHTML = '<option value="">Sin cuentas</option>';
 
     $('accountsGrid').innerHTML = accounts.map(a => {
       const statusCls = a.status === 'active' ? 'active' : (a.status === 'warmup' ? 'warmup' : 'error');
@@ -215,21 +228,41 @@ async function refreshQueue() {
     queue = await api('/api/queue');
     $('queueCount').textContent = queue.length;
     $('queueBody').innerHTML = queue.slice().reverse().map(j => {
-      const statusCls = ['pending','generating','publishing','published','failed','awaiting_manual_upload']
+      const statusCls = ['pending','scripting','awaiting_approval','generating','publishing','published','failed','awaiting_manual_upload','rejected']
         .includes(j.status) ? j.status : 'pending';
       const video = j.video_path
         ? `<video src="/videos/${j.id}.mp4" preload="metadata"></video>` : '—';
+      const captionHint = j.caption
+        ? `<span class="has-caption" title="${j.caption.replace(/"/g, '&quot;').slice(0, 200)}">📝</span>` : '';
+      let actions = '';
+      if (j.status === 'awaiting_approval') {
+        actions = `<button class="btn approve" onclick="approveJob('${j.id}')">✅ Aprobar</button>
+                   <button class="btn reject" onclick="rejectJob('${j.id}')">❌ Rechazar</button>`;
+      } else if (j.status === 'pending') {
+        actions = `<button class="btn" onclick="scriptJob('${j.id}')">✍️ Guion</button>`;
+      }
       return `
       <tr>
         <td class="mono">${j.id}</td>
-        <td>${j.keyword}</td>
+        <td>${j.keyword} ${captionHint}</td>
         <td>${j.target_account}</td>
         <td><span class="badge ${statusCls}">${j.status}</span></td>
         <td><div class="progress"><div style="width:${j.progress || 0}%"></div></div></td>
         <td class="video-thumb">${video}</td>
+        <td>${actions}</td>
       </tr>`;
     }).join('');
   } catch (e) { console.warn(e.message); }
+}
+
+async function refreshNiches() {
+  try {
+    const profiles = await api('/api/content/profiles');
+    const sel = $('nicheSelect');
+    const prev = sel.value;
+    sel.innerHTML = profiles.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    if (prev) sel.value = prev;
+  } catch (e) { /* perfiles no disponibles */ }
 }
 
 // --- Acciones ---
@@ -249,10 +282,38 @@ async function addJob() {
   try {
     await api('/api/queue', {
       method: 'POST',
-      body: JSON.stringify({ keyword, target_account: $('acctSelect').value })
+      body: JSON.stringify({
+        keyword,
+        target_account: $('acctSelect').value,
+        niche_id: $('nicheSelect').value || 'general'
+      })
     });
     $('kwInput').value = '';
-    toast('Job agregado a la cola');
+    toast('Job agregado a la cola (pasa a guionado)');
+    refreshQueue();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function scriptJob(jobId) {
+  try {
+    await api('/api/queue/next', { method: 'POST', body: '{}' });
+    toast(`Generando guión de ${jobId}...`);
+    refreshQueue();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function approveJob(jobId) {
+  try {
+    await api(`/api/queue/${jobId}/approve`, { method: 'POST', body: '{}' });
+    toast(`Aprobado: generando y publicando ${jobId}...`);
+    refreshQueue();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function rejectJob(jobId) {
+  try {
+    await api(`/api/queue/${jobId}/reject`, { method: 'POST', body: '{}' });
+    toast(`Guión rechazado: ${jobId}`);
     refreshQueue();
   } catch (e) { toast(e.message, true); }
 }
@@ -260,7 +321,7 @@ async function addJob() {
 async function processNext() {
   try {
     const r = await api('/api/queue/next', { method: 'POST', body: '{}' });
-    toast(r.message || `Procesando ${r.id}...`);
+    toast(r.message || `Guionando ${r.id}...`);
     refreshQueue();
   } catch (e) { toast(e.message, true); }
 }
@@ -290,10 +351,11 @@ function initConsole() {
 }
 
 // --- Ciclo de refresco ---
-refreshStats(); refreshAccounts(); refreshQueue(); initConsole();
+refreshStats(); refreshAccounts(); refreshQueue(); refreshNiches(); initConsole();
 setInterval(refreshStats, 5000);
 setInterval(refreshAccounts, 5000);
 setInterval(refreshQueue, 5000);
+setInterval(refreshNiches, 15000);
 </script>
 </body>
 </html>

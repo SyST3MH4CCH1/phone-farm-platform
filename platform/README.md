@@ -60,7 +60,36 @@ python scripts\gen_mpt_config.py   # o edita mpt-config.toml
 python platform.py                 # API en http://127.0.0.1:5000
 ```
 
-## Endpoints (11 del plan + extras)
+## Pipeline de creación de contenido (v2 — aprobación humana)
+
+```
+keyword + nicho ──► [scripting] guión+caption+hashtags (LLM o plantilla)
+        ──► [awaiting_approval]  ✍️ revisar el draft
+        ──► ✅ approve ──► [generating] MPT (script+terms provistos, sin LLM propio)
+        ──► [publishing] instagrapi ──► published
+        ──► ❌ reject ──► rejected
+        └── scheduler: jobs con scheduled_time se procesan solos
+```
+
+- **Perfiles de nicho** (`content_profiles.json`): hashtags, plantilla de caption, tono LLM, voz TTS, terms de materiales. CRUD vía `/api/content/profiles`.
+- **Aprobación**: `GET /api/drafts` → `POST /api/queue/<id>/approve` | `/reject`.
+- **auto_approve=true** salta la revisión (full-auto).
+- **Sin LLM en MPT**: el guión y los terms se generan en la plataforma y se pasan a MPT (`video_script` + `video_terms`) — MPT solo necesita `pexels_api_keys`.
+
+## MCP server (agentes) — puerto 5001
+
+La plataforma real expone **14 tools MCP** en `http://127.0.0.1:5001/mcp` (Streamable HTTP): `create_content_job`, `list_jobs`, `get_drafts`, `approve_job`, `reject_job`, `generate_script_preview`, `list_content_profiles`, `create_content_profile`, `get_stats`, `list_accounts`, `start_bot`, `stop_bot`, `list_proxies`, `get_logs`.
+
+```bash
+# Ejemplo: un agente crea contenido y lo aprueba
+curl -s -X POST http://127.0.0.1:5001/mcp -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"create_content_job","arguments":{"keyword":"recetas rapidas","auto_approve":false}}}'
+```
+
+> El MCP del Express (:3000) opera datos mock; **el de la plataforma (:5001) opera los datos reales**.
+
+## Endpoints (11 del plan + pipeline v2)
 
 | Método | Ruta | Descripción |
 |---|---|---|
@@ -75,6 +104,10 @@ python platform.py                 # API en http://127.0.0.1:5000
 | POST | `/engagement/start` | Inicia taktik-bot `{account_id}` |
 | POST | `/engagement/stop` | Detiene taktik-bot `{account_id}` |
 | GET | `/api/stats` | `videos_subidos, acciones_hoy, errores, cpu, ram, bots, proxies` |
+| GET | `/api/drafts` | Drafts esperando aprobación (script + caption) |
+| POST | `/api/queue/<id>/approve` · `/reject` | Aprueba/rechaza el guión del draft |
+| GET/POST/DELETE | `/api/content/profiles` | CRUD de perfiles de nicho |
+| POST | `/api/content/preview` | Vista previa guión+caption sin encolar |
 | GET | `/` | Dashboard (`templates/dashboard.html`) |
 | GET | `/stream/logs` | SSE (tail de `logs/platform.log`) |
 | GET | `/api/adb/config` · `/api/auth/me` | Compatibilidad dashboard React |

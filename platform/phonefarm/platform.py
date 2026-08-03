@@ -21,23 +21,11 @@ Endpoints (11 obligatorios del plan maestro + extras de compatibilidad):
 Seguridad: CORS abierto SOLO para orígenes loopback (127.0.0.1/localhost);
 persistencia JSON tras cada modificación; logs rotados diariamente sin
 contraseñas ni tokens en claro.
+
+NOTA: este módulo vive en el paquete `phonefarm/` precisamente para que el
+archivo platform.py NO sombree al stdlib `platform` (Flask/instagrapi/attrs
+lo importan). Ejecutar con: python -m phonefarm.platform
 """
-
-# IMPORTANTE: este archivo se llama platform.py (nombre obligatorio del plan
-# maestro), lo que sombrea al módulo estándar `platform` que Flask, instagrapi
-# y pycryptodome importan internamente. Solución: reordenar sys.path para que
-# el stdlib gane ANTES de importar nada, y fijarlo en sys.modules.
-import sys as _sys
-import os as _os
-
-_stdlib_dir = _os.path.dirname(_os.__file__)
-if _stdlib_dir in _sys.path:
-    _sys.path.remove(_stdlib_dir)
-_sys.path.insert(0, _stdlib_dir)
-
-import platform as _stdlib_platform  # ahora SÍ resuelve al stdlib
-
-_sys.modules["platform"] = _stdlib_platform
 
 import logging
 import logging.handlers
@@ -52,9 +40,9 @@ import psutil
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, request, send_from_directory
 
-from platform_data import load_accounts, load_proxies, load_queue, save_accounts, save_proxies, save_queue
+from phonefarm.platform_data import load_accounts, load_proxies, load_queue, save_accounts, save_proxies, save_queue
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", BASE_DIR))
 TEMPLATES_DIR = BASE_DIR / "templates"
 LOGS_DIR = DATA_DIR / "logs"
@@ -155,23 +143,101 @@ _buffer_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-7s | 
 logging.getLogger().addHandler(_buffer_handler)
 
 
-# --- Cola de trabajos: procesamiento en background --------------------------
+# --- Cola de trabajos: pipeline de contenido v2 -------------------------------
+# Ciclo de vida del job:
+#   pending -> scripting -> awaiting_approval -> [approve] -> generating
+#           -> publishing -> published | awaiting_manual_upload | failed
+#   awaiting_approval -> [reject] -> rejected
+#   pending (scheduled_time <= now) -> lo procesa el scheduler
 _queue_threads: dict[str, threading.Thread] = {}
 _queue_lock = threading.RLock()
 
+JOB_STATUSES = {
+    "pending", "scripting", "awaiting_approval", "generating",
+    "publishing", "published", "awaiting_manual_upload", "failed", "rejected",
+}
 
-def _process_job(job: dict[str, Any]) -> None:
-    """Pipeline completo: generar con MPT -> publicar con instagrapi."""
-    import generator
-    import publisher
+
+def _sync_job(updated: dict[str, Any]) -> list[dict[str, Any]]:
+    """Persiste el estado del job en queue.json (reescritura completa)."""
+    queue = load_queue()
+    for idx, item in enumerate(queue):
+        if item.get("id") == updated["id"]:
+            queue[idx] = updated
+            break
+    else:
+        queue.append(updated)
+    save_queue(queue)
+    return queue
+
+
+def _spawn(job_id: str, target) -> None:
+    """Lanza un worker en background para el job (idempotente)."""
+    with _queue_lock:
+        existing = _queue_threads.get(job_id)
+        if existing is not None and existing.is_alive():
+            return False
+        worker = threading.Thread(target=target, daemon=True, name=f"job-{job_id}")
+        _queue_threads[job_id] = worker
+        worker.start()
+        return True
+
+
+def _script_job(job: dict[str, Any]) -> None:
+    """Etapa 1: guión + caption + terms (LLM o plantilla) -> awaiting_approval."""
+    from phonefarm import content
+
+    job_id = job["id"]
+    try:
+        job["status"] = "scripting"
+        _sync_job(job)
+        logger.info("[%s] Generando guión para keyword=%r (nicho=%s)",
+                    job_id, job.get("keyword"), job.get("niche_id") or "general")
+        profile = content.get_profile(job.get("niche_id"))
+        script = content.build_script(job.get("keyword", ""), profile, job.get("script"))
+        job["script"] = script
+        job["caption"] = content.build_caption(job.get("keyword", ""), profile)
+        job["hashtags"] = content.suggest_hashtags(job.get("keyword", ""), profile)
+        job["terms"] = content.generate_terms(job.get("keyword", ""), profile)
+        job["voice_name"] = profile.get("voice_name", "es-ES-AlvaroNeural")
+        job["video_aspect"] = profile.get("video_aspect", "9:16")
+        job["niche_id"] = profile.get("id", "general")
+        _sync_job(job)
+
+        if job.get("auto_approve"):
+            logger.info("[%s] auto_approve activo — continuando a generación", job_id)
+            _generate_and_publish(job)
+        else:
+            job["status"] = "awaiting_approval"
+            _sync_job(job)
+            logger.info("[%s] Guión listo para aprobación (caption de %d chars)",
+                        job_id, len(job.get("caption", "")))
+    except Exception as exc:  # noqa: BLE001
+        logger.error("[%s] Fallo en scripting: %s", job_id, exc)
+        job["status"] = "failed"
+        job["error"] = str(exc)[:500]
+        _sync_job(job)
+    finally:
+        _queue_threads.pop(job_id, None)
+
+
+def _generate_and_publish(job: dict[str, Any]) -> None:
+    """Etapa 2: generar vídeo con MPT (script+terms provistos) -> publicar."""
+    from phonefarm import generator
+    from phonefarm import publisher
 
     job_id = job["id"]
     try:
         job["status"] = "generating"
         _sync_job(job)
-        logger.info("[%s] Generando reel para keyword=%r", job_id, job.get("keyword"))
+        logger.info("[%s] Generando reel con MPT (script %d chars, %d terms)...",
+                    job_id, len(job.get("script", "")), len(job.get("terms", [])))
 
-        video_path = generator.generate_reel(job.get("keyword", ""), job_id, script=job.get("script", ""))
+        video_path = generator.generate_reel(
+            job.get("keyword", ""), job_id,
+            script=job.get("script", ""),
+            terms=job.get("terms"),
+        )
         job["video_path"] = video_path
         job["progress"] = 50
         _sync_job(job)
@@ -204,17 +270,27 @@ def _is_manual_fallback(exc: Exception) -> bool:
     return name in {"ChallengeRequired", "PleaseWaitFewMinutes", "LoginRequired"}
 
 
-def _sync_job(updated: dict[str, Any]) -> list[dict[str, Any]]:
-    """Persiste el estado del job en queue.json (reescritura completa)."""
-    queue = load_queue()
-    for idx, item in enumerate(queue):
-        if item.get("id") == updated["id"]:
-            queue[idx] = updated
-            break
-    else:
-        queue.append(updated)
-    save_queue(queue)
-    return queue
+# --- Scheduler: jobs programados ----------------------------------------------
+
+def scheduler_loop() -> None:
+    """Cada 30 s procesa los jobs pending con scheduled_time vencido."""
+    while True:
+        try:
+            now = time.time()
+            for job in load_queue():
+                if job.get("status") != "pending":
+                    continue
+                scheduled = job.get("scheduled_ts")
+                if isinstance(scheduled, (int, float)) and scheduled <= now:
+                    logger.info("[%s] Job programado vencido — iniciando scripting", job["id"])
+                    _spawn(job["id"], lambda j=job: _script_job(j))
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Scheduler: %s", exc)
+        time.sleep(30)
+
+
+def start_scheduler() -> None:
+    threading.Thread(target=scheduler_loop, daemon=True, name="scheduler").start()
 
 
 # --- Aplicación Flask --------------------------------------------------------
@@ -290,7 +366,7 @@ def api_accounts_create():
 
 @app.delete("/api/accounts/<account_id>")
 def api_accounts_delete(account_id: str):
-    import engagement
+    from phonefarm import engagement
 
     try:
         engagement.stop_bot(account_id)
@@ -315,7 +391,7 @@ _proxy_cache_ts: dict[str, float] = {}
 
 @app.get("/api/proxies")
 def api_proxies():
-    import proxy_manager
+    from phonefarm import proxy_manager
 
     proxies = load_proxies()
     now = time.monotonic()
@@ -365,7 +441,7 @@ def api_proxies_create():
 @app.post("/api/proxies/verify")
 def api_proxies_verify():
     """Verificación explícita de un proxy (endpoint adicional)."""
-    import proxy_manager
+    from phonefarm import proxy_manager
 
     proxy_id = (request.get_json(silent=True) or {}).get("proxy_id")
     if not proxy_id:
@@ -379,11 +455,18 @@ def api_proxies_verify():
     return jsonify(verdict)
 
 
-# --- Queue -------------------------------------------------------------------
+# --- Queue (pipeline de contenido v2) -----------------------------------------
 
 @app.get("/api/queue")
 def api_queue():
     return jsonify(load_queue())
+
+
+@app.get("/api/drafts")
+def api_drafts():
+    """Jobs en espera de aprobación (script + caption listos para revisar)."""
+    drafts = [j for j in load_queue() if j.get("status") == "awaiting_approval"]
+    return jsonify(drafts)
 
 
 @app.post("/api/queue")
@@ -395,40 +478,165 @@ def api_queue_create():
         return jsonify({"error": "keyword es obligatoria"}), 400
     if target_account and not any(a.get("id") == target_account for a in load_accounts()):
         return jsonify({"error": f"Cuenta destino no existe: {target_account}"}), 400
+    from phonefarm import content
+
+    if body.get("niche_id") and not any(p.get("id") == body["niche_id"] for p in content.load_profiles()):
+        return jsonify({"error": f"Niché no existe: {body['niche_id']}"}), 400
 
     queue = load_queue()
     job = {
         "id": f"job_{len(queue) + 101}",
         "keyword": keyword,
         "target_account": target_account or (load_accounts()[0]["id"] if load_accounts() else ""),
+        "niche_id": body.get("niche_id") or "general",
         "status": "pending",
         "video_path": None,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "progress": 0,
         "script": body.get("script") or "",
+        # auto_approve=true -> salta la revisión humana (script -> generar -> publicar)
+        "auto_approve": bool(body.get("auto_approve")),
+        # programación: "2026-08-03T12:00:00Z" o timestamp
+        "scheduled_ts": _parse_schedule(body.get("scheduled_time")),
     }
     queue.append(job)
     save_queue(queue)
-    logger.info("Job encolado: %s (keyword=%r)", job["id"], keyword)
+    logger.info("Job encolado: %s (keyword=%r, nicho=%s, auto=%s)",
+                job["id"], keyword, job["niche_id"], job["auto_approve"])
     return jsonify(job), 201
+
+
+def _parse_schedule(value: Any) -> float | None:
+    """Convierte scheduled_time (ISO 8601 o timestamp) a epoch; None si vacío."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        from datetime import datetime, timezone
+
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    except ValueError:
+        logger.warning("scheduled_time inválido: %r", value)
+        return None
 
 
 @app.post("/api/queue/next")
 def api_queue_next():
-    """Procesa el siguiente job pendiente (genera + publica) en background."""
+    """Etapa 1: genera guión del siguiente job pendiente -> awaiting_approval.
+
+    Con auto_approve=true continúa directo a generación + publicación.
+    """
     queue = load_queue()
     job = next((j for j in queue if j.get("status") == "pending"), None)
     if job is None:
         return jsonify({"message": "No hay trabajos pendientes en la cola."})
 
-    with _queue_lock:
-        thread = _queue_threads.get(job["id"])
-        if thread is not None and thread.is_alive():
-            return jsonify({"error": f"El job {job['id']} ya se está procesando"}), 409
+    if not _spawn(job["id"], lambda j=job: _script_job(j)):
+        return jsonify({"error": f"El job {job['id']} ya se está procesando"}), 409
 
-        worker = threading.Thread(target=_process_job, args=(job,), daemon=True, name=f"job-{job['id']}")
-        _queue_threads[job["id"]] = worker
-        worker.start()
+    return jsonify(job), 202
+
+
+@app.post("/api/queue/<job_id>/approve")
+def api_queue_approve(job_id: str):
+    """Etapa 2: aprueba el guión -> genera vídeo con MPT -> publica."""
+    queue = load_queue()
+    job = next((j for j in queue if j.get("id") == job_id), None)
+    if job is None:
+        return jsonify({"error": f"Job no existe: {job_id}"}), 404
+    if job.get("status") != "awaiting_approval":
+        return jsonify({"error": f"El job {job_id} está en estado {job.get('status')}, no en aprobación"}), 409
+
+    if not _spawn(job_id, lambda j=job: _generate_and_publish(j)):
+        return jsonify({"error": f"El job {job_id} ya se está procesando"}), 409
+
+    logger.info("[%s] Guión APROBADO — generando y publicando", job_id)
+    return jsonify(job), 202
+
+
+@app.post("/api/queue/<job_id>/reject")
+def api_queue_reject(job_id: str):
+    """Rechaza el guión del draft (status -> rejected)."""
+    queue = load_queue()
+    for job in queue:
+        if job.get("id") == job_id:
+            if job.get("status") != "awaiting_approval":
+                return jsonify({"error": f"El job {job_id} está en estado {job.get('status')}"}), 409
+            job["status"] = "rejected"
+            save_queue(queue)
+            logger.info("[%s] Guión RECHAZADO por el operador", job_id)
+            return jsonify(job)
+    return jsonify({"error": f"Job no existe: {job_id}"}), 404
+
+
+# --- Perfiles de contenido (nichos) --------------------------------------------
+
+@app.get("/api/content/profiles")
+def api_content_profiles():
+    from phonefarm import content
+
+    return jsonify(content.load_profiles())
+
+
+@app.post("/api/content/profiles")
+def api_content_profiles_create():
+    from phonefarm import content
+
+    body = request.get_json(silent=True) or {}
+    profile_id = (body.get("id") or "").strip().lower().replace(" ", "_")
+    name = (body.get("name") or "").strip()
+    if not profile_id or not name:
+        return jsonify({"error": "id y name son obligatorios"}), 400
+
+    profiles = content.load_profiles()
+    if any(p.get("id") == profile_id for p in profiles):
+        return jsonify({"error": f"El niché ya existe: {profile_id}"}), 409
+
+    profile = {
+        "id": profile_id,
+        "name": name,
+        "keywords": body.get("keywords") or [],
+        "hashtags": body.get("hashtags") or [],
+        "caption_template": body.get("caption_template") or "{keyword} 🔥",
+        "tone": body.get("tone") or "directo y con gancho",
+        "voice_name": body.get("voice_name") or "es-ES-AlvaroNeural",
+        "video_aspect": body.get("video_aspect") or "9:16",
+        "video_terms": body.get("video_terms") or [],
+        "cta": body.get("cta") or "",
+    }
+    profiles.append(profile)
+    content.save_profiles(profiles)
+    logger.info("Perfil de contenido creado: %s (%s)", profile_id, name)
+    return jsonify(profile), 201
+
+
+@app.delete("/api/content/profiles/<profile_id>")
+def api_content_profiles_delete(profile_id: str):
+    from phonefarm import content
+
+    profiles = content.load_profiles()
+    remaining = [p for p in profiles if p.get("id") != profile_id]
+    if len(remaining) == len(profiles):
+        return jsonify({"error": f"Niché no existe: {profile_id}"}), 404
+    content.save_profiles(remaining)
+    logger.info("Perfil de contenido eliminado: %s", profile_id)
+    return jsonify({"success": True, "id": profile_id})
+
+
+@app.post("/api/content/preview")
+def api_content_preview():
+    """Vista previa de guión + caption + hashtags SIN encolar (para UI/MCP)."""
+    from phonefarm import content
+
+    body = request.get_json(silent=True) or {}
+    keyword = (body.get("keyword") or "").strip()
+    if not keyword:
+        return jsonify({"error": "keyword es obligatoria"}), 400
+    return jsonify(content.preview(keyword, body.get("niche_id"), body.get("script")))
 
     return jsonify(job), 202  # procesando en background
 
@@ -437,7 +645,7 @@ def api_queue_next():
 
 @app.post("/engagement/start")
 def api_engagement_start():
-    import engagement
+    from phonefarm import engagement
 
     body = request.get_json(silent=True) or {}
     account_id = body.get("account_id")
@@ -451,7 +659,7 @@ def api_engagement_start():
 
 @app.post("/engagement/stop")
 def api_engagement_stop():
-    import engagement
+    from phonefarm import engagement
 
     body = request.get_json(silent=True) or {}
     account_id = body.get("account_id")
@@ -467,7 +675,7 @@ def api_engagement_stop():
 
 @app.get("/api/stats")
 def api_stats():
-    import engagement
+    from phonefarm import engagement
 
     queue = load_queue()
     accounts = load_accounts()
@@ -564,5 +772,12 @@ if __name__ == "__main__":
     # En Docker, Flask escucha en 0.0.0.0 (el loopback lo garantiza el bind
     # "127.0.0.1:5000:5000" del compose). Local: solo 127.0.0.1.
     bind_host = "0.0.0.0" if os.getenv("IN_DOCKER") == "1" else "127.0.0.1"
+
+    start_scheduler()
+    if os.getenv("MCP_ENABLED", "1") == "1":
+        from phonefarm.mcp_server import start_mcp_server
+
+        start_mcp_server(int(os.getenv("MCP_PORT", "5001")))
+
     logger.info("Phone Farm Platform arrancando en http://%s:%d", bind_host, PORT)
     app.run(host=bind_host, port=PORT, threaded=True, debug=False, use_reloader=False)

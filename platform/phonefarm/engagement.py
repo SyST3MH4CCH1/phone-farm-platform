@@ -25,11 +25,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from platform_data import find_account, find_proxy, load_accounts, save_accounts
+from phonefarm.platform_data import find_account, find_proxy, load_accounts, save_accounts
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", BASE_DIR))
 LOGS_DIR = DATA_DIR / "logs"
 WORKFLOWS_DIR = LOGS_DIR / "workflows"

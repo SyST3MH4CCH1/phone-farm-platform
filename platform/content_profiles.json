@@ -1,0 +1,26 @@
+[
+  {
+    "id": "decoracion",
+    "name": "Decoración de interiores",
+    "keywords": ["decoracion sala", "decoracion hogar", "interiorismo minimalista"],
+    "hashtags": ["#decoracion", "#hogar", "#minimalismo", "#interiordesign", "#homedecor", "#salonmoderno"],
+    "caption_template": "{keyword} ✨ Transforma tu espacio con estos detalles que marcan la diferencia.",
+    "tone": "inspirador, práctico y cercano",
+    "voice_name": "es-ES-AlvaroNeural",
+    "video_aspect": "9:16",
+    "video_terms": ["sala moderna minimalista", "interior luminoso", "decoracion hogar elegante"],
+    "cta": "Guarda este reel y sígueme para más ideas de decoración."
+  },
+  {
+    "id": "fitness",
+    "name": "Fitness y motivación",
+    "keywords": ["rutina ejercicio casa", "motivacion gym", "entrenamiento corto"],
+    "hashtags": ["#fitness", "#entrenamiento", "#motivacion", "#gym", "#salud", "#rutina"],
+    "caption_template": "{keyword} 💪 Entrena 15 minutos al día y nota la diferencia en 2 semanas.",
+    "tone": "enérgico y motivador",
+    "voice_name": "es-MX-[#1]JorgeNeural",
+    "video_aspect": "9:16",
+    "video_terms": ["rutina alta intensidad", "ejercicio en casa", "entrenamiento funcional"],
+    "cta": "Sígueme para tu rutina diaria."
+  }
+]

@@ -1,1 +1,70 @@
-[]
+[
+  {
+    "id": "job_101",
+    "keyword": "decoracion sala minimalista",
+    "target_account": "acc_01",
+    "niche_id": "decoracion",
+    "status": "failed",
+    "video_path": "C:\\Users\\haxth3\\Documents\\phone-farm-platform (1)\\platform\\videos\\job_101.mp4",
+    "created_at": "2026-08-03T08:25:00Z",
+    "progress": 50,
+    "script": "✨ 3 Claves sobre decoracion sala minimalista ✨\n\n1. El detalle que marca la diferencia.\n2. El error que casi todos cometen.\n3. La solución simple que funciona hoy.\n\n#reels #viral #decoracionsalaminima",
+    "auto_approve": false,
+    "scheduled_ts": null,
+    "caption": "decoracion sala minimalista ✨ Transforma tu espacio con estos detalles que marcan la diferencia.\n\nGuarda este reel y sígueme para más ideas de decoración.\n\n#decoracion #hogar #minimalismo #interiordesign #homedecor #salonmoderno #sala #minimalista",
+    "hashtags": [
+      "#decoracion",
+      "#hogar",
+      "#minimalismo",
+      "#interiordesign",
+      "#homedecor",
+      "#salonmoderno",
+      "#sala",
+      "#minimalista"
+    ],
+    "terms": [
+      "sala moderna minimalista",
+      "interior luminoso",
+      "decoracion hogar elegante",
+      "decoracion sala minimalista aesthetic",
+      "decoracion sala minimalista"
+    ],
+    "voice_name": "es-ES-AlvaroNeural",
+    "video_aspect": "9:16",
+    "error": "No existe sesión para acc_01. Ejecuta login_once() UNA vez para crearla (nunca se reloguea automáticamente)."
+  },
+  {
+    "id": "job_102",
+    "keyword": "decoracion sala minimalista",
+    "target_account": "acc_01",
+    "niche_id": "decoracion",
+    "status": "failed",
+    "video_path": null,
+    "created_at": "2026-08-03T08:26:02Z",
+    "progress": 0,
+    "script": "✨ 3 Claves sobre decoracion sala minimalista ✨\n\n1. El detalle que marca la diferencia.\n2. El error que casi todos cometen.\n3. La solución simple que funciona hoy.\n\n#reels #viral #decoracionsalaminima",
+    "auto_approve": false,
+    "scheduled_ts": null,
+    "caption": "decoracion sala minimalista ✨ Transforma tu espacio con estos detalles que marcan la diferencia.\n\nGuarda este reel y sígueme para más ideas de decoración.\n\n#decoracion #hogar #minimalismo #interiordesign #homedecor #salonmoderno #sala #minimalista",
+    "hashtags": [
+      "#decoracion",
+      "#hogar",
+      "#minimalismo",
+      "#interiordesign",
+      "#homedecor",
+      "#salonmoderno",
+      "#sala",
+      "#minimalista"
+    ],
+    "terms": [
+      "sala moderna minimalista",
+      "interior luminoso",
+      "decoracion hogar elegante",
+      "decoracion sala minimalista aesthetic",
+      "decoracion sala minimalista"
+    ],
+    "voice_name": "es-ES-AlvaroNeural",
+    "video_aspect": "9:16",
+    "error": "Tarea MPT 320b871c-2576-41b9-981b-b15e65f739a1 falló en etapa: pipeline"
+  }
+]

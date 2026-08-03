@@ -62,8 +62,11 @@ New-Item -ItemType Directory -Force -Path (Join-Path $Root "templates")  | Out-N
 New-Item -ItemType Directory -Force -Path (Join-Path $Root "scripts")    | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $Root "data")       | Out-Null
 
-foreach ($f in @("platform.py","proxy_manager.py","generator.py","publisher.py","engagement.py","platform_data.py",
-                 "requirements.txt",".env.example","accounts.json","proxies.json","queue.json",
+# Paquete Python (platform.py dentro de phonefarm/ — evita el shadowing del stdlib)
+Copy-Item -Recurse (Join-Path $RepoPlatform "phonefarm") (Join-Path $Root "phonefarm") -Force
+
+foreach ($f in @("requirements.txt",".env.example","accounts.json","proxies.json","queue.json",
+                 "content_profiles.json",
                  "Dockerfile","docker-compose.yml",".dockerignore","mpt-config.toml")) {
     Copy-Item (Join-Path $RepoPlatform $f) (Join-Path $Root $f) -Force
 }
