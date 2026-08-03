@@ -1,0 +1,7 @@
+flask>=3.0
+instagrapi>=2.0
+uiautomator2>=2.16
+requests[socks]>=2.31
+pysocks>=1.7
+python-dotenv>=1.0
+psutil>=5.9

@@ -1,0 +1,13 @@
+[
+  {
+    "id": "job_101",
+    "keyword": "decoracion sala minimalista",
+    "target_account": "acc_01",
+    "status": "failed",
+    "video_path": "C:\\Users\\haxth3\\Documents\\phone-farm-platform (1)\\platform\\videos\\job_101.mp4",
+    "created_at": "2026-08-03T06:59:30Z",
+    "progress": 50,
+    "script": "",
+    "error": "No existe sesión para acc_01. Ejecuta login_once() UNA vez para crearla (nunca se reloguea automáticamente)."
+  }
+]

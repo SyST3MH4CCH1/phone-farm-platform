@@ -1,0 +1,10 @@
+# Contexto de build de la imagen platform: excluir datos y terceros
+# (taktik-bot se copia explícitamente en el Dockerfile; el contexto de MPT
+# es su propia carpeta en docker-compose.yml)
+third_party
+data
+.git
+*.log
+.env
+__pycache__
+*.pyc

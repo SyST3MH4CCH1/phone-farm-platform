@@ -6,3 +6,15 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Phone Farm Platform (Python)
+platform/third_party/
+platform/data/
+platform/.env
+platform/mpt-config.toml
+platform/sessions/
+platform/videos/
+platform/logs/
+platform/venv/
+__pycache__/
+*.pyc

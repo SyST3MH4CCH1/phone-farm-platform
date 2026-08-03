@@ -1,0 +1,67 @@
+"""gen_mpt_config — Genera mpt-config.toml para MoneyPrinterTurbo desde .env.
+
+Sustituye placeholders {{VAR}} con los valores del .env de la plataforma:
+    LLM_PROVIDER  (kimi -> moonshot | openai)
+    KIMI_API_KEY  -> moonshot_api_key
+    OPENAI_API_KEY -> openai_api_key
+
+Seguridad (CVE-2025-7897): en Docker, MPT escucha en 0.0.0.0 DENTRO del
+contenedor pero su puerto 8080 SOLO se publica en 127.0.0.1 del host; en
+ejecución local se fuerza listen_host = "127.0.0.1".
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+MPT_SOURCE = BASE_DIR / "third_party" / "MoneyPrinterTurbo" / "config.example.toml"
+OUTPUT = BASE_DIR / "mpt-config.toml"
+TEMPLATE = """# Auto-generado por scripts/gen_mpt_config.py (no editar a mano).
+# Configuración segura: en ejecución local el API escucha SOLO en 127.0.0.1.
+log_level = "INFO"
+listen_host = "{listen_host}"
+listen_port = 8080
+
+[app]
+edge_tts_timeout = 30
+tls_verify = true
+video_source = "pexels"
+pexels_api_keys = []
+pixabay_api_keys = []
+
+[llm]
+llm_provider = "{llm_provider}"
+{llm_keys}
+"""
+
+
+def main() -> None:
+    provider = os.getenv("LLM_PROVIDER", "kimi").lower()
+    if provider == "openai":
+        llm_provider = "openai"
+        llm_keys = f'openai_api_key = "{os.getenv("OPENAI_API_KEY", "")}"\nopenai_base_url = ""\nopenai_model_name = ""'
+    else:
+        llm_provider = "moonshot"
+        llm_keys = f'moonshot_api_key = "{os.getenv("KIMI_API_KEY", "")}"\nmoonshot_base_url = ""\nmoonshot_model_name = ""'
+
+    listen_host = "0.0.0.0" if os.getenv("IN_DOCKER", "0") == "1" else "127.0.0.1"
+
+    OUTPUT.write_text(
+        TEMPLATE.format(listen_host=listen_host, llm_provider=llm_provider, llm_keys=llm_keys),
+        encoding="utf-8",
+    )
+    print(f"[ok] Config MPT generada: {OUTPUT} (provider={llm_provider}, listen={listen_host})")
+
+
+if __name__ == "__main__":
+    # Cargar .env si existe (misma lógica que platform.py)
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(BASE_DIR / ".env")
+    except ImportError:
+        pass
+    main()

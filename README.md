@@ -98,3 +98,17 @@ bun run typecheck  # tsc --noEmit (también es el "lint")
 ## Auditoría
 
 Informe completo de la auditoría (hallazgos + remediación + roadmap): **[docs/AUDIT.md](docs/AUDIT.md)**
+
+## Backend real (Python + Docker) — `platform/`
+
+Este panel React es la interfaz avanzada; el **backend real** de la granja vive en [`platform/`](platform/README.md):
+
+- **Flask API** (`platform.py`) — 11 endpoints + SSE + stats reales (psutil) + persistencia JSON
+- **MoneyPrinterTurbo** (`generator.py`) — generación real de Reels 9:16 (API FastAPI, solo loopback — CVE-2025-7897)
+- **instagrapi** (`publisher.py`) — publicación con sesión persistente + device spoofing Galaxy A52
+- **taktik-bot** (`engagement.py`) — engagement con límites de warmup y aislamiento 1:1
+- **Docker** — `docker compose` levanta platform + moneyprinter; despliegue con `platform/scripts/deploy.ps1` → `C:\phone-farm\`
+
+```powershell
+powershell -ExecutionPolicy Bypass -File platform\scripts\deploy.ps1
+```
