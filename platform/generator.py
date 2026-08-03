@@ -32,6 +32,8 @@ BASE_DIR = Path(__file__).resolve().parent
 VIDEOS_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", BASE_DIR)) / "videos"
 
 MPT_API_URL = os.getenv("MPT_API_URL", "http://127.0.0.1:8080").rstrip("/")
+# Prefix real de la API de MoneyPrinterTurbo (verificado contra su openapi.json)
+MPT_API_PREFIX = "/api/v1"
 VIDEO_ASPECT = os.getenv("MPT_VIDEO_ASPECT", "9:16")  # "9:16" | "16:9" | "1:1"
 VOICE_NAME = os.getenv("MPT_VOICE_NAME", "es-ES-AlvaroNeural")
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
@@ -69,7 +71,7 @@ def _submit_task(keyword: str, script: str = "") -> str:
         "bgm_volume": 0.2,
     }
     try:
-        response = requests.post(f"{MPT_API_URL}/videos", json=payload, timeout=15)
+        response = requests.post(f"{MPT_API_URL}{MPT_API_PREFIX}/videos", json=payload, timeout=15)
     except requests.exceptions.RequestException as exc:
         raise GeneratorError(f"MPT no responde en {MPT_API_URL}: {type(exc).__name__}") from exc
     if not response.ok:
@@ -86,7 +88,7 @@ def _poll_task(task_id: str) -> tuple[int, list[str], str | None]:
     deadline = time.monotonic() + TASK_TIMEOUT_S
     while time.monotonic() < deadline:
         try:
-            response = requests.get(f"{MPT_API_URL}/tasks/{task_id}", timeout=10)
+            response = requests.get(f"{MPT_API_URL}{MPT_API_PREFIX}/tasks/{task_id}", timeout=10)
         except requests.exceptions.RequestException as exc:
             logger.warning("MPT poll error: %s", type(exc).__name__)
             time.sleep(TASK_POLL_INTERVAL_S)

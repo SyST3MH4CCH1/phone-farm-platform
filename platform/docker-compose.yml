@@ -20,8 +20,10 @@ services:
     env_file:
       - .env
     volumes:
-      # Config segura generada por scripts/gen_mpt_config.py
-      - ./mpt-config.toml:/MoneyPrinterTurbo/config.toml:ro
+      # Config segura generada por scripts/gen_mpt_config.py. Se monta desde
+      # MPT_CONFIG (ruta sin paréntesis: Docker Desktop falla al montar
+      # archivos desde rutas con caracteres especiales; por defecto ./mpt-config.toml)
+      - ${MPT_CONFIG:-./mpt-config.toml}:/MoneyPrinterTurbo/config.toml:ro
       - mpt-storage:/MoneyPrinterTurbo/storage
     expose:
       - "8080"                    # solo red interna (platform)
