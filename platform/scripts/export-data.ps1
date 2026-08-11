@@ -8,12 +8,17 @@
 
   Uso:  powershell -ExecutionPolicy Bypass -File platform\scripts\export-data.ps1
         powershell ... -Out C:\backups   (destino distinto; default: ..\backups)
+        powershell ... -IncludeSecrets   (VOLCADO COMPLETO: incluye platform\.env
+                                          con API keys/token + adbkey del host)
 
   Importar en la máquina nueva: descomprimir el ZIP sobre platform/ y
   `adb reconnect` los dispositivos (los seriales se re-enumeran solos).
 #>
 
-param([string]$Out = "")
+param(
+    [string]$Out = "",
+    [switch]$IncludeSecrets
+)
 
 $ErrorActionPreference = "Stop"
 $Root   = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -31,12 +36,23 @@ $items = @(
     (Join-Path $Root "accounts.json"),
     (Join-Path $Root "proxies.json"),
     (Join-Path $Root "queue.json"),
-    (Join-Path $Root "content_profiles.json")
+    (Join-Path $Root "content_profiles.json"),
+    (Join-Path $Root "mpt-config.toml")
 )
 # Carpetas (solo si existen)
 foreach ($d in @("sessions", "logs", "videos")) {
     $p = Join-Path $Root $d
     if (Test-Path $p) { $items += $p }
+}
+# VOLCADO COMPLETO: secrets del host (API keys, token, huella ADB)
+if ($IncludeSecrets) {
+    $items += (Join-Path $Root ".env")                          # platform\.env
+    $adbKey = Join-Path $env:USERPROFILE ".android\adbkey"
+    if (Test-Path $adbKey) {
+        $items += $adbKey
+        $items += "$adbKey.pub"
+    }
+    Write-Host "  [IncludeSecrets] .env + adbkey incluidos (¡no compartir este ZIP!)" -ForegroundColor DarkYellow
 }
 foreach ($i in $items) {
     if (Test-Path $i) {

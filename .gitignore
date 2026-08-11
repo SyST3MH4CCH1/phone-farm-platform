@@ -11,6 +11,10 @@ coverage/
 platform/.venv/
 .zcode/
 
+# Volcados/backups (pueden contener API keys + adbkey — NUNCA subir)
+backups/
+phonefarm-export-*.zip
+
 # Phone Farm Platform (Python)
 platform/third_party/
 platform/data/
