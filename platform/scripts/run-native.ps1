@@ -35,6 +35,13 @@ if (-not $Python) {
     $pyCmd = Get-Command python -ErrorAction SilentlyContinue
     if ($pyCmd) { $Python = $pyCmd.Source }
 }
+# Python instalado por winget (Python.Python.3.12) — rutas típicas
+foreach ($p in @(
+    "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+    "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
+)) {
+    if (-not $Python -and (Test-Path $p)) { $Python = $p }
+}
 if (-not $Python -and (Test-Path "C:\Python312\python.exe")) {
     $Python = "C:\Python312\python.exe"
 }
