@@ -42,6 +42,33 @@ nvidia-smi                                        # → GPU + driver OK
 
 ## 3. Despliegue del código (portable — ya no hay rutas fijas)
 
+### 3A. Despliegue AUTOMÁTICO (recomendado — un solo comando)
+
+```powershell
+git clone git@github.com:SyST3MH4CCH1/phone-farm-platform.git
+cd phone-farm-platform
+powershell -ExecutionPolicy Bypass -File platform\scripts\setup-new-machine.ps1
+```
+
+El script `setup-new-machine.ps1` hace TODO automáticamente:
+
+| Paso | Qué hace |
+|---|---|
+| 0. Pre-check | Verifica git, node, npm, adb, ffmpeg, python, scrcpy |
+| 1. .env | Copia `.env.example` → `.env` y `platform/.env.example` → `platform/.env`; **genera y sincroniza el token interno** si quedaron vacíos |
+| 2. npm | `npm install` (panel React + Express) |
+| 3. Stack Python | `run-native.ps1` (auto-detecta Python, crea venvs, instala `requirements.txt` pinned, genera config MPT) |
+| 4. Datos | Si pasas `-ImportZip C:\ruta\phonefarm-export-*.zip` → descomprime sobre `platform/` (cuentas, proxies, cola, sesiones IG, vídeos) |
+| 5. Express | Arranca el panel en `http://127.0.0.1:3000` |
+| 6. Verificación | Comprueba Flask :5000, Express :3000, `/panda` y cuenta los dispositivos ADB |
+
+**Después del script** solo queda: abrir el panel, editar `MINIMAX_API_KEY`/`PEXELS_API_KEY` en `platform/.env` (si no los copiaste antes) y conectar los teléfonos por USB.
+
+> Nota: el script muestra advertencias si `ffmpeg`/`scrcpy` no están en PATH — instálalos
+> antes con `winget install Gyan.FFmpeg` y descargando scrcpy (ver sección 2).
+
+### 3B. Despliegue manual (si prefieres control total)
+
 ```powershell
 # 1. Clona el repo (o copia la carpeta completa)
 git clone <tu-repo> phone-farm
