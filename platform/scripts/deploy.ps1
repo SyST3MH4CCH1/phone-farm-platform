@@ -1,15 +1,16 @@
-# deploy.ps1 — Despliega la Phone Farm Platform en C:\phone-farm con Docker.
+# deploy.ps1 — Despliega la Phone Farm Platform en un directorio destino con Docker.
 #
 #   1. Verifica Docker Desktop
 #   2. Clona taktik-bot y MoneyPrinterTurbo (si faltan)
 #   3. Crea .env (desde .env.example) y mpt-config.toml
-#   4. Copia la plataforma a C:\phone-farm (junction para third_party)
+#   4. Copia la plataforma al destino (junction para third_party)
 #   5. docker compose up -d --build
 #
 # Uso:  powershell -ExecutionPolicy Bypass -File platform\scripts\deploy.ps1
+#       powershell ... -Root D:\phone-farm   (destino distinto del default)
 
 param(
-    [string]$Root = "C:\phone-farm",
+    [string]$Root = (Join-Path $PWD "phone-farm"),
     [switch]$NoBuild
 )
 

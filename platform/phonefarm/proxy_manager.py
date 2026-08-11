@@ -59,8 +59,9 @@ def _mask(value: str) -> str:
 def get_proxy_dict(proxy_id: str) -> dict[str, str]:
     """Retorna {"http": "socks5://user:pass@host:port", "https": ...} para el proxy dado.
 
-    Si el proxy no tiene user/pass en proxies.json, usa DATAIMPULSE_USER/PASS del .env.
-    Lanza ValueError si el proxy no existe.
+    Si el proxy no trae user/pass — o trae el placeholder literal (p.ej.
+    "DATAIMPULSE_USER") — se leen las credenciales del .env
+    (DATAIMPULSE_USER/DATAIMPULSE_PASS). Lanza ValueError si no hay credenciales.
     """
     proxy = find_proxy(proxy_id)
     if proxy is None:
@@ -68,8 +69,13 @@ def get_proxy_dict(proxy_id: str) -> dict[str, str]:
 
     host = proxy.get("host", "")
     port = int(proxy.get("port", 0) or 0)
-    user = proxy.get("user") or DI_USER
-    passwd = proxy.get("pass") or DI_PASS
+    # Un user/pass "placeholder" no es una credencial real; se cae al .env.
+    user = proxy.get("user") or ""
+    passwd = proxy.get("pass") or ""
+    if user in ("DATAIMPULSE_USER", "${DATAIMPULSE_USER}", "", None):
+        user = DI_USER
+    if passwd in ("DATAIMPULSE_PASS", "${DATAIMPULSE_PASS}", "", None):
+        passwd = DI_PASS
     scheme = proxy.get("type", "socks5")  # socks5 | http
 
     if not host or not port:
@@ -112,6 +118,93 @@ def _run_adb(device_serial: str, args: list[str], timeout: int = 20) -> str:
             f"adb {args[0]} falló en {device_serial}: {result.stderr.strip() or result.stdout.strip()}"
         )
     return result.stdout.strip()
+
+
+def adb_discover_devices(timeout: int = 8) -> list[dict[str, Any]]:
+    """Devices reales conectados via `adb devices -l` (sin la cabecera).
+
+    Retorna: [{"serial": "ZY326WFTMQ", "status": "device", "product": ..., "model": ...}]
+    Solo incluye estados "device" (autorizado) y "unauthorized" (pendiente de
+    aceptar el diálogo en el teléfono). Un dispositivo desconectado no aparece.
+    """
+    try:
+        result = subprocess.run(
+            [*adb_cmd_prefix(), "devices", "-l"],
+            capture_output=True, text=True, timeout=timeout, check=False,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("Binario 'adb' no encontrado en PATH") from exc
+    devices: list[dict[str, Any]] = []
+    for line in result.stdout.splitlines()[1:]:  # saltar "List of devices attached"
+        parts = line.strip().split()
+        if len(parts) < 2:
+            continue
+        serial, status = parts[0], parts[1]
+        if status not in ("device", "unauthorized"):
+            continue
+        dev: dict[str, Any] = {"serial": serial, "status": status}
+        for part in parts[2:]:
+            if ":" in part:
+                k, v = part.split(":", 1)
+                dev[k] = v
+        devices.append(dev)
+    return devices
+
+
+def is_device_authorized(serial: str) -> bool:
+    """¿El serial dado está autorizado (status=device) en adb?"""
+    try:
+        return any(
+            d.get("serial") == serial and d.get("status") == "device"
+            for d in adb_discover_devices()
+        )
+    except RuntimeError:
+        return False
+
+
+def adb_device_details(serial: str) -> dict[str, Any]:
+    """Datos REALES del dispositivo via ADB (batería, resolución, Android...).
+
+    Cada campo se consulta con timeout corto; si un comando falla el campo
+    queda en None (nunca se inventa un valor).
+    """
+    def shell(*args: str) -> str | None:
+        try:
+            return _run_adb(serial, ["shell", *args], timeout=6)
+        except RuntimeError:
+            return None
+
+    details: dict[str, Any] = {"serial": serial}
+
+    battery_raw = shell("dumpsys", "battery")
+    if battery_raw:
+        level = next((l.split(":", 1)[1].strip() for l in battery_raw.splitlines()
+                      if l.strip().startswith("level:")), None)
+        status = next((l.split(":", 1)[1].strip() for l in battery_raw.splitlines()
+                       if l.strip().startswith("status:")), None)
+        details["battery_pct"] = int(level) if level and level.isdigit() else None
+        # status: 2=charging, 3=discharging, 4=not charging, 5=full
+        details["charging"] = status in ("2", "5")
+
+    size = shell("wm", "size")
+    if size:
+        w = next((l for l in size.splitlines() if "Physical size" in l), None)
+        if w:
+            details["resolution"] = w.split(":", 1)[1].strip()
+
+    release = shell("getprop", "ro.build.version.release")
+    if release:
+        details["android_version"] = release.strip()
+
+    model = shell("getprop", "ro.product.model")
+    if model:
+        details["model"] = model.strip()
+
+    uptime = shell("uptime")
+    if uptime:
+        details["uptime"] = uptime.strip()[:60]
+
+    return details
 
 
 def _is_placeholder_serial(device_serial: str) -> bool:

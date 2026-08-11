@@ -31,6 +31,7 @@ import logging
 import logging.handlers
 import os
 import queue as queue_module
+import re
 import threading
 import time
 from pathlib import Path
@@ -43,12 +44,13 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 from phonefarm.platform_data import load_accounts, load_proxies, load_queue, save_accounts, save_proxies, save_queue
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", BASE_DIR))
+load_dotenv(BASE_DIR / ".env")  # antes de resolver DATA_DIR: PHONE_FARM_DATA_DIR viene del .env
+
+DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", str(BASE_DIR)))
 TEMPLATES_DIR = BASE_DIR / "templates"
 LOGS_DIR = DATA_DIR / "logs"
 SESSIONS_DIR = DATA_DIR / "sessions"
 
-load_dotenv(BASE_DIR / ".env")
 
 PORT = int(os.getenv("FLASK_PORT", "5000"))
 ALLOWED_ORIGINS = {
@@ -144,17 +146,21 @@ logging.getLogger().addHandler(_buffer_handler)
 
 
 # --- Cola de trabajos: pipeline de contenido v2 -------------------------------
-# Ciclo de vida del job:
-#   pending -> scripting -> awaiting_approval -> [approve] -> generating
-#           -> publishing -> published | awaiting_manual_upload | failed
+# Ciclo de vida del job (TODA aprobación es humana, con previsualización real):
+#   pending -> scripting -> awaiting_approval (guión listo)
+#       -> [approve guión] -> generating (MPT genera MP4)
+#       -> awaiting_preview (vídeo REAL listo para previsualizar)
+#       -> [approve publicación] -> publishing -> published | awaiting_manual_upload | failed
 #   awaiting_approval -> [reject] -> rejected
 #   pending (scheduled_time <= now) -> lo procesa el scheduler
+#   auto_approve=true -> salta TODAS las revisiones (solo E2E/CLI)
 _queue_threads: dict[str, threading.Thread] = {}
 _queue_lock = threading.RLock()
 
 JOB_STATUSES = {
     "pending", "scripting", "awaiting_approval", "generating",
-    "publishing", "published", "awaiting_manual_upload", "failed", "rejected",
+    "awaiting_preview", "publishing", "published",
+    "awaiting_manual_upload", "failed", "rejected",
 }
 
 
@@ -206,7 +212,8 @@ def _script_job(job: dict[str, Any]) -> None:
 
         if job.get("auto_approve"):
             logger.info("[%s] auto_approve activo — continuando a generación", job_id)
-            _generate_and_publish(job)
+            _generate_video(job)
+            _publish_job(job)
         else:
             job["status"] = "awaiting_approval"
             _sync_job(job)
@@ -221,10 +228,13 @@ def _script_job(job: dict[str, Any]) -> None:
         _queue_threads.pop(job_id, None)
 
 
-def _generate_and_publish(job: dict[str, Any]) -> None:
-    """Etapa 2: generar vídeo con MPT (script+terms provistos) -> publicar."""
+def _generate_video(job: dict[str, Any]) -> None:
+    """Etapa 2: generar vídeo con MPT (script+terms provistos) -> awaiting_preview.
+
+    El vídeo queda GENERADO y PENDIENTE de aprobación final: el operador
+    previsualiza el MP4 real en el dashboard y decide publicar o no.
+    """
     from phonefarm import generator
-    from phonefarm import publisher
 
     job_id = job["id"]
     try:
@@ -240,9 +250,31 @@ def _generate_and_publish(job: dict[str, Any]) -> None:
         )
         job["video_path"] = video_path
         job["progress"] = 50
+        job["status"] = "awaiting_preview"
         _sync_job(job)
+        logger.info("[%s] Vídeo generado: %s — listo para previsualizar y aprobar publicación",
+                    job_id, video_path)
 
+    except Exception as exc:  # noqa: BLE001 — el error se persiste en el job
+        logger.error("[%s] Fallo en generación: %s", job_id, exc)
+        job["status"] = "failed"
+        job["error"] = str(exc)[:500]
+        job["progress"] = job.get("progress", 0)
+    finally:
+        _sync_job(job)
+        _queue_threads.pop(job_id, None)
+
+
+def _publish_job(job: dict[str, Any]) -> None:
+    """Etapa 3: publicar el vídeo YA generado (awaiting_preview) -> published."""
+    from phonefarm import publisher
+
+    job_id = job["id"]
+    try:
         account_id = job.get("target_account", "")
+        video_path = job.get("video_path", "")
+        if not video_path:
+            raise RuntimeError("No hay vídeo generado para publicar")
         caption = job.get("caption") or f"{job.get('keyword', '')} #reels #viral"
         logger.info("[%s] Publicando en cuenta %s...", job_id, account_id)
         job["status"] = "publishing"
@@ -255,7 +287,7 @@ def _generate_and_publish(job: dict[str, Any]) -> None:
         logger.info("[%s] Publicado OK (media_id=%s)", job_id, media_id)
 
     except Exception as exc:  # noqa: BLE001 — el error se persiste en el job
-        logger.error("[%s] Fallo en pipeline: %s", job_id, exc)
+        logger.error("[%s] Fallo en publicación: %s", job_id, exc)
         job["status"] = "awaiting_manual_upload" if _is_manual_fallback(exc) else "failed"
         job["error"] = str(exc)[:500]
         job["progress"] = job.get("progress", 0)
@@ -267,7 +299,9 @@ def _generate_and_publish(job: dict[str, Any]) -> None:
 def _is_manual_fallback(exc: Exception) -> bool:
     """¿El error es un bloqueo de IG (fallback manual) o un fallo técnico?"""
     name = type(exc).__name__
-    return name in {"ChallengeRequired", "PleaseWaitFewMinutes", "LoginRequired"}
+    # FileNotFoundError = sesión IG no creada: el vídeo ya se copió al teléfono
+    # vía ADB push (publisher._register_manual_fallback) — estado manual, no fallo.
+    return name in {"ChallengeRequired", "PleaseWaitFewMinutes", "LoginRequired", "FileNotFoundError"}
 
 
 # --- Scheduler: jobs programados ----------------------------------------------
@@ -295,6 +329,26 @@ def start_scheduler() -> None:
 
 # --- Aplicación Flask --------------------------------------------------------
 app = Flask(__name__, template_folder=str(TEMPLATES_DIR), static_folder=None)
+
+# Token interno compartido con el panel Express (server.ts). Flask NO es público:
+# aunque bindee a 127.0.1 (o 0.0.0.0 en Docker con loopback solo), exige este header
+# en TODO /api/*, /engagement/*, /stream/*, /videos/*.
+# SIN fallback embebido (seguridad): debe venir de platform/.env (INTERNAL_TOKEN).
+INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "")
+
+if not INTERNAL_TOKEN:
+    print("[FATAL] INTERNAL_TOKEN no definido en platform/.env — el backend rechazará todas las llamadas.", flush=True)
+
+
+@app.before_request
+def auth_internal() -> Any:
+    """Auth interno: exige X-Internal-Auth en cualquier endpoint de estado."""
+    path = request.path
+    if path == "/" or path == "/favicon.ico":
+        return None  # página HTML pública, sin datos
+    if request.headers.get("X-Internal-Auth") != INTERNAL_TOKEN:
+        return jsonify({"error": "unauthorized"}), 401
+    return None
 
 
 @app.after_request
@@ -451,6 +505,7 @@ def api_proxies_verify():
     for proxy in proxies:
         if proxy["id"] == proxy_id:
             proxy.update({k: verdict.get(k) for k in ("ip", "latency_ms", "status")})
+            break
     save_proxies(proxies)
     return jsonify(verdict)
 
@@ -469,6 +524,16 @@ def api_drafts():
     return jsonify(drafts)
 
 
+def _next_numeric_id(queue: list[dict[str, Any]]) -> str:
+    """ID de job único: máx. numérico existente + 1 (len+1 colisiona al borrar)."""
+    nums = []
+    for j in queue:
+        m = re.match(r"job_(\d+)$", str(j.get("id", "")))
+        if m:
+            nums.append(int(m.group(1)))
+    return f"job_{max(nums, default=100) + 1}"
+
+
 @app.post("/api/queue")
 def api_queue_create():
     body = request.get_json(silent=True) or {}
@@ -485,7 +550,7 @@ def api_queue_create():
 
     queue = load_queue()
     job = {
-        "id": f"job_{len(queue) + 101}",
+        "id": _next_numeric_id(queue),
         "keyword": keyword,
         "target_account": target_account or (load_accounts()[0]["id"] if load_accounts() else ""),
         "niche_id": body.get("niche_id") or "general",
@@ -543,34 +608,101 @@ def api_queue_next():
 
 @app.post("/api/queue/<job_id>/approve")
 def api_queue_approve(job_id: str):
-    """Etapa 2: aprueba el guión -> genera vídeo con MPT -> publica."""
+    """Etapa 2: aprueba el GUION -> genera el vídeo con MPT -> awaiting_preview.
+
+    El vídeo queda generado y listo para PREVISUALIZAR (no se publica aún):
+    el operador ve el MP4 real y decide publicar con /api/queue/<id>/publish.
+    """
     queue = load_queue()
     job = next((j for j in queue if j.get("id") == job_id), None)
     if job is None:
         return jsonify({"error": f"Job no existe: {job_id}"}), 404
     if job.get("status") != "awaiting_approval":
-        return jsonify({"error": f"El job {job_id} está en estado {job.get('status')}, no en aprobación"}), 409
+        return jsonify({"error": f"El job {job_id} está en estado {job.get('status')}, no en aprobación de guión"}), 409
 
-    if not _spawn(job_id, lambda j=job: _generate_and_publish(j)):
+    if not _spawn(job_id, lambda j=job: _generate_video(j)):
         return jsonify({"error": f"El job {job_id} ya se está procesando"}), 409
 
-    logger.info("[%s] Guión APROBADO — generando y publicando", job_id)
+    logger.info("[%s] Guión APROBADO — generando vídeo (quedará en awaiting_preview)", job_id)
     return jsonify(job), 202
+
+
+@app.post("/api/queue/<job_id>/publish")
+def api_queue_publish(job_id: str):
+    """Etapa 3: aprueba la PUBLICACION del vídeo ya generado -> publishing -> published."""
+    queue = load_queue()
+    job = next((j for j in queue if j.get("id") == job_id), None)
+    if job is None:
+        return jsonify({"error": f"Job no existe: {job_id}"}), 404
+    if job.get("status") != "awaiting_preview":
+        return jsonify({"error": f"El job {job_id} está en estado {job.get('status')}, no en espera de publicación"}), 409
+    if not job.get("video_path"):
+        return jsonify({"error": "El job no tiene vídeo generado"}), 409
+
+    if not _spawn(job_id, lambda j=job: _publish_job(j)):
+        return jsonify({"error": f"El job {job_id} ya se está procesando"}), 409
+
+    logger.info("[%s] Publicación APROBADA — publicando vídeo %s", job_id, job.get("video_path"))
+    return jsonify(job), 202
+
+
+@app.post("/api/queue/<job_id>/schedule")
+def api_queue_schedule(job_id: str):
+    """Re-programa un job (drag&drop del calendario): actualiza scheduled_ts.
+
+    Se permite en cualquier estado NO ejecutándose ni terminal; los jobs
+    publicados/fallidos/rechazados no tienen sentido re-programar.
+    """
+    queue = load_queue()
+    job = next((j for j in queue if j.get("id") == job_id), None)
+    if job is None:
+        return jsonify({"error": f"Job no existe: {job_id}"}), 404
+    if job.get("status") in ("scripting", "generating", "publishing",
+                             "published", "failed", "rejected"):
+        return jsonify({"error": f"No se puede re-programar un job en estado {job.get('status')}"}), 409
+
+    body = request.get_json(silent=True) or {}
+    ts = _parse_schedule(body.get("scheduled_time"))
+    if ts is None:
+        return jsonify({"error": "scheduled_time inválido (ISO '2026-08-07T07:30:00Z' o timestamp)"}), 400
+    job["scheduled_ts"] = ts
+    save_queue(queue)
+    logger.info("[%s] Re-programado para %s", job_id, ts)
+    return jsonify(job)
 
 
 @app.post("/api/queue/<job_id>/reject")
 def api_queue_reject(job_id: str):
-    """Rechaza el guión del draft (status -> rejected)."""
+    """Rechaza el guión (awaiting_approval) o el vídeo previsualizado (awaiting_preview)."""
     queue = load_queue()
     for job in queue:
         if job.get("id") == job_id:
-            if job.get("status") != "awaiting_approval":
+            if job.get("status") not in ("awaiting_approval", "awaiting_preview"):
                 return jsonify({"error": f"El job {job_id} está en estado {job.get('status')}"}), 409
             job["status"] = "rejected"
             save_queue(queue)
-            logger.info("[%s] Guión RECHAZADO por el operador", job_id)
+            logger.info("[%s] Rechazado por el operador (%s)", job_id, job.get("video_path") and "vídeo" or "guión")
             return jsonify(job)
     return jsonify({"error": f"Job no existe: {job_id}"}), 404
+
+
+@app.delete("/api/queue/<job_id>")
+def api_queue_delete(job_id: str):
+    """Elimina un job de la cola (y su MP4 local si existe)."""
+    queue = load_queue()
+    job = next((j for j in queue if j.get("id") == job_id), None)
+    if job is None:
+        return jsonify({"error": f"Job no existe: {job_id}"}), 404
+
+    save_queue([j for j in queue if j.get("id") != job_id])
+    video = job.get("video_path")
+    if video:
+        path = Path(video)
+        if path.is_file():
+            path.unlink(missing_ok=True)
+            logger.info("[%s] MP4 eliminado: %s", job_id, path.name)
+    logger.info("[%s] Eliminado de la cola", job_id)
+    return jsonify({"ok": True, "id": job_id})
 
 
 # --- Perfiles de contenido (nichos) --------------------------------------------
@@ -638,8 +770,6 @@ def api_content_preview():
         return jsonify({"error": "keyword es obligatoria"}), 400
     return jsonify(content.preview(keyword, body.get("niche_id"), body.get("script")))
 
-    return jsonify(job), 202  # procesando en background
-
 
 # --- Engagement --------------------------------------------------------------
 
@@ -671,11 +801,33 @@ def api_engagement_stop():
         return jsonify({"error": str(exc)}), 404
 
 
+@app.post("/api/accounts/<account_id>/instagram/login")
+def api_instagram_login(account_id: str):
+    """Login inicial de Instagram para crear la sesión persistida (sessions/).
+
+    Necesario para jobs en awaiting_manual_upload por 'No existe sesión'.
+    Cooldown de 5 min entre intentos por cuenta (en publisher.login_once).
+    """
+    from phonefarm import publisher
+
+    body = request.get_json(silent=True) or {}
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    if not username or not password:
+        return jsonify({"error": "username y password son obligatorios"}), 400
+    try:
+        session_path = publisher.login_once(account_id, username, password)
+        return jsonify({"ok": True, "account_id": account_id, "session": session_path})
+    except Exception as exc:  # noqa: BLE001 — instagrapi challenge / 2FA / credenciales
+        logger.warning("Login IG fallido para %s: %s", account_id, exc)
+        return jsonify({"ok": False, "error": str(exc)[:500]}), 502
+
+
 # --- Stats -------------------------------------------------------------------
 
 @app.get("/api/stats")
 def api_stats():
-    from phonefarm import engagement
+    from phonefarm import engagement, proxy_manager
 
     queue = load_queue()
     accounts = load_accounts()
@@ -693,7 +845,9 @@ def api_stats():
         "ram_percent": ram,
         "active_bots": engagement.active_bots_count(),
         "active_proxies": sum(1 for p in proxies if p.get("status") == "online"),
-        "panda_grid_status": PANDA_GRID_STATUS,
+        # Panda Grid = rejilla de dispositivos ADB REALES (antes era una env var
+        # con default "Connected" sin verificar nada -> cero fake).
+        "panda_grid_status": "Connected" if proxy_manager.adb_discover_devices() else "Disconnected",
         "bridge_config": {
             "mini_pc_ip": "127.0.0.1",
             "mini_pc_port": PORT,
@@ -729,7 +883,104 @@ def api_auth_me():
     }})
 
 
-# --- SSE + Dashboard ----------------------------------------------------------
+@app.get("/api/source/<path:filename>")
+def api_source(filename: str):
+    """Sirve el código REAL del backend (para el CodeViewer del panel).
+
+    Solo archivos del paquete phonefarm (nunca rutas arbitrarias).
+    """
+    import pathlib
+
+    safe = pathlib.Path(filename).name
+    base = pathlib.Path(__file__).resolve().parent
+    allowed = {
+        "platform.py", "proxy_manager.py", "generator.py",
+        "publisher.py", "engagement.py", "content.py",
+        "platform_data.py", "mcp_server.py",
+    }
+    if safe not in allowed:
+        return jsonify({"error": f"Archivo no permitido: {filename}"}), 403
+    try:
+        text = (base / safe).read_text(encoding="utf-8")
+    except OSError as exc:
+        return jsonify({"error": f"No se pudo leer: {exc}"}), 500
+    return jsonify({"filename": safe, "content": text})
+
+
+@app.get("/api/source")
+def api_source_index():
+    """Lista los archivos reales disponibles en el CodeViewer."""
+    return jsonify({"files": [
+        "platform.py", "proxy_manager.py", "generator.py",
+        "publisher.py", "engagement.py", "content.py",
+        "platform_data.py", "mcp_server.py",
+    ]})
+
+
+# En Flask, arrancarée lsa sub de MCP si estaenabled
+bind_host = "0.0.0.0" if os.getenv("IN_DOCKER") == "1" else "127.0.0.1"
+
+# Endpoint adb: lista real de dispositivos conectados (nativo)
+from phonefarm import proxy_manager
+
+
+@app.get("/api/adb/devices")
+def adb_devices_list():
+    """Devices detectados por adb (nativo directo), con detalles REALES por
+    dispositivo (batería, resolución, Android...) para la rejilla Panda Grid."""
+    try:
+        devices = proxy_manager.adb_discover_devices()
+        for dev in devices:
+            if dev.get("status") == "device":
+                dev.update(proxy_manager.adb_device_details(dev["serial"]))
+        return jsonify({"devices": devices})
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc), "devices": []}), 500
+
+
+@app.post("/api/accounts/from-device")
+def adb_account_from_device():
+    """Registra una cuenta automáticamente desde un dispositivo ADB autorizado."""
+    body = request.get_json(silent=True) or {}
+    serial = (body.get("serial") or "").strip()
+    username = (body.get("username") or "").strip()
+    password = (body.get("password") or "").strip()
+    proxy_id = (body.get("proxy_id") or "").strip()
+
+    if not serial or not username or not password:
+        return jsonify({"error": "serial, username y password requeridos"}), 400
+
+    try:
+        devices = proxy_manager.adb_discover_devices()
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 500
+    dev = next((d for d in devices if d.get("serial") == serial and d.get("status") == "device"), None)
+    if not dev:
+        return jsonify({"error": f"Dispositivo {serial} no autorizado (devices actuales: {[d['serial']+':'+d['status'] for d in devices]})"}), 400
+
+    accounts = load_accounts()
+    if any(a.get("username") == username for a in accounts):
+        return jsonify({"error": f"Usuario ya registrado: {username}"}), 409
+    acc_id = f"acc_{max([int(a['id'].split('_')[1]) for a in accounts] or [0]) + 1:02d}"
+    account = {
+        "id": acc_id,
+        "username": username,
+        "password": password,
+        "status": "active",
+        "device_serial": serial,
+        "proxy_id": proxy_id or (load_proxies()[0]["id"] if load_proxies() else ""),
+        "session_file": f"sessions/{acc_id}.json",
+        "warmup_day": 0,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "likes_today": 0,
+        "follows_today": 0,
+        "comments_today": 0,
+        "bot_active": False,
+    }
+    accounts.append(account)
+    save_accounts(accounts)
+    logger.info("Cuenta ADB creada: %s (@%s, %s)", account["id"], username, serial)
+    return jsonify(account), 201
 
 @app.get("/stream/logs")
 def stream_logs():

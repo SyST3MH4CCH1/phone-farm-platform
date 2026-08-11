@@ -15,7 +15,15 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", Path(__file__).resolve().parent.parent))
+_BASE_DIR = Path(__file__).resolve().parent.parent
+# Carga .env antes de resolver DATA_DIR (PHONE_FARM_DATA_DIR puede venir del .env).
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_BASE_DIR / ".env")
+except ImportError:  # dotenv no instalado: confiar en vars de entorno reales
+    pass
+
+DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", str(_BASE_DIR)))
 
 ACCOUNTS_FILE = DATA_DIR / "accounts.json"
 PROXIES_FILE = DATA_DIR / "proxies.json"
@@ -36,10 +44,14 @@ def _read(file: Path, default: Any) -> Any:
 
 
 def _write(file: Path, data: Any) -> None:
+    """Escritura ATÓMICA: tmp + os.replace para no corromper el JSON si el
+    proceso muere a mitad de un json.dump (AUDIT: persistencia no atómica)."""
     with _lock:
         file.parent.mkdir(parents=True, exist_ok=True)
-        with open(file, "w", encoding="utf-8") as fh:
+        tmp = file.with_suffix(file.suffix + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2, ensure_ascii=False)
+        os.replace(tmp, file)
 
 
 # --- accounts.json ---

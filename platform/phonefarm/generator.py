@@ -126,17 +126,20 @@ def _poll_task(task_id: str) -> tuple[int, list[str], str | None]:
 
         # Workaround: ¿el vídeo final ya existe aunque el estado no flipeó?
         # Solo en la fase final (progress>=75); se exige tamaño ESTABLE entre
-        # dos muestras (15 s) y la descarga se valida después con ffprobe.
+        # TRES muestras (20 s) porque ffmpeg puede pausar la escritura a mitad
+        # del encode: 2 muestras no bastan (descargaba el MP4 a medio escribir).
         if time.monotonic() - started > 180 and progress >= 75:
             probe_url = f"{MPT_API_URL}{MPT_API_PREFIX}/download/{task_id}/final-1.mp4"
             size1 = _probe_file_size(probe_url)
             if size1 > 200_000:
-                time.sleep(15)
+                time.sleep(20)
                 size2 = _probe_file_size(probe_url)
-                if size1 == size2:
+                time.sleep(20)
+                size3 = _probe_file_size(probe_url)
+                if size1 == size2 == size3:
                     logger.warning(
                         "MPT estado colgado post-generación; final-1.mp4 estable "
-                        "(%d bytes) — usando detección por archivo", size2,
+                        "(%d bytes) — usando detección por archivo", size3,
                     )
                     return 100, [f"/download/{task_id}/final-1.mp4"], None
 
@@ -219,7 +222,7 @@ def _download_video(uri: str, dest: Path) -> None:
     espera — el archivo de MPT puede seguir escribiéndose.
     """
     url = _normalize_download_uri(uri)
-    for attempt in range(1, 4):
+    for attempt in range(1, 5):
         dest.parent.mkdir(parents=True, exist_ok=True)
         response = requests.get(url, timeout=180, stream=True)
         if not response.ok:
@@ -232,13 +235,15 @@ def _download_video(uri: str, dest: Path) -> None:
             return
 
         logger.warning(
-            "Descarga %s inválida/truncada (intento %d/3, %d bytes) — reintentando",
+            "Descarga %s inválida/truncada (intento %d/4, %d bytes) — reintentando",
             dest.name, attempt, dest.stat().st_size,
         )
         dest.unlink(missing_ok=True)
-        time.sleep(20)
+        # ffmpeg puede tardar minutos en terminar el encode final; esperar
+        # más cada intento en vez de volver a descargar un archivo a medias.
+        time.sleep(30 * attempt)
 
-    raise GeneratorError(f"MP4 truncado tras 3 intentos: {dest.name}")
+    raise GeneratorError(f"MP4 truncado tras 4 intentos: {dest.name}")
 
 
 # ---------------------------------------------------------------------------

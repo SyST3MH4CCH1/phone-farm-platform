@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Video, Volume2, Key, Sliders, Play, CheckCircle2, AlertCircle, ExternalLink, RefreshCw, Wand2, Type, Music, Layers } from 'lucide-react';
 import { MoneyPrinterConfig, Account } from '../types';
 
 interface MoneyPrinterModalProps {
   accounts: Account[];
+  initialAccount?: Account;
   onClose: () => void;
   onRefreshData: () => void;
 }
 
-export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, onClose, onRefreshData }) => {
+export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, initialAccount, onClose, onRefreshData }) => {
   const [config, setConfig] = useState<MoneyPrinterConfig>({
     repo_url: "https://github.com/harry0703/MoneyPrinterTurbo",
     bind_address: "127.0.0.1:8501",
@@ -24,14 +24,14 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
     subtitle_font: "STHeiti",
     subtitle_color: "#FFFFFF",
     subtitle_size: 28,
-    pexels_api_key: ""your_pexels_key"",
+    pexels_api_key: "",
     auto_upload_to_adb: true,
     status: "online"
   });
 
   const [activeTab, setActiveTab] = useState<'generator' | 'engine' | 'subtitles'>('generator');
-  const [keyword, setKeyword] = useState('diseño de interiores salas modernas');
-  const [targetAccount, setTargetAccount] = useState(accounts[0]?.id || 'acc_01');
+  const [keyword, setKeyword] = useState('');
+  const [targetAccount, setTargetAccount] = useState(accounts[0]?.id || '');
   const [customPrompt, setCustomPrompt] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -128,67 +128,63 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
-      <div className="bg-[#101A2D] border border-[#1E2C42] rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 font-mono">
+      <div className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="bg-[#0F1829] px-5 py-4 border-b border-[#1E2C42] flex items-center justify-between">
+        <div className="bg-[#232528] px-5 py-4 border-b border-[#2A2C30] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-[#00E5BE]/10 border border-[#00E5BE]/30 rounded-xl flex items-center justify-center text-[#00E5BE]">
-              <Sparkles className="w-4 h-4" />
+            <div className="w-8 h-8 bg-[#8A8F98]/10 border border-[#8A8F98]/30 rounded-xl flex items-center justify-center text-[#8A8F98]">
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-wider flex items-center gap-2">
                 MoneyPrinterTurbo Engine Integration
                 <a
                   href="https://github.com/harry0703/MoneyPrinterTurbo/blob/main/README-en.md"
                   target="_blank"
                   rel="noreferrer"
-                  className="text-[10px] text-[#4DFFE0] hover:underline flex items-center gap-1 font-sans"
+                  className="text-[10px] text-[#A1A6AE] hover:underline flex items-center gap-1 font-sans"
                 >
-                  GitHub Repo <ExternalLink className="w-3 h-3 text-[#00E5BE]" />
+                  GitHub Repo
                 </a>
               </h3>
-              <p className="text-[11px] text-[#94A3B8] font-sans">
+              <p className="text-[11px] text-[#9CA1A8] font-sans">
                 Generación automática de vídeos virales 9:16 (Shorts/Reels) mediante IA + Pexels + EdgeTTS
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-[#94A3B8] hover:text-white font-bold text-sm p-1">
+          <button onClick={onClose} className="text-[#9CA1A8] hover:text-[#E5E5E5] font-bold text-sm p-1">
             ✕
           </button>
         </div>
 
         {/* Tab Selector */}
-        <div className="flex border-b border-[#1E2C42] bg-[#0B1320] text-xs">
+        <div className="flex border-b border-[#2A2C30] bg-[#1A1C1E] text-xs">
           <button
             onClick={() => setActiveTab('generator')}
             className={`px-4 py-2.5 font-bold flex items-center gap-2 border-b-2 transition-colors ${
               activeTab === 'generator'
-                ? 'border-[#00E5BE] text-[#00E5BE] bg-[#101A2D]'
-                : 'border-transparent text-[#94A3B8] hover:text-white'
+                ? 'border-[#8A8F98] text-[#8A8F98] bg-[#1E2023]'
+                : 'border-transparent text-[#9CA1A8] hover:text-[#E5E5E5]'
             }`}
-          >
-            <Wand2 className="w-3.5 h-3.5 text-[#00E5BE]" /> Generador Rápido de Reel
+          > Generador Rápido de Reel
           </button>
           <button
             onClick={() => setActiveTab('engine')}
             className={`px-4 py-2.5 font-bold flex items-center gap-2 border-b-2 transition-colors ${
               activeTab === 'engine'
-                ? 'border-[#00E5BE] text-[#00E5BE] bg-[#101A2D]'
-                : 'border-transparent text-[#94A3B8] hover:text-white'
+                ? 'border-[#8A8F98] text-[#8A8F98] bg-[#1E2023]'
+                : 'border-transparent text-[#9CA1A8] hover:text-[#E5E5E5]'
             }`}
-          >
-            <Sliders className="w-3.5 h-3.5 text-[#4DFFE0]" /> Motores IA & API Keys
+          > Motores IA & API Keys
           </button>
           <button
             onClick={() => setActiveTab('subtitles')}
             className={`px-4 py-2.5 font-bold flex items-center gap-2 border-b-2 transition-colors ${
               activeTab === 'subtitles'
-                ? 'border-[#00E5BE] text-[#00E5BE] bg-[#101A2D]'
-                : 'border-transparent text-[#94A3B8] hover:text-white'
+                ? 'border-[#8A8F98] text-[#8A8F98] bg-[#1E2023]'
+                : 'border-transparent text-[#9CA1A8] hover:text-[#E5E5E5]'
             }`}
-          >
-            <Type className="w-3.5 h-3.5 text-[#00E5BE]" /> Subtítulos & Audio
+          > Subtítulos & Audio
           </button>
         </div>
 
@@ -196,14 +192,13 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
         <div className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
           {activeTab === 'generator' && (
             <form onSubmit={handleGenerateVideo} className="space-y-4">
-              <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#00E5BE] uppercase tracking-wide flex items-center gap-2">
-                  <Video className="w-4 h-4 text-[#4DFFE0]" /> Generar Reel 9:16 con MoneyPrinterTurbo Pipeline
+              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
+                <div className="text-xs font-bold text-[#8A8F98] uppercase tracking-wide flex items-center gap-2"> Generar Reel 9:16 con MoneyPrinterTurbo Pipeline
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">
+                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">
                       Keyword / Nicho Principal
                     </label>
                     <input
@@ -212,19 +207,19 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                       value={keyword}
                       onChange={(e) => setKeyword(e.target.value)}
                       placeholder="ej. rutina fitness alta intensidad en casa"
-                      className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#00E5BE]"
+                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">
+                      <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">
                         Cuenta Instagram de Destino (ADB)
                       </label>
                       <select
                         value={targetAccount}
                         onChange={(e) => setTargetAccount(e.target.value)}
-                        className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#00E5BE]"
+                        className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
                       >
                         {accounts.map(acc => (
                           <option key={acc.id} value={acc.id}>
@@ -235,13 +230,13 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                     </div>
 
                     <div>
-                      <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">
+                      <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">
                         Formato Aspect Ratio
                       </label>
                       <select
                         value={config.video_aspect}
                         onChange={(e) => setConfig({ ...config, video_aspect: e.target.value as any })}
-                        className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#00E5BE]"
+                        className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
                       >
                         <option value="9:16">9:16 (Instagram Reels / TikTok / Shorts)</option>
                         <option value="16:9">16:9 (YouTube Standard)</option>
@@ -251,7 +246,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                   </div>
 
                   <div>
-                    <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">
+                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">
                       Instrucción Opcional para LLM (Prompt Custom)
                     </label>
                     <textarea
@@ -259,42 +254,39 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                       value={customPrompt}
                       onChange={(e) => setCustomPrompt(e.target.value)}
                       placeholder="ej. Enfatizar un tono humorístico y usar palabras de alto gancho en los primeros 3 segundos."
-                      className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-[#00E5BE] text-xs"
+                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-1.5 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98] text-xs"
                     />
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center justify-between pt-2">
-                <div className="text-[11px] text-[#94A3B8] font-sans flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#00E5BE] animate-pulse" />
+                <div className="text-[11px] text-[#9CA1A8] font-sans flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#8A8F98] animate-pulse" />
                   <span>Configuración activa: <strong>{config.voice_name}</strong> + Pexels HD Clips</span>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-[#00E5BE] hover:bg-[#00E5BE]/90 text-[#090D16] font-bold px-5 py-2.5 rounded-lg flex items-center gap-2 shadow-lg disabled:opacity-50"
+                  className="bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold px-5 py-2.5 rounded-lg flex items-center gap-2 disabled:opacity-50"
                 >
                   {loading ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin text-[#090D16]" /> Ejecutando MoneyPrinterTurbo...
+                    <> Ejecutando MoneyPrinterTurbo...
                     </>
                   ) : (
-                    <>
-                      <Play className="w-4 h-4 fill-[#090D16] text-[#090D16]" /> Generar & Inyectar a Granja ADB
+                    <> Generar & Inyectar a Granja ADB
                     </>
                   )}
                 </button>
               </div>
 
               {genResult && (
-                <div className="p-4 rounded-xl border border-[#00E5BE]/40 bg-[#00E5BE]/10 text-[#00E5BE] font-mono text-xs space-y-2">
+                <div className="p-4 rounded-xl border border-[#8A8F98]/40 bg-[#8A8F98]/10 text-[#8A8F98] font-mono text-xs space-y-2">
                   <div className="flex items-center gap-2 font-bold">
-                    <CheckCircle2 className="w-4 h-4 text-[#00E5BE]" />
                     <span>¡Vídeo procesado e inyectado a la cola de teléfonos físicos ADB!</span>
                   </div>
-                  <div className="text-[11px] text-neutral-300">
+                  <div className="text-[11px] text-[#E5E5E5]">
                     <div>• Job ID: <strong>{genResult.job.id}</strong></div>
                     <div>• RUTA VÍDEO: <strong>{genResult.job.video_path}</strong></div>
                     <div>• ESTADO: <strong>Auto-Publicando mediante instagrapi en @{accounts.find(a => a.id === genResult.job.target_account)?.username}</strong></div>
@@ -306,12 +298,11 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
 
           {activeTab === 'engine' && (
             <form onSubmit={handleSaveConfig} className="space-y-4">
-              <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#4DFFE0] uppercase tracking-wide flex items-center gap-2">
-                  <Key className="w-4 h-4 text-[#00E5BE]" /> Configuración de Pexels API Key & Clips de Vídeo Stock
+              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
+                <div className="text-xs font-bold text-[#A1A6AE] uppercase tracking-wide flex items-center gap-2"> Configuración de Pexels API Key & Clips de Vídeo Stock
                 </div>
                 <div>
-                  <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">
+                  <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">
                     Pexels API Key
                   </label>
                   <div className="flex gap-2">
@@ -319,13 +310,13 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                       type="password"
                       value={config.pexels_api_key}
                       onChange={(e) => setConfig({ ...config, pexels_api_key: e.target.value })}
-                      className="flex-1 bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-[#00E5BE]"
+                      className="flex-1 bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-1.5 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
                     />
                     <button
                       type="button"
                       onClick={handleTestPexels}
                       disabled={testingPexels}
-                      className="bg-[#1E293B] hover:bg-[#334155] border border-[#1E2C42] px-3 py-1.5 rounded-lg text-[#00E5BE] font-bold"
+                      className="bg-[#33363A] hover:bg-[#3A3D42] border border-[#2A2C30] px-3 py-1.5 rounded-lg text-[#8A8F98] font-bold"
                     >
                       {testingPexels ? 'Verificando...' : 'Probar Key'}
                     </button>
@@ -334,26 +325,25 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
 
                 {pexelsResult && (
                   <div className={`p-2.5 rounded-lg border text-[11px] flex items-center gap-2 ${
-                    pexelsResult.valid ? 'bg-[#00E5BE]/10 border-[#00E5BE]/30 text-[#00E5BE]' : 'bg-red-950/40 border-red-500/40 text-red-300'
+                    pexelsResult.valid ? 'bg-[#8A8F98]/10 border-[#8A8F98]/30 text-[#8A8F98]' : 'bg-red-950/40 border-red-500/40 text-red-300'
                   }`}>
-                    {pexelsResult.valid ? <CheckCircle2 className="w-4 h-4 text-[#00E5BE]" /> : <AlertCircle className="w-4 h-4 text-red-400" />}
+                    {pexelsResult.valid ? true : null}
                     <span>{pexelsResult.message}</span>
                   </div>
                 )}
               </div>
 
-              <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#00E5BE] uppercase tracking-wide flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-[#4DFFE0]" /> Proveedor de Modelo de Lenguaje (LLM Script Generator)
+              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
+                <div className="text-xs font-bold text-[#8A8F98] uppercase tracking-wide flex items-center gap-2"> Proveedor de Modelo de Lenguaje (LLM Script Generator)
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">Proveedor LLM</label>
+                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Proveedor LLM</label>
                     <select
                       value={config.llm_provider}
                       onChange={(e) => setConfig({ ...config, llm_provider: e.target.value as any })}
-                      className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-2 text-white focus:outline-none"
+                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5] focus:outline-none"
                     >
                       <option value="gemini">Google Gemini API (gemini-2.5-flash)</option>
                       <option value="openai">OpenAI (gpt-4o-mini)</option>
@@ -364,13 +354,13 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                   </div>
 
                   <div>
-                    <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">Puerto / Address Enlace</label>
+                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Puerto / Address Enlace</label>
                     <input
                       type="text"
                       value={config.bind_address}
                       onChange={(e) => setConfig({ ...config, bind_address: e.target.value })}
                       placeholder="127.0.0.1:8501"
-                      className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-2 text-white"
+                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5]"
                     />
                   </div>
                 </div>
@@ -380,7 +370,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                 <button
                   type="submit"
                   disabled={saving}
-                  className="bg-[#00E5BE] hover:bg-[#00E5BE]/90 text-[#090D16] font-bold px-4 py-2 rounded-lg"
+                  className="bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold px-4 py-2 rounded-lg"
                 >
                   {saving ? 'Guardando...' : 'Guardar Configuración MoneyPrinter'}
                 </button>
@@ -390,18 +380,17 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
 
           {activeTab === 'subtitles' && (
             <form onSubmit={handleSaveConfig} className="space-y-4">
-              <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#00E5BE] uppercase tracking-wide flex items-center gap-2">
-                  <Volume2 className="w-4 h-4 text-[#4DFFE0]" /> Motor de Síntesis de Voz (Text-to-Speech)
+              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
+                <div className="text-xs font-bold text-[#8A8F98] uppercase tracking-wide flex items-center gap-2"> Motor de Síntesis de Voz (Text-to-Speech)
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">Voz Predeterminada</label>
+                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Voz Predeterminada</label>
                     <select
                       value={config.voice_name}
                       onChange={(e) => setConfig({ ...config, voice_name: e.target.value })}
-                      className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-2 text-white"
+                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5]"
                     >
                       <option value="es-ES-AlvaroNeural">Álvaro (Español España - Natural)</option>
                       <option value="es-ES-[#1]ElviraNeural">Elvira (Español España - Expresivo)</option>
@@ -413,7 +402,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                   </div>
 
                   <div>
-                    <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">Volumen de Música de Fondo (BGM)</label>
+                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Volumen de Música de Fondo (BGM)</label>
                     <input
                       type="range"
                       min="0"
@@ -421,46 +410,45 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                       step="0.05"
                       value={config.bgm_volume}
                       onChange={(e) => setConfig({ ...config, bgm_volume: parseFloat(e.target.value) })}
-                      className="w-full accent-[#00E5BE]"
+                      className="w-full accent-[#8A8F98]"
                     />
-                    <div className="text-[10px] text-[#94A3B8] text-right">{Math.round(config.bgm_volume * 100)}%</div>
+                    <div className="text-[10px] text-[#9CA1A8] text-right">{Math.round(config.bgm_volume * 100)}%</div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-[#0B1320] border border-[#1E2C42] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#4DFFE0] uppercase tracking-wide flex items-center gap-2">
-                  <Type className="w-4 h-4 text-[#00E5BE]" /> Estilo de Subtítulos FFmpeg SRT
+              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
+                <div className="text-xs font-bold text-[#A1A6AE] uppercase tracking-wide flex items-center gap-2"> Estilo de Subtítulos FFmpeg SRT
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">Tipografía Font</label>
+                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Tipografía Font</label>
                     <input
                       type="text"
                       value={config.subtitle_font}
                       onChange={(e) => setConfig({ ...config, subtitle_font: e.target.value })}
-                      className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-1.5 text-white"
+                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-1.5 text-[#E5E5E5]"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">Color de Texto</label>
+                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Color de Texto</label>
                     <input
                       type="color"
                       value={config.subtitle_color}
                       onChange={(e) => setConfig({ ...config, subtitle_color: e.target.value })}
-                      className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg h-8 px-1 py-1 cursor-pointer"
+                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg h-8 px-1 py-1 cursor-pointer"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#94A3B8] mb-1 uppercase text-[10px]">Tamaño de Letra</label>
+                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Tamaño de Letra</label>
                     <input
                       type="number"
                       value={config.subtitle_size}
                       onChange={(e) => setConfig({ ...config, subtitle_size: Number(e.target.value) })}
-                      className="w-full bg-[#101A2D] border border-[#1E2C42] rounded-lg px-3 py-1.5 text-white"
+                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-1.5 text-[#E5E5E5]"
                     />
                   </div>
                 </div>
@@ -470,7 +458,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                 <button
                   type="submit"
                   disabled={saving}
-                  className="bg-[#00E5BE] hover:bg-[#00E5BE]/90 text-[#090D16] font-bold px-4 py-2 rounded-lg"
+                  className="bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold px-4 py-2 rounded-lg"
                 >
                   {saving ? 'Guardando...' : 'Guardar Preferencias de Subtítulos'}
                 </button>

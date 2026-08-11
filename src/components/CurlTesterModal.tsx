@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Terminal as TerminalIcon, Play, Copy, Check, Send } from 'lucide-react';
 
 interface CurlTesterModalProps {
   isOpen: boolean;
@@ -31,7 +30,7 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
       name: "2. Crear nueva cuenta IG",
       method: "POST",
       url: "/api/accounts",
-      curl: `curl -X POST http://127.0.0.1:5000/api/accounts -H "Content-Type: application/json" -d '{"username":"nicho_fitness_02","password":"Pass123!","device_serial":"RFCW80ZZZZZ","proxy_id":"proxy_01","warmup_day":1}'`,
+      curl: `curl -X POST http://127.0.0.1:5000/api/accounts -H "Content-Type: application/json" -d '{"username":"<cuenta>","password":"<password>","device_serial":"<serial>","proxy_id":"proxy_01","warmup_day":1}'`,
       body: { username: "nicho_fitness_02", password: "Pass123!", device_serial: "RFCW80ZZZZZ", proxy_id: "proxy_01", warmup_day: 1 }
     },
     {
@@ -101,7 +100,7 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
       name: "12. Autenticación Operador (Login)",
       method: "POST",
       url: "/api/auth/login",
-      curl: `curl -X POST http://127.0.0.1:5000/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"admin123"}'`,
+      curl: `curl -X POST http://127.0.0.1:5000/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"<password>"}'`,
       body: { username: "admin", password: "admin123" }
     },
     {
@@ -130,7 +129,7 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
       method: "POST",
       url: "/api/moneyprinter/test-pexels",
       curl: `curl -X POST http://127.0.0.1:5000/api/moneyprinter/test-pexels -H "Content-Type: application/json" -d '{"pexels_api_key":"your_pexels_key"}'`,
-      body: { pexels_api_key: ""your_pexels_key"" }
+      body: { pexels_api_key: "" }
     }
   ];
 
@@ -156,64 +155,63 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
-      <div className="bg-[#101A2D] border border-[#1E2C42] rounded-2xl w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 font-mono">
+      <div className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-[#0F1829] px-4 py-3 border-b border-[#1E2C42] flex items-center justify-between">
+        <div className="bg-[#232528] px-4 py-3 border-b border-[#2A2C30] flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <TerminalIcon className="w-5 h-5 text-[#00E5BE]" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+            <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-wider">
               Pruebas cURL y Validación REST API (16 Endpoints - Incluye MoneyPrinterTurbo)
             </h3>
           </div>
-          <button onClick={onClose} className="text-[#94A3B8] hover:text-white font-bold text-sm p-1">✕</button>
+          <button onClick={onClose} className="text-[#9CA1A8] hover:text-[#E5E5E5] font-bold text-sm p-1">✕</button>
         </div>
 
         {/* Content */}
         <div className="flex flex-1 overflow-hidden">
           {/* List of 16 Endpoints */}
-          <div className="w-72 bg-[#0B1320] border-r border-[#1E2C42] p-2 overflow-y-auto space-y-1 text-xs">
+          <div className="w-72 bg-[#1A1C1E] border-r border-[#2A2C30] p-2 overflow-y-auto space-y-1 text-xs">
             {endpoints.map((ep, idx) => (
               <button
                 key={idx}
                 onClick={() => { setActiveTab(idx); setResponseOutput(null); }}
                 className={`w-full text-left px-3 py-2 rounded-lg flex flex-col gap-0.5 transition-colors font-mono ${
                   activeTab === idx
-                    ? 'bg-[#00E5BE]/10 border border-[#00E5BE]/30 text-[#00E5BE]'
-                    : 'text-[#94A3B8] hover:bg-[#101A2D] hover:text-white'
+                    ? 'bg-[#8A8F98]/10 border border-[#8A8F98]/30 text-[#8A8F98]'
+                    : 'text-[#9CA1A8] hover:bg-[#1E2023] hover:text-[#E5E5E5]'
                 }`}
               >
                 <div className="flex items-center gap-2">
                   <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                    ep.method === 'GET' ? 'bg-[#4DFFE0]/10 text-[#4DFFE0] border border-[#4DFFE0]/30' :
-                    ep.method === 'POST' ? 'bg-[#00E5BE]/10 text-[#00E5BE] border border-[#00E5BE]/30' : 'bg-red-950/40 text-red-400 border border-red-500/30'
+                    ep.method === 'GET' ? 'bg-[#A1A6AE]/10 text-[#A1A6AE] border border-[#A1A6AE]/30' :
+                    ep.method === 'POST' ? 'bg-[#8A8F98]/10 text-[#8A8F98] border border-[#8A8F98]/30' : 'bg-red-950/40 text-[#E05B5B] border border-red-500/30'
                   }`}>
                     {ep.method}
                   </span>
-                  <span className="truncate font-semibold text-white">{ep.name}</span>
+                  <span className="truncate font-semibold text-[#E5E5E5]">{ep.name}</span>
                 </div>
-                <span className="text-[10px] text-[#64748B] truncate">{ep.url}</span>
+                <span className="text-[10px] text-[#6B7076] truncate">{ep.url}</span>
               </button>
             ))}
           </div>
 
           {/* Test Workbench */}
-          <div className="flex-1 flex flex-col p-4 bg-[#0B1320] overflow-y-auto space-y-4">
+          <div className="flex-1 flex flex-col p-4 bg-[#1A1C1E] overflow-y-auto space-y-4">
             <div>
-              <h4 className="text-sm font-bold text-white mb-1">{currentEndpoint.name}</h4>
-              <div className="flex items-center gap-2 text-xs font-mono text-[#94A3B8]">
-                <span className="text-[#00E5BE] font-bold">{currentEndpoint.method}</span>
+              <h4 className="text-sm font-bold text-[#E5E5E5] mb-1">{currentEndpoint.name}</h4>
+              <div className="flex items-center gap-2 text-xs font-mono text-[#9CA1A8]">
+                <span className="text-[#8A8F98] font-bold">{currentEndpoint.method}</span>
                 <span>http://127.0.0.1:5000{currentEndpoint.url}</span>
               </div>
             </div>
 
             {/* cURL Command Block */}
-            <div className="bg-[#101A2D] border border-[#1E2C42] rounded-xl p-3 relative font-mono text-xs text-[#00E5BE]">
+            <div className="bg-[#1E2023] border border-[#2A2C30] rounded-xl p-3 relative font-mono text-xs text-[#8A8F98]">
               <button
                 onClick={() => handleCopyCurl(activeTab, currentEndpoint.curl)}
-                className="absolute top-2 right-2 bg-[#0B1320] hover:bg-[#1E293B] text-white border border-[#1E2C42] px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 font-bold"
+                className="absolute top-2 right-2 bg-[#1A1C1E] hover:bg-[#33363A] text-[#E5E5E5] border border-[#2A2C30] px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 font-bold"
               >
-                {copiedIndex === activeTab ? <Check className="w-3 h-3 text-[#00E5BE]" /> : <Copy className="w-3 h-3 text-[#4DFFE0]" />}
+                {copiedIndex === activeTab ? true : null}
                 {copiedIndex === activeTab ? 'Copiado' : 'Copiar cURL'}
               </button>
               <pre className="pr-24 whitespace-pre-wrap">{currentEndpoint.curl}</pre>
@@ -224,17 +222,16 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
               <button
                 onClick={handleTest}
                 disabled={loading}
-                className="bg-[#00E5BE] hover:bg-[#00E5BE]/90 text-[#090D16] font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm"
-              >
-                <Send className="w-4 h-4 text-[#090D16]" /> Ejecutar Prueba cURL
+                className="bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-2"
+              > Ejecutar Prueba cURL
               </button>
             </div>
 
             {/* Response Output */}
             {responseOutput && (
               <div className="flex-1 flex flex-col">
-                <span className="text-xs font-mono text-[#94A3B8] mb-1">Respuesta HTTP 200 (JSON):</span>
-                <pre className="bg-[#101A2D] border border-[#1E2C42] rounded-xl p-3 font-mono text-xs text-[#4DFFE0] overflow-auto flex-1 max-h-60">
+                <span className="text-xs font-mono text-[#9CA1A8] mb-1">Respuesta del endpoint:</span>
+                <pre className="bg-[#1E2023] border border-[#2A2C30] rounded-xl p-3 font-mono text-xs text-[#A1A6AE] overflow-auto flex-1 max-h-60">
                   {responseOutput}
                 </pre>
               </div>

@@ -7,6 +7,10 @@ coverage/
 .env*
 !.env.example
 
+# Entornos y tooling local
+platform/.venv/
+.zcode/
+
 # Phone Farm Platform (Python)
 platform/third_party/
 platform/data/
@@ -18,3 +22,18 @@ platform/logs/
 platform/venv/
 __pycache__/
 *.pyc
+
+# Datos en tiempo real (credenciales en claro)
+platform/accounts.json
+platform/proxies.json
+platform/queue.json
+platform/content_profiles.json
+
+# Claves y artefactos de depuración (NUNCA commitear)
+adbkey
+adbkey.pub
+*.adbkey
+ui*.xml
+huawei_screen.png
+*.screen.png
+

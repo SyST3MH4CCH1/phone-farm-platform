@@ -1,128 +1,117 @@
 import React from 'react';
 import { Account, ProxyItem, SystemStats, AuthUser } from '../types';
-import { Monitor, Cpu, HardDrive, ShieldCheck, Play, Activity, Code2, Terminal as TerminalIcon, Download, Smartphone, LogOut, UserCheck, Sparkles, GitBranch } from 'lucide-react';
+import { Sparkles, Smartphone, Terminal as TerminalIcon, Code2, GitBranch, Download } from 'lucide-react';
+
+export type ActiveTab = 'dashboard' | 'moneyprinter' | 'adb' | 'panda' | 'curl' | 'code' | 'versions' | 'proxies' | 'schedule';
 
 interface HeaderProps {
   stats: SystemStats;
   accounts: Account[];
   proxies: ProxyItem[];
   currentUser: AuthUser | null;
-  onOpenCodeViewer: () => void;
-  onOpenCurlTester: () => void;
-  onOpenAdbBridge: () => void;
+  theme: 'dark' | 'light';
+  deviceCount: number;
+  onOpenPandaGrid: () => void;
   onOpenMoneyPrinter: () => void;
+  onOpenAdbBridge: () => void;
+  onOpenCurlTester: () => void;
+  onOpenCodeViewer: () => void;
   onOpenVersionControl: () => void;
   onDownloadAllZip: () => void;
+  onToggleMaster: () => void;
+  onToggleTheme: () => void;
   onLogout: () => void;
 }
 
+/** Barra superior del panel — pestañas de acceso rápido + métricas en vivo. */
 export const Header: React.FC<HeaderProps> = ({
   stats,
   accounts,
   proxies,
   currentUser,
-  onOpenCodeViewer,
-  onOpenCurlTester,
-  onOpenAdbBridge,
+  theme,
+  deviceCount,
+  onOpenPandaGrid,
   onOpenMoneyPrinter,
+  onOpenAdbBridge,
+  onOpenCurlTester,
+  onOpenCodeViewer,
   onOpenVersionControl,
   onDownloadAllZip,
+  onToggleMaster,
+  onToggleTheme,
   onLogout,
 }) => {
-  const onlineProxiesCount = proxies.filter(p => p.status === 'online').length;
+  const onlineProxies = proxies.filter(p => p.status === 'online').length;
+  const botsActive = (stats.active_bots || 0) > 0;
 
   return (
-    <header className="h-16 border-b border-[#1E2C42] flex items-center justify-between px-6 bg-[#0B1220] text-neutral-200 select-none">
-      {/* Brand & Badge matching TH3F4Rm3R */}
+    <header
+      className="h-11 border-b flex items-center justify-between px-4 text-[13px] font-mono select-none"
+      style={{ background: 'var(--color-header-bg)', borderColor: 'var(--color-header-border)' }}
+    >
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 cursor-pointer" onClick={onOpenVersionControl} title="Abrir Control de Versiones & History">
-          <div className="w-6 h-6 rounded-lg bg-[#00E5BE]/10 border border-[#00E5BE]/30 flex items-center justify-center text-[#00E5BE]">
-            <Sparkles className="w-3.5 h-3.5" />
-          </div>
-          <h1 className="text-base font-bold tracking-tight text-[#00E5BE] font-mono flex items-center gap-2">
-            TH3F4Rm3R <span className="text-xs text-[#4DFFE0] bg-[#0F1829] px-2 py-0.5 rounded border border-[#1E2C42] hover:border-[#00E5BE] flex items-center gap-1">
-              <GitBranch className="w-3 h-3 text-[#00E5BE]" /> v2.4 REAL
-            </span>
-          </h1>
-        </div>
-
-        {/* Top Nav Tabs from screenshot: Dashboard, AI Accounts, Emails, Social, Proxies, SMS, Jobs */}
-        <div className="hidden md:flex items-center gap-1 bg-[#0F172A] p-1 rounded-lg border border-[#1E293B]">
-          <button className="px-3 py-1.5 rounded-md text-xs font-semibold bg-[#1E293B] text-white flex items-center gap-1.5 shadow-sm">
-            <Activity className="w-3.5 h-3.5 text-[#4DFFE0]" /> Dashboard
-          </button>
-          <button onClick={onOpenMoneyPrinter} className="px-3 py-1.5 rounded-md text-xs font-semibold text-[#94A3B8] hover:text-white hover:bg-[#1E293B]/50 flex items-center gap-1.5 transition-colors">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" /> MoneyPrinter
-          </button>
-          <button onClick={onOpenAdbBridge} className="px-3 py-1.5 rounded-md text-xs font-semibold text-[#94A3B8] hover:text-white hover:bg-[#1E293B]/50 flex items-center gap-1.5 transition-colors">
-            <Smartphone className="w-3.5 h-3.5 text-[#00E5BE]" /> ADB Bridge
-          </button>
-          <button onClick={onOpenCurlTester} className="px-3 py-1.5 rounded-md text-xs font-semibold text-[#94A3B8] hover:text-white hover:bg-[#1E293B]/50 flex items-center gap-1.5 transition-colors">
-            <TerminalIcon className="w-3.5 h-3.5 text-[#4DFFE0]" /> cURL API
-          </button>
-          <button onClick={onOpenCodeViewer} className="px-3 py-1.5 rounded-md text-xs font-semibold text-[#94A3B8] hover:text-white hover:bg-[#1E293B]/50 flex items-center gap-1.5 transition-colors">
-            <Code2 className="w-3.5 h-3.5 text-pink-400" /> Python Code
-          </button>
-          <button onClick={onOpenVersionControl} className="px-3 py-1.5 rounded-md text-xs font-semibold text-[#94A3B8] hover:text-white hover:bg-[#1E293B]/50 flex items-center gap-1.5 transition-colors">
-            <GitBranch className="w-3.5 h-3.5 text-[#00E5BE]" /> Versiones
-          </button>
-        </div>
+        <span className="font-bold tracking-wide" style={{ color: 'var(--color-header-text)' }}>Phone Farm</span>
+        <span className="hidden md:inline text-[11px]" style={{ color: 'var(--color-header-muted2)' }}>Panel de Control — Mini PC</span>
       </div>
 
-      {/* Center System Metrics */}
-      <div className="hidden lg:flex items-center text-xs font-mono gap-4 text-[#94A3B8]">
-        <div className="flex items-center gap-2">
-          <span className="text-[#64748B] text-[11px] uppercase tracking-wider">Panda Grid:</span>
-          <span className="text-[#00E5BE] font-bold flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-[#00E5BE] animate-pulse" /> {stats.panda_grid_status}
-          </span>
-        </div>
+      {/* Pestañas de acceso rápido (restauradas 2026-08-10) */}
+      <nav className="hidden md:flex items-center gap-1 text-[11px]" style={{ color: 'var(--color-header-muted)' }}>
+        <button onClick={onOpenMoneyPrinter} className="px-2.5 py-1 rounded-md hover:underline transition-colors" title="Generador MoneyPrinterTurbo" style={{ color: 'var(--color-header-muted)' }}>
+          <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> MoneyPrinter</span>
+        </button>
+        <button onClick={onOpenAdbBridge} className="px-2.5 py-1 rounded-md hover:underline transition-colors" title="Bridge ADB" style={{ color: 'var(--color-header-muted)' }}>
+          <span className="flex items-center gap-1.5"><Smartphone className="w-3.5 h-3.5" /> ADB Bridge</span>
+        </button>
+        <button onClick={onOpenCurlTester} className="px-2.5 py-1 rounded-md hover:underline transition-colors" title="Probador de API cURL" style={{ color: 'var(--color-header-muted)' }}>
+          <span className="flex items-center gap-1.5"><TerminalIcon className="w-3.5 h-3.5" /> cURL API</span>
+        </button>
+        <button onClick={onOpenCodeViewer} className="px-2.5 py-1 rounded-md hover:underline transition-colors" title="Código fuente del backend" style={{ color: 'var(--color-header-muted)' }}>
+          <span className="flex items-center gap-1.5"><Code2 className="w-3.5 h-3.5" /> Python Code</span>
+        </button>
+        <button onClick={onOpenVersionControl} className="px-2.5 py-1 rounded-md hover:underline transition-colors" title="Control de versiones" style={{ color: 'var(--color-header-muted)' }}>
+          <span className="flex items-center gap-1.5"><GitBranch className="w-3.5 h-3.5" /> Versiones</span>
+        </button>
+      </nav>
 
-        <div className="flex items-center gap-2 border-l border-[#1E2C42] pl-4">
-          <span className="text-[#64748B] text-[11px] uppercase tracking-wider">Proxies:</span>
-          <span className="text-[#4DFFE0] font-bold">{onlineProxiesCount}/{proxies.length} (35ms)</span>
-        </div>
-
-        <div className="flex items-center gap-2 border-l border-[#1E2C42] pl-4">
-          <span className="text-[#64748B] text-[11px] uppercase tracking-wider">CPU/RAM:</span>
-          <span className="text-white font-medium">{stats.cpu_percent}% / {stats.ram_percent}%</span>
-        </div>
-      </div>
-
-      {/* Right Actions & Status Switch */}
-      <div className="flex items-center gap-3">
-        <div className="text-[11px] font-mono text-[#94A3B8] hidden sm:block">
-          {new Date().toLocaleTimeString()} • {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-        </div>
-
+      <div className="flex items-center gap-4 text-[11px]" style={{ color: 'var(--color-header-muted)' }}>
+        <button onClick={onOpenPandaGrid} className="hover:underline transition-colors" title="Abrir Panda (pantallas en vivo) en otra ventana" style={{ color: 'var(--color-header-muted)' }}>
+          Panda: <span style={{ color: deviceCount > 0 ? 'var(--color-header-text)' : 'var(--color-header-muted2)' }}>{deviceCount > 0 ? `${deviceCount} conectado${deviceCount !== 1 ? 's' : ''}` : 'sin dispositivos'}</span>
+        </button>
+        <span>
+          Bots: <span className={botsActive ? 'text-[#6FBF73]' : ''} style={{ color: botsActive ? '#6FBF73' : 'var(--color-header-muted2)' }}>{stats.active_bots || 0} activo{(stats.active_bots || 0) !== 1 ? 's' : ''}</span>
+          {botsActive ? (
+            <button onClick={onToggleMaster} className="ml-2 text-[#E05B5B] hover:underline" title="Detener todos los bots">[detener]</button>
+          ) : (
+            <button onClick={onToggleMaster} className="ml-2 text-[#6FBF73] hover:underline" title="Iniciar bots taktik">[iniciar]</button>
+          )}
+        </span>
+        <span className="hidden lg:inline">
+          Proxies: <span style={{ color: 'var(--color-header-text)' }}>{onlineProxies}/{proxies.length}</span>
+        </span>
+        <span className="hidden xl:inline">
+          CPU/RAM: <span style={{ color: 'var(--color-header-text)' }}>{stats.cpu_percent}% / {stats.ram_percent}%</span>
+        </span>
         <button
           onClick={onDownloadAllZip}
-          className="px-3 py-1.5 bg-[#1E293B] hover:bg-[#334155] text-[#4DFFE0] border border-[#4DFFE0]/30 font-bold text-xs rounded-lg flex items-center gap-1.5 transition-all font-mono"
-          title="Descargar paquete ZIP"
+          className="px-2 py-0.5 rounded border font-bold transition-colors"
+          style={{ borderColor: 'var(--color-header-border)', color: 'var(--color-header-text)' }}
+          title="Descargar configuración ZIP"
         >
-          <Download className="w-3.5 h-3.5" /> ZIP
+          <span className="flex items-center gap-1"><Download className="w-3.5 h-3.5" /> ZIP</span>
         </button>
-
-        {/* Master ON/OFF Switch matching screenshot */}
-        <div className="flex items-center gap-2 bg-[#0F172A] border border-[#1E293B] px-3 py-1 rounded-full text-xs font-mono">
-          <span className="text-[#00E5BE] font-bold text-[10px]">ON</span>
-          <div className="w-8 h-4 rounded-full bg-[#00E5BE] p-0.5 flex items-center justify-end">
-            <div className="w-3 h-3 rounded-full bg-slate-950" />
-          </div>
-          <span className="text-[#64748B] font-bold text-[10px]">OFF</span>
-        </div>
-
+        <span className="hidden sm:inline" style={{ color: 'var(--color-header-muted2)' }}>
+          {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        </span>
+        <button onClick={onToggleTheme} className="hover:underline transition-colors" title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'} style={{ color: 'var(--color-header-muted)' }}>
+          {theme === 'dark' ? '☀' : '☾'}
+        </button>
         {currentUser && (
-          <button
-            onClick={onLogout}
-            className="p-1.5 text-[#94A3B8] hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-            title="Cerrar sesión"
-          >
-            <LogOut className="w-4 h-4" />
+          <button onClick={onLogout} className="hover:text-[#E05B5B] transition-colors" style={{ color: 'var(--color-header-muted)' }} title="Cerrar sesión">
+            {currentUser.username} [salir]
           </button>
         )}
       </div>
     </header>
   );
 };
-

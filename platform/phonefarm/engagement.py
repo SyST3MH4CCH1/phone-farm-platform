@@ -264,6 +264,13 @@ def get_bot_status(account_id: str) -> dict[str, Any]:
 
 
 def active_bots_count() -> int:
-    """Número de bots con proceso vivo (para /api/stats)."""
+    """Número de cuentas con bot activo.
+
+    Fuente de verdad: accounts.json (bot_active), que sobrevive a reinicios
+    del proceso. La memoria de procesos (running_bots) se pierde al reiniciar
+    Flask aunque el bot siga vivo — solo memoria daba 0 bots tras cada reinicio.
+    """
+    from phonefarm.platform_data import load_accounts
+
     with _bots_lock:
-        return sum(1 for p in running_bots.values() if p.poll() is None)
+        return sum(1 for a in load_accounts() if a.get("bot_active"))

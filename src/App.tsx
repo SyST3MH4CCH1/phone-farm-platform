@@ -1,61 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import JSZip from 'jszip';
-import { Account, ProxyItem, QueueJob, LogEntry, SystemStats, AuthUser, StackInfo } from './types';
-import { INITIAL_ACCOUNTS, INITIAL_PROXIES, INITIAL_QUEUE, CODE_FILES } from './data';
-import { Header } from './components/Header';
+import type { Account, ProxyItem, QueueJob, LogEntry, SystemStats, AuthUser, StackInfo, DraftPost } from './types';
+import { Header, ActiveTab } from './components/Header';
 import { AccountsPanel } from './components/AccountsPanel';
 import { QueuePanel } from './components/QueuePanel';
+import { PandaGridModal } from './components/PandaGridModal';
 import { TerminalLogs } from './components/TerminalLogs';
 import { ProxyModal } from './components/ProxyModal';
 import { CodeViewerModal } from './components/CodeViewerModal';
 import { CurlTesterModal } from './components/CurlTesterModal';
 import { AdbBridgeModal } from './components/AdbBridgeModal';
+import { ScheduleModal } from './components/ScheduleModal';
 import { LoginScreen } from './components/LoginScreen';
 import { MoneyPrinterModal } from './components/MoneyPrinterModal';
 import { PostPreviewModal } from './components/PostPreviewModal';
 import { AccountDetailModal } from './components/AccountDetailModal';
 import { VersionControlModal } from './components/VersionControlModal';
-import { Boxes } from 'lucide-react';
-import { DraftPost } from './types';
+
+// Estado inicial VACÍO — los datos REALES se cargan desde el backend Flask.
+// CERO datos de ejemplo: la UI refleja exclusivamente el estado del servidor.
+const EMPTY_STATS: SystemStats = {
+  videos_subidos: 0,
+  acciones_hoy: 0,
+  errores: 0,
+  cpu_percent: 0,
+  ram_percent: 0,
+  active_bots: 0,
+  active_proxies: 0,
+  panda_grid_status: 'Disconnected'
+};
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
-  const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
-  const [proxies, setProxies] = useState<ProxyItem[]>(INITIAL_PROXIES);
-  const [queue, setQueue] = useState<QueueJob[]>(INITIAL_QUEUE);
-  const [logs, setLogs] = useState<LogEntry[]>([
-    {
-      id: 'log_1',
-      timestamp: new Date().toLocaleTimeString(),
-      level: 'INFO',
-      module: 'PlatformServer',
-      message: 'Servidor Express Phone Farm enlazado en http://0.0.0.0:3000 con Antigravity Engine'
-    },
-    {
-      id: 'log_2',
-      timestamp: new Date().toLocaleTimeString(),
-      level: 'INFO',
-      module: 'ADBBridge',
-      message: 'Módulo de conexión a ADB Server y MoneyPrinterTurbo activo para Instagram y TikTok.'
-    }
-  ]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [proxies, setProxies] = useState<ProxyItem[]>([]);
+  const [queue, setQueue] = useState<QueueJob[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
-  const [stats, setStats] = useState<SystemStats>({
-    videos_subidos: 1,
-    acciones_hoy: 51,
-    errores: 0,
-    cpu_percent: 14.5,
-    ram_percent: 42.1,
-    active_bots: 1,
-    active_proxies: 2,
-    panda_grid_status: 'Connected'
-  });
+  const [stats, setStats] = useState<SystemStats>(EMPTY_STATS);
+  const [deviceCount, setDeviceCount] = useState(0);
 
-  // Stack Docker real (contenedores + salud MPT/Flask) — ver /api/stack
+  // Stack real (procesos nativos + salud MPT/Flask) — ver /api/stack
   const [stack, setStack] = useState<StackInfo>({
-    containers: [], mpt_online: false, flask_online: false, drafts: 0
+    containers: [], native: [], mpt_online: false, flask_online: false, drafts: 0, mode: 'native'
   });
 
   const [isProcessingJob, setIsProcessingJob] = useState(false);
@@ -63,12 +51,67 @@ export default function App() {
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [showCurlModal, setShowCurlModal] = useState(false);
   const [showAdbModal, setShowAdbModal] = useState(false);
+  const [showQueueModal, setShowQueueModal] = useState(false);
+  const [showPandaModal, setShowPandaModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showMoneyPrinterModal, setShowMoneyPrinterModal] = useState(false);
   const [showVersionControlModal, setShowVersionControlModal] = useState(false);
+  const [terminalMinimized, setTerminalMinimized] = useState(false);
+
+  // Modo claro/oscuro — persistido en localStorage
+  const [theme, setTheme] = useState<'dark' | 'light'>(
+    () => (localStorage.getItem('phonefarm-theme') || 'dark') as 'dark' | 'light'
+  );
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('phonefarm-theme', next);
+  };
+
+  // Tab activo del header (resalta el modal abierto)
+  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const openTab = (tab: ActiveTab, open: () => void) => {
+    setActiveTab(tab);
+    open();
+  };
+
+  // Master ON/OFF — real: arranca/detiene los bots taktik de las cuentas
+  // (engagement exige account_id por cuenta; el switch actúa sobre todas).
+  // Lee el estado FRESCO de /api/stats antes de decidir (el estado del
+  // componente puede ir con 5s de retraso y decidir al revés).
+  const handleToggleMaster = async () => {
+    let turningOn = (stats.active_bots || 0) === 0;
+    try {
+      const fresh = await fetch('/api/stats').then(r => r.ok ? r.json() : null);
+      if (fresh) turningOn = (fresh.active_bots || 0) === 0;
+    } catch { /* usar estado local */ }
+    const targetAccounts = accounts.filter(a => turningOn ? !a.bot_active : a.bot_active);
+    if (targetAccounts.length === 0) {
+      addLog('INFO', 'Master', turningOn ? 'Todos los bots ya están activos' : 'No hay bots activos que detener');
+      return;
+    }
+    let ok = 0, fail = 0;
+    for (const acc of targetAccounts) {
+      try {
+        const res = await fetch(turningOn ? '/engagement/start' : '/engagement/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account_id: acc.id })
+        });
+        if (res.ok) ok++; else fail++;
+      } catch {
+        fail++;
+      }
+    }
+    addLog('INFO', 'Master', `Master ${turningOn ? 'ON' : 'OFF'}: ${ok} bot(s) ${turningOn ? 'iniciado(s)' : 'detenido(s)'}${fail ? `, ${fail} con error` : ''}`);
+    refreshBackendData();
+  };
 
   // New interactive modals
   const [selectedAccountForDetail, setSelectedAccountForDetail] = useState<Account | null>(null);
   const [activePreviewDraft, setActivePreviewDraft] = useState<DraftPost | null>(null);
+  // Cuenta preseleccionada al abrir MoneyPrinter desde AccountDetail (o null = accounts[0])
+  const [moneyPrinterAccount, setMoneyPrinterAccount] = useState<Account | null>(null);
 
   // Verify auth status on load
   useEffect(() => {
@@ -82,14 +125,8 @@ export default function App() {
           }
         }
       } catch (err) {
-        // local sandbox default user
-        setCurrentUser({
-          id: 'usr_01',
-          username: 'admin',
-          role: 'admin',
-          email: 'admin@phonefarm.io',
-          token: 'token_pf_admin'
-        });
+        // Backend no responde: NUNCA autenticar con credenciales locales — el panel muestra login.
+        setCurrentUser(null);
       } finally {
         setCheckingAuth(false);
       }
@@ -110,21 +147,29 @@ export default function App() {
   // Fetch initial data from Express backend if available
   const refreshBackendData = async () => {
     if (!currentUser) return;
-    try {
-      const [statsRes, accountsRes, proxiesRes, queueRes] = await Promise.all([
-        fetch('/api/stats').then(r => r.ok ? r.json() : null),
-        fetch('/api/accounts').then(r => r.ok ? r.json() : null),
-        fetch('/api/proxies').then(r => r.ok ? r.json() : null),
-        fetch('/api/queue').then(r => r.ok ? r.json() : null)
-      ]);
+    // allSettled: un endpoint lento (p.ej. verify de proxy online) NO debe
+    // bloquear el render de los demás (antes Promise.all los congelaba).
+    const [statsRes, accountsRes, proxiesRes, queueRes, devicesRes] = await Promise.allSettled([
+      fetch('/api/stats').then(r => r.ok ? r.json() : null),
+      fetch('/api/accounts').then(r => r.ok ? r.json() : null),
+      fetch('/api/proxies').then(r => r.ok ? r.json() : null),
+      fetch('/api/queue').then(r => r.ok ? r.json() : null),
+      fetch('/api/adb/devices').then(r => r.ok ? r.json() : null)
+    ]);
+    const val = <T,>(p: PromiseSettledResult<T | null>): T | null =>
+      p.status === 'fulfilled' ? p.value : null;
 
-      if (statsRes) setStats(statsRes);
-      if (accountsRes) setAccounts(accountsRes);
-      if (proxiesRes) setProxies(proxiesRes);
-      if (queueRes) setQueue(queueRes);
-    } catch (err) {
-      // fallback to initial state
-    }
+    const stats = val(statsRes);
+    const accounts = val(accountsRes);
+    const proxies = val(proxiesRes);
+    const queue = val(queueRes);
+    const devices = val<{ devices?: { serial: string }[] }>(devicesRes);
+    if (stats) setStats(stats);
+    if (accounts) setAccounts(accounts);
+    if (proxies) setProxies(proxies);
+    if (queue) setQueue(queue);
+    // Contador REAL de terminales conectados por ADB (no cuentas configuradas).
+    if (devices?.devices) setDeviceCount(devices.devices.filter(d => d.serial).length);
   };
 
   useEffect(() => {
@@ -139,9 +184,9 @@ export default function App() {
     if (!currentUser) return;
     const fetchStack = async () => {
       try {
-        const res = await fetch('/api/stack');
+        const res = await fetch('/api/stack', { signal: AbortSignal.timeout(8000) });
         if (res.ok) setStack(await res.json());
-      } catch (e) { /* docker no disponible */ }
+      } catch (e) { /* stack no disponible */ }
     };
     fetchStack();
     const interval = setInterval(fetchStack, 5000);
@@ -186,26 +231,15 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ account_id: accountId })
       });
-      if (res.ok) {
-        refreshBackendData();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('ERROR', 'Engagement', `No se pudo cambiar el bot de @${acc.username}: ${data?.error || res.status}`);
         return;
       }
-    } catch (e) {
-      // fallback
+      refreshBackendData();
+    } catch (err) {
+      addLog('ERROR', 'Engagement', `Engagement no disponible para @${acc.username}: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    setAccounts(prev => prev.map(a => {
-      if (a.id === accountId) {
-        const nextState = !a.bot_active;
-        addLog(
-          nextState ? 'INFO' : 'WARN',
-          'Engagement',
-          `${nextState ? 'Iniciando' : 'Deteniendo'} taktik-bot para @${a.username} (Warmup Día ${a.warmup_day})`
-        );
-        return { ...a, bot_active: nextState };
-      }
-      return a;
-    }));
   };
 
   const handleAddAccount = async (newAcc: Partial<Account>) => {
@@ -215,48 +249,30 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newAcc)
       });
-      if (res.ok) {
-        refreshBackendData();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('ERROR', 'PlatformServer', `Alta de cuenta rechazada: ${data?.error || res.status}`);
         return;
       }
-    } catch (e) {
-      // fallback
+      addLog('INFO', 'PlatformServer', `Nueva cuenta creada: ${data?.id || ''}`);
+      refreshBackendData();
+    } catch (err) {
+      addLog('ERROR', 'PlatformServer', `No se pudo crear la cuenta: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    const id = `acc_${String(accounts.length + 1).padStart(2, '0')}`;
-    const account: Account = {
-      id,
-      username: newAcc.username || 'nicho_nuevo',
-      password: newAcc.password || 'Pass123!',
-      status: 'active',
-      device_serial: newAcc.device_serial || 'RFCW80XXXXX',
-      proxy_id: newAcc.proxy_id || 'proxy_01',
-      session_file: `sessions/${id}.json`,
-      warmup_day: newAcc.warmup_day || 1,
-      created_at: new Date().toISOString().split('T')[0],
-      likes_today: 0,
-      follows_today: 0,
-      comments_today: 0,
-      bot_active: false
-    };
-
-    setAccounts(prev => [...prev, account]);
-    addLog('INFO', 'PlatformServer', `Nueva cuenta registrada: @${account.username} (ADB: ${account.device_serial})`);
   };
 
   const handleDeleteAccount = async (accountId: string) => {
     try {
       const res = await fetch(`/api/accounts/${accountId}`, { method: 'DELETE' });
-      if (res.ok) {
-        refreshBackendData();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('ERROR', 'PlatformServer', `Borrado rechazado (${accountId}): ${data?.error || res.status}`);
         return;
       }
-    } catch (e) {
-      // fallback
+      refreshBackendData();
+    } catch (err) {
+      addLog('ERROR', 'PlatformServer', `No se pudo eliminar ${accountId}: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    setAccounts(prev => prev.filter(a => a.id !== accountId));
-    addLog('WARN', 'PlatformServer', `Cuenta eliminada: ${accountId}`);
   };
 
   // Queue Operations
@@ -267,70 +283,132 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword, target_account: targetAccount })
       });
-      if (res.ok) {
-        refreshBackendData();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('ERROR', 'Generator', `Job rechazado: ${data?.error || res.status}`);
         return;
       }
-    } catch (e) {
-      // fallback
+      addLog('INFO', 'Generator', `Job ${data?.id || ''} encolado (keyword '${keyword}')`);
+      refreshBackendData();
+    } catch (err) {
+      addLog('ERROR', 'Generator', `No se pudo encolar: ${err instanceof Error ? err.message : String(err)}`);
     }
+  };
 
-    const jobId = `job_${101 + queue.length}`;
-    const newJob: QueueJob = {
-      id: jobId,
-      keyword,
-      target_account: targetAccount,
-      status: 'pending',
-      video_path: null,
-      created_at: new Date().toISOString(),
-      progress: 0
-    };
+  // Programar publicación futura desde el calendario (scheduled_time ISO -> scheduler real)
+  const handleScheduleJob = async (keyword: string, targetAccount: string, scheduledTime: string) => {
+    const res = await fetch('/api/queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keyword, target_account: targetAccount, scheduled_time: scheduledTime })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    addLog('INFO', 'Scheduler', `Job ${data?.id || ''} PROGRAMADO para ${scheduledTime} (${keyword})`);
+    refreshBackendData();
+  };
 
-    setQueue(prev => [...prev, newJob]);
-    addLog('INFO', 'Generator', `Job '${jobId}' agregado a la cola con Keyword: '${keyword}'`);
+  // Re-programar job existente (drag&drop del calendario)
+  const handleRescheduleJob = async (jobId: string, scheduledTime: string) => {
+    const res = await fetch(`/api/queue/${jobId}/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduled_time: scheduledTime })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || `HTTP ${res.status}`);
+    }
+    addLog('INFO', 'Scheduler', `${jobId} re-programado para ${scheduledTime}`);
+    refreshBackendData();
   };
 
   const handleProcessNextJob = async () => {
     setIsProcessingJob(true);
     try {
       const res = await fetch('/api/queue/next', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        addLog('INFO', 'Generator', `Pipeline iniciado para ${data?.id || 'job'} (processing)`);
         await refreshBackendData();
-        setIsProcessingJob(false);
+      addLog('WARN', 'Generator', data?.message || data?.error || 'No hay trabajos pendientes.');
+      }
+    } catch (err) {
+      addLog('ERROR', 'Generator', `queue/next falló: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsProcessingJob(false);
+    }
+  };
+
+  const handleApproveJob = async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/queue/${jobId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('ERROR', 'Queue', `Aprobación rechazada (${jobId}): ${data?.error || res.status}`);
         return;
       }
-    } catch (e) {
-      // fallback
+      addLog('INFO', 'Queue', `Job ${jobId} guiado a generate (approve)`);
+      refreshBackendData();
+    } catch (err) {
+      addLog('ERROR', 'Queue', `approve falló: ${err instanceof Error ? err.message : String(err)}`);
     }
+  };
 
-    const pendingJobs = queue.filter(j => j.status === 'pending');
-    if (pendingJobs.length === 0) {
-      setIsProcessingJob(false);
-      return;
+  const handleRejectJob = async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/queue/${jobId}/reject`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('ERROR', 'Queue', `Reject rechazado (${jobId}): ${data?.error || res.status}`);
+        return;
+      }
+      addLog('INFO', 'Queue', `Job ${jobId} rechazado (rejected)`);
+      refreshBackendData();
+    } catch (err) {
+      addLog('ERROR', 'Queue', `reject falló: ${err instanceof Error ? err.message : String(err)}`);
     }
+  };
 
-    const currentJob = pendingJobs[0];
+  const handleDeleteJob = async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/queue/${jobId}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('WARN', 'Queue', `Borrar ${jobId}: ${data?.error || 'Flask no implementa DELETE /api/queue/:id'}`);
+        return;
+      }
+      addLog('INFO', 'Queue', `Job ${jobId} eliminado`);
+      refreshBackendData();
+    } catch (err) {
+      addLog('ERROR', 'Queue', `delete falló: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
-    // Step 1: Generating with MoneyPrinterTurbo
-    setQueue(prev => prev.map(j => j.id === currentJob.id ? { ...j, status: 'generating', progress: 30 } : j));
-    addLog('INFO', 'Generator', `Invocando MoneyPrinterTurbo para Keyword: '${currentJob.keyword}' [CVE-2025-7897 127.0.0.1 Binding]`);
-
-    await new Promise(res => setTimeout(res, 2000));
-
-    // Step 2: Publishing with instagrapi
-    const videoPath = `videos/${currentJob.id}.mp4`;
-    setQueue(prev => prev.map(j => j.id === currentJob.id ? { ...j, status: 'generating', video_path: videoPath, progress: 70 } : j));
-    addLog('INFO', 'Publisher', `Cargando sesión instagrapi (Galaxy A52 Fingerprint) para cuenta ${currentJob.target_account}...`);
-
-    await new Promise(res => setTimeout(res, 1800));
-
-    // Step 3: Complete
-    const mediaId = `3154${Math.floor(1000000000 + Math.random() * 9000000000)}`;
-    setQueue(prev => prev.map(j => j.id === currentJob.id ? { ...j, status: 'published', media_id: mediaId, progress: 100 } : j));
-    addLog('INFO', 'Publisher', `¡Reel publicado con éxito en Instagram! Media ID: ${mediaId}`);
-    
-    setStats(prev => ({ ...prev, videos_subidos: prev.videos_subidos + 1 }));
-    setIsProcessingJob(false);
+  // Aprobar PUBLICACIÓN del vídeo ya generado (awaiting_preview -> published)
+  const handlePublishJob = async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/queue/${jobId}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('ERROR', 'Queue', `Publicación rechazada (${jobId}): ${data?.error || res.status}`);
+        return;
+      }
+      addLog('INFO', 'Queue', `Job ${jobId} publicación aprobada (publishing)`);
+      refreshBackendData();
+    } catch (err) {
+      addLog('ERROR', 'Queue', `publish falló: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   // Proxy Operations
@@ -341,30 +419,16 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newProxy)
       });
-      if (res.ok) {
-        refreshBackendData();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('ERROR', 'ProxyManager', `Proxy rechazado: ${data?.error || res.status}`);
         return;
       }
-    } catch (e) {
-      // fallback
+      addLog('INFO', 'ProxyManager', `Proxy ${data?.id || ''} registrado`);
+      refreshBackendData();
+    } catch (err) {
+      addLog('ERROR', 'ProxyManager', `No se pudo registrar el proxy: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    const id = `proxy_${String(proxies.length + 1).padStart(2, '0')}`;
-    const proxyItem: ProxyItem = {
-      id,
-      provider: newProxy.provider || 'DataImpulse',
-      type: 'socks5',
-      host: newProxy.host || 'gw.dataimpulse.com',
-      port: newProxy.port || 10001,
-      user: newProxy.user || '',
-      pass: newProxy.pass || '',
-      assigned_account: '',
-      status: 'online',
-      ip: `185.220.101.${Math.floor(10 + Math.random() * 200)}`,
-      latency_ms: Math.floor(30 + Math.random() * 40)
-    };
-    setProxies(prev => [...prev, proxyItem]);
-    addLog('INFO', 'ProxyManager', `Proxy SOCKS5 '${id}' registrado (${proxyItem.host}:${proxyItem.port})`);
   };
 
   const handleVerifyProxy = async (proxyId: string) => {
@@ -374,26 +438,16 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proxy_id: proxyId })
       });
-      if (res.ok) {
-        refreshBackendData();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('ERROR', 'ProxyManager', `Verificación rechazada (${proxyId}): ${data?.error || res.status}`);
         return;
       }
-    } catch (e) {
-      // fallback
+      addLog('INFO', 'ProxyManager', `Proxy ${proxyId}: ${data?.status || '?'} ${data?.ip ? `(${data.ip}, ${data.latency_ms}ms)` : ''}`);
+      refreshBackendData();
+    } catch (err) {
+      addLog('ERROR', 'ProxyManager', `No se pudo verificar ${proxyId}: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    setProxies(prev => prev.map(p => {
-      if (p.id === proxyId) {
-        addLog('INFO', 'ProxyManager', `Consultando https://api.ipify.org para proxy '${proxyId}'...`);
-        return {
-          ...p,
-          status: 'online',
-          ip: `185.220.101.${Math.floor(10 + Math.random() * 200)}`,
-          latency_ms: Math.floor(30 + Math.random() * 30)
-        };
-      }
-      return p;
-    }));
   };
 
   // Helper Logger
@@ -419,159 +473,93 @@ export default function App() {
     document.body.removeChild(element);
   };
 
-  // Download complete .ZIP package for C:\phone-farm\
+  // Download complete .ZIP package — servidor real (ZIP del estado en Flask)
   const handleDownloadAllZip = async () => {
-    try {
-      window.location.href = '/api/download-zip';
-      return;
-    } catch (e) {
-      // client-side fallback
-    }
-
-    const zip = new JSZip();
-    Object.entries(CODE_FILES).forEach(([filename, content]) => {
-      if (filename === 'dashboard.html') {
-        zip.folder('templates')?.file('dashboard.html', content);
-      } else {
-        zip.file(filename, content);
-      }
-    });
-
-    zip.file('accounts.json', JSON.stringify(accounts, null, 2));
-    zip.file('proxies.json', JSON.stringify(proxies, null, 2));
-    zip.file('queue.json', JSON.stringify(queue, null, 2));
-
-    const content = await zip.generateAsync({ type: 'blob' });
-    const element = document.createElement('a');
-    element.href = URL.createObjectURL(content);
-    element.download = 'phone-farm-windows-mini-pc.zip';
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-    
-    addLog('INFO', 'PlatformServer', 'Paquete ZIP comprimido C:\\phone-farm descargado localmente.');
+    window.location.href = '/api/download-zip';
   };
 
-  // Simulated REST API Tester for Modal
+  // REST API Tester (real): ejecuta el endpoint y dispara refresco; error claro si falla
   const handleRunEndpointTest = async (method: string, endpoint: string, body?: any) => {
-    addLog('INFO', 'PlatformServer', `cURL Exec: ${method} http://127.0.0.1:5000${endpoint}`);
-    
+    addLog('INFO', 'PlatformServer', `Exec: ${method} ${endpoint}`);
     try {
-      const options: RequestInit = {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-      };
+      const options: RequestInit = { method, headers: { 'Content-Type': 'application/json' } };
       if (body) options.body = JSON.stringify(body);
       const res = await fetch(endpoint, options);
-      if (res.ok) {
-        const data = await res.json();
-        refreshBackendData();
-        return data;
-      }
-    } catch (e) {
-      // fallback
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) refreshBackendData();
+      return data;
+    } catch (err) {
+      return { error: `Fetch falló (${endpoint}): ${err instanceof Error ? err.message : String(err)}` };
     }
-
-    if (endpoint === '/api/accounts' && method === 'GET') return accounts;
-    if (endpoint === '/api/accounts' && method === 'POST') {
-      handleAddAccount(body);
-      return { status: "created", account: body };
-    }
-    if (endpoint.startsWith('/api/accounts/') && method === 'DELETE') {
-      const accId = endpoint.split('/').pop() || '';
-      handleDeleteAccount(accId);
-      return { success: true, deleted_id: accId };
-    }
-    if (endpoint === '/api/proxies' && method === 'GET') return proxies;
-    if (endpoint === '/api/proxies' && method === 'POST') {
-      handleAddProxy(body);
-      return { status: "created", proxy: body };
-    }
-    if (endpoint === '/api/queue' && method === 'GET') return queue;
-    if (endpoint === '/api/queue' && method === 'POST') {
-      handleAddJob(body.keyword, body.target_account);
-      return { status: "created", job: body };
-    }
-    if (endpoint === '/api/queue/next' && method === 'POST') {
-      await handleProcessNextJob();
-      return { status: "processed", last_job: queue.find(j => j.status === 'published') };
-    }
-    if (endpoint === '/engagement/start' && method === 'POST') {
-      handleToggleBot(body.account_id);
-      return { success: true, account_id: body.account_id };
-    }
-    if (endpoint === '/engagement/stop' && method === 'POST') {
-      handleToggleBot(body.account_id);
-      return { success: true, account_id: body.account_id };
-    }
-    if (endpoint === '/api/stats' && method === 'GET') return stats;
-
-    return { status: "ok", endpoint };
   };
 
-  const handleOpenPreviewForJob = (job: QueueJob) => {
+  const handleOpenPreviewForJob = async (job: QueueJob) => {
     const acc = accounts.find(a => a.id === job.target_account) || accounts[0];
+    let scriptTxt = job.script || '';
+    let captionTxt = job.caption || '';
+    // El vídeo REAL está disponible si el job lo tiene (awaiting_preview o publicado)
+    const jobHasVideo = Boolean(job.video_path) && (job.status === 'awaiting_preview' || job.status === 'published' || job.status === 'awaiting_manual_upload');
+    if (!scriptTxt && !jobHasVideo) {
+      // No hay draft todavía; pedir a MPT un guión real (preview sin encolar)
+      try {
+        const res = await fetch('/api/content/preview', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({keyword: job.keyword, niche_id: 'general'})
+        });
+        if (res.ok) {
+          const data = await res.json();
+          scriptTxt = data.script || '';
+          captionTxt = data.caption || '';
+        }
+      } catch (err) { /* noop */ }
+    }
+    // video_path es ruta local (C:\...\videos\job_X.mp4) -> URL servible por
+    // Express /videos/<file> (proxy a Flask), para el <video> del modal.
+    const videoUrl = jobHasVideo && job.video_path
+      ? `/videos/${job.video_path.split(/[\\/]/).pop()}`
+      : undefined;
     const draft: DraftPost = {
-      id: `draft_${job.id}`,
-      job_id: job.id,
-      title: job.keyword,
-      keyword: job.keyword,
-      target_account_id: acc.id,
-      target_account_username: acc.username,
-      platform: 'both',
-      video_url: job.video_path || '/videos/sample_916.mp4',
-      script: `¡Descubre el secreto de ${job.keyword}! En este vídeo te mostramos paso a paso las mejores ideas para transformar tu espacio con diseño profesional. Guardalo y síguenos para más.`,
-      caption: `✨ Ideas exclusivas para ${job.keyword}. ¿Cuál es tu favorito? Cuéntanos en los comentarios 👇`,
-      hashtags: ['#decoracion', '#viral', '#reels', '#tiktok', '#shorts', '#design'],
+      id: `draft_${job.id}`, job_id: job.id, title: job.keyword, keyword: job.keyword,
+      target_account_id: acc.id, target_account_username: acc.username,
+      platform: 'instagram',
+      video_url: videoUrl,
+      script: scriptTxt || '(genera guión con MiniMax en el paso anterior)',
+      caption: captionTxt || job.script || job.keyword,
+      hashtags: ['#reels','#viral','#fyp'],
       status: job.status === 'published' ? 'published' : 'draft',
-      created_at: job.created_at,
-      aspect_ratio: '9:16',
-      voice_tts: 'es-ES-AlvaroNeural'
+      created_at: job.created_at, aspect_ratio: '9:16', voice_tts: 'es-ES-AlvaroNeural',
     };
     setActivePreviewDraft(draft);
   };
 
   const handleApproveAndPublishDraft = async (draftId: string, updatedCaption: string, platform: 'instagram' | 'tiktok' | 'both') => {
     if (!activePreviewDraft) return;
-
+    const jobId = activePreviewDraft.job_id;
     try {
-      await fetch('/api/moneyprinter/generate', {
+      const res = await fetch(`/api/queue/${jobId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          keyword: activePreviewDraft.keyword,
-          target_account: activePreviewDraft.target_account_id,
-          video_aspect: activePreviewDraft.aspect_ratio,
-          caption: updatedCaption,
-          platform
-        })
+        body: JSON.stringify({ caption: updatedCaption, platform })
       });
-
-      // Local update
-      setQueue(prev => prev.map(j => j.id === activePreviewDraft.job_id ? { ...j, status: 'published', progress: 100 } : j));
-      
-      const newLog: LogEntry = {
-        id: `log_${Date.now()}`,
-        timestamp: new Date().toLocaleTimeString(),
-        level: 'INFO',
-        module: 'ADBBridge',
-        message: `Publicación aprobada y enviada a ADB para @${activePreviewDraft.target_account_username} en ${platform.toUpperCase()}`
-      };
-      setLogs(prev => [...prev, newLog]);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('ERROR', 'Publisher', `Aprobación rechazada (${jobId}): ${data?.error || res.status}`);
+      } else {
+        addLog('INFO', 'Publisher', `Draft ${jobId} aprobado -> generación+publicación iniciada (${platform.toUpperCase()})`);
+      }
       setActivePreviewDraft(null);
       refreshBackendData();
     } catch (err) {
-      console.error('Error enviando a ADB:', err);
+      addLog('ERROR', 'Publisher', `approve falló: ${err instanceof Error ? err.message : String(err)}`);
       setActivePreviewDraft(null);
     }
   };
 
   if (checkingAuth) {
     return (
-      <div className="min-h-screen bg-[#0B1220] text-[#00E5BE] font-mono flex items-center justify-center">
+      <div className="min-h-screen bg-[#17181A] text-[#8A8F98] font-mono flex items-center justify-center">
         <div className="flex items-center gap-2">
-          <span className="w-3.5 h-3.5 rounded-full bg-[#00E5BE] animate-ping" />
-          <span className="text-xs uppercase tracking-widest text-[#94A3B8]">Cargando TH3F4Rm3R Phone Farm System...</span>
+          <span className="w-3.5 h-3.5 rounded-full bg-[#8A8F98] animate-ping" />
+          <span className="text-xs uppercase tracking-widest text-[#9CA1A8]">Cargando TH3F4Rm3R Phone Farm System...</span>
         </div>
       </div>
     );
@@ -582,65 +570,97 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#0B1220] text-neutral-200 overflow-hidden font-sans">
-      {/* Top Header Navigation */}
+    <div className={`flex flex-col h-screen overflow-hidden font-sans ${theme === 'dark' ? 'theme-dark bg-[#17181A] text-[#E5E5E5]' : 'theme-light bg-[#F8FAFC] text-[#1E293B]'}`}>
+      {/* Barra superior — texto plano */}
       <Header
         stats={stats}
         accounts={accounts}
         proxies={proxies}
         currentUser={currentUser}
-        onOpenCodeViewer={() => setShowCodeModal(true)}
-        onOpenCurlTester={() => setShowCurlModal(true)}
-        onOpenAdbBridge={() => setShowAdbModal(true)}
-        onOpenMoneyPrinter={() => setShowMoneyPrinterModal(true)}
-        onOpenVersionControl={() => setShowVersionControlModal(true)}
-        onDownloadAllZip={handleDownloadAllZip}
+        theme={theme}
+        deviceCount={deviceCount}
+        onOpenPandaGrid={() => window.open('/panda', '_blank', 'noopener,width=1100,height=760')}
+        onOpenMoneyPrinter={() => openTab('moneyprinter', () => setShowMoneyPrinterModal(true))}
+        onOpenAdbBridge={() => openTab('adb', () => setShowAdbModal(true))}
+        onOpenCurlTester={() => openTab('curl', () => setShowCurlModal(true))}
+        onOpenCodeViewer={() => openTab('code', () => setShowCodeModal(true))}
+        onOpenVersionControl={() => openTab('versions', () => setShowVersionControlModal(true))}
+        onDownloadAllZip={() => { window.location.href = '/api/download-zip'; }}
+        onToggleMaster={handleToggleMaster}
+        onToggleTheme={toggleTheme}
         onLogout={handleLogout}
       />
 
-      {/* Main Grid Workspace */}
-      {/* Stack Docker: contenedores de la farm + salud de MPT/Flask */}
-      <div className="flex items-center gap-4 px-6 py-1.5 border-b border-[#1E2C42] bg-[#0B1220] text-[11px] font-mono overflow-x-auto whitespace-nowrap">
-        <span className="font-bold tracking-wider text-[#00E5BE] flex items-center gap-1.5">
-          <Boxes className="w-3.5 h-3.5" /> {stack.mode === 'native' ? 'STACK NATIVO' : 'STACK DOCKER'}
-        </span>
-        {stack.mode !== 'native' && stack.containers.length === 0 && (
-          <span className="text-[#F87171]">🐳 docker no disponible o sin contenedores phonefarm</span>
-        )}
-        {stack.mode !== 'native' && stack.containers.map((c) => {
-          const up = c.status.startsWith('Up');
-          return (
-            <span key={c.name} className="flex items-center gap-1.5 bg-[#0F1829] border border-[#1E2C42] rounded px-2 py-0.5">
-              <span className={`w-2 h-2 rounded-full ${up ? 'bg-[#00E5BE] shadow-[0_0_5px_#00E5BE]' : 'bg-[#F87171]'}`} />
-              <span className="text-[#94A3B8]">{c.name.replace('phonefarm-', '')}</span>
-              <span className={up ? 'text-[#00E5BE]' : 'text-[#F87171]'}>{up ? 'UP' : 'DOWN'}</span>
-              {c.ports && <span className="text-[#64748B]">[{c.ports.split('->')[0].trim()}]</span>}
-            </span>
-          );
-        })}
-        {stack.mode === 'native' && (stack.native?.length ? stack.native.map((p) => (
-          <span key={p} className="flex items-center gap-1.5 bg-[#0F1829] border border-[#1E2C42] rounded px-2 py-0.5">
-            <span className="w-2 h-2 rounded-full bg-[#00E5BE] shadow-[0_0_5px_#00E5BE]" />
-            <span className="text-[#94A3B8]">{p.includes('phonefarm.platform') ? 'platform' : 'moneyprinter'}</span>
-            <span className="text-[#00E5BE]">NATIVO</span>
+      {/* Stack: procesos nativos + salud MPT/Flask — texto plano */}
+      <div
+        className="flex items-center gap-4 px-4 py-1 border-b text-[11px] font-mono overflow-x-auto whitespace-nowrap"
+        style={{ background: 'var(--color-stack-bg)', borderColor: 'var(--color-stack-border)' }}
+      >
+        <span className="font-bold tracking-wider text-[#9CA1A8]">STACK NATIVO</span>
+        {stack.native?.length ? stack.native.map((p) => (
+          <span key={p} className="text-[#6B7076]">
+            {p.includes('phonefarm.platform') ? 'platform' : 'moneyprinter'} · nativo
           </span>
         )) : (
-          <span className="text-[#F87171]">procesos nativos no detectados</span>
-        ))}
-        <span className={`flex items-center gap-1.5 ${stack.mpt_online ? 'text-[#00E5BE]' : 'text-[#F87171]'}`}>
-          <span className={`w-2 h-2 rounded-full ${stack.mpt_online ? 'bg-[#00E5BE]' : 'bg-[#F87171]'}`} />
-          MPT API {stack.mpt_online ? 'online' : 'offline'}
+          <span className="text-[#E05B5B]">procesos nativos no detectados</span>
+        )}
+        <span className={`ml-auto ${stack.mpt_online ? 'text-[#6FBF73]' : 'text-[#E05B5B]'}`}>
+          MPT {stack.mpt_online ? 'online' : 'offline'}
         </span>
-        <span className={`flex items-center gap-1.5 ${stack.flask_online ? 'text-[#00E5BE]' : 'text-[#F87171]'}`}>
-          <span className={`w-2 h-2 rounded-full ${stack.flask_online ? 'bg-[#00E5BE]' : 'bg-[#F87171]'}`} />
+        <span className={stack.flask_online ? 'text-[#6FBF73]' : 'text-[#E05B5B]'}>
           Flask {stack.flask_online ? 'online' : 'offline'}
         </span>
-        <span className="text-[#94A3B8]">
-          Drafts <b className={stack.drafts > 0 ? 'text-[#4DFFE0]' : 'text-[#64748B]'}>{stack.drafts}</b>
-        </span>
+        <span className="text-[#6B7076]">drafts: {stack.drafts}</span>
       </div>
 
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 grid-rows-[1fr_240px] gap-3 p-4 overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(0,229,190,0.04),transparent_70%)]">
+      {/* Layout principal: sidebar + contenido */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar — texto plano con contadores reales */}
+        <aside
+          className="w-48 shrink-0 border-r flex flex-col font-mono text-[12px] overflow-y-auto"
+          style={{ background: 'var(--color-sidebar-bg)', borderColor: 'var(--color-sidebar-border)' }}
+        >
+          <div className="px-4 py-2 border-b text-[10px] uppercase tracking-wider" style={{ borderColor: 'var(--color-sidebar-border)', color: 'var(--color-header-muted2)' }}>Secciones</div>
+          <button onClick={() => openTab('panda', () => setShowPandaModal(true))} title="Dispositivos ADB + manejo scrcpy" className={`px-4 py-2 text-left flex justify-between transition-colors ${activeTab === 'panda' ? 'font-bold' : ''}`} style={{ background: activeTab === 'panda' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'panda' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
+            <span>Dispositivos</span><span style={{ color: 'var(--color-header-muted2)' }}>{deviceCount}</span>
+          </button>
+          <button onClick={() => window.open('/panda', '_blank', 'noopener,width=1100,height=760')} title="Abrir Panda live (grid de pantallas) en ventana nueva" className="px-4 py-2 text-left flex justify-between transition-colors" style={{ color: 'var(--color-sidebar-text)' }}>
+            <span>Panda live</span><span style={{ color: 'var(--color-header-muted2)' }}>↗</span>
+          </button>
+          <button onClick={() => openTab('proxies', () => setShowProxyModal(true))} className={`px-4 py-2 text-left flex justify-between transition-colors ${activeTab === 'proxies' ? 'font-bold' : ''}`} style={{ background: activeTab === 'proxies' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'proxies' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
+            <span>Proxies</span><span style={{ color: 'var(--color-header-muted2)' }}>{proxies.length}</span>
+          </button>
+          <button onClick={() => openTab('schedule', () => setShowScheduleModal(true))} className={`px-4 py-2 text-left flex justify-between transition-colors ${activeTab === 'schedule' ? 'font-bold' : ''}`} style={{ background: activeTab === 'schedule' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'schedule' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
+            <span>Calendario</span><span style={{ color: 'var(--color-header-muted2)' }}>{queue.filter(j => j.scheduled_ts).length}</span>
+          </button>
+
+          <div className="px-4 py-2 mt-2 border-t text-[10px] uppercase tracking-wider" style={{ borderColor: 'var(--color-sidebar-border)', color: 'var(--color-header-muted2)' }}>Herramientas</div>
+          <button onClick={() => openTab('moneyprinter', () => setShowMoneyPrinterModal(true))} className={`px-4 py-2 text-left transition-colors ${activeTab === 'moneyprinter' ? 'font-bold' : ''}`} style={{ background: activeTab === 'moneyprinter' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'moneyprinter' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
+            Generador de Reels
+          </button>
+          <button onClick={() => openTab('adb', () => setShowAdbModal(true))} className={`px-4 py-2 text-left transition-colors ${activeTab === 'adb' ? 'font-bold' : ''}`} style={{ background: activeTab === 'adb' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'adb' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
+            ADB Bridge
+          </button>
+          <button onClick={() => openTab('curl', () => setShowCurlModal(true))} className={`px-4 py-2 text-left transition-colors ${activeTab === 'curl' ? 'font-bold' : ''}`} style={{ background: activeTab === 'curl' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'curl' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
+            cURL API
+          </button>
+          <button onClick={() => openTab('code', () => setShowCodeModal(true))} className={`px-4 py-2 text-left transition-colors ${activeTab === 'code' ? 'font-bold' : ''}`} style={{ background: activeTab === 'code' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'code' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
+            Código Python
+          </button>
+          <button onClick={() => openTab('versions', () => setShowVersionControlModal(true))} className={`px-4 py-2 text-left transition-colors ${activeTab === 'versions' ? 'font-bold' : ''}`} style={{ background: activeTab === 'versions' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'versions' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
+            Versiones
+          </button>
+          <button onClick={handleDownloadAllZip} className="px-4 py-2 text-left transition-colors" style={{ color: 'var(--color-sidebar-text)' }}>
+            Descargar ZIP
+          </button>
+
+          <div className="mt-auto px-4 py-3 border-t text-[10px]" style={{ borderColor: 'var(--color-sidebar-border)', color: 'var(--color-header-muted2)' }}>
+            {stats.panda_grid_status} · cpu {stats.cpu_percent}%
+          </div>
+        </aside>
+
+        {/* Contenido principal */}
+        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 grid-rows-[1fr_200px] gap-3 p-3 overflow-hidden">
         {/* Left Column: Accounts & ADB Devices (4 cols) */}
         <div className="lg:col-span-4 h-full overflow-hidden">
           <AccountsPanel
@@ -662,14 +682,20 @@ export default function App() {
             onAddJob={handleAddJob}
             onProcessNextJob={handleProcessNextJob}
             onOpenPreview={handleOpenPreviewForJob}
+            onApproveJob={handleApproveJob}
+            onPublishJob={handlePublishJob}
+            onRejectJob={handleRejectJob}
+            onDeleteJob={handleDeleteJob}
           />
         </div>
 
         {/* Bottom Full-Width Row: Live Terminal SSE Stream (12 cols) */}
-        <div className="lg:col-span-12 h-full overflow-hidden">
+        <div className={`lg:col-span-12 overflow-hidden ${terminalMinimized ? 'h-10' : 'h-full'}`}>
           <TerminalLogs
             logs={logs}
             onClearLogs={() => setLogs([])}
+            isMinimized={terminalMinimized}
+            onToggleMinimize={() => setTerminalMinimized(!terminalMinimized)}
           />
         </div>
       </main>
@@ -708,10 +734,28 @@ export default function App() {
         />
       )}
 
+      {showPandaModal && (
+        <PandaGridModal
+          onClose={() => setShowPandaModal(false)}
+        />
+      )}
+
+      {showScheduleModal && (
+        <ScheduleModal
+          queue={queue}
+          accounts={accounts}
+          onClose={() => setShowScheduleModal(false)}
+          onScheduleJob={handleScheduleJob}
+          onRescheduleJob={handleRescheduleJob}
+          onRefresh={refreshBackendData}
+        />
+      )}
+
       {showMoneyPrinterModal && (
         <MoneyPrinterModal
           accounts={accounts}
-          onClose={() => setShowMoneyPrinterModal(false)}
+          initialAccount={moneyPrinterAccount || undefined}
+          onClose={() => { setShowMoneyPrinterModal(false); setMoneyPrinterAccount(null); }}
           onRefreshData={refreshBackendData}
         />
       )}
@@ -725,6 +769,7 @@ export default function App() {
           onClose={() => setSelectedAccountForDetail(null)}
           onToggleBot={handleToggleBot}
           onOpenMoneyPrinterForAccount={(acc) => {
+            setMoneyPrinterAccount(acc);
             setSelectedAccountForDetail(null);
             setShowMoneyPrinterModal(true);
           }}
@@ -751,6 +796,7 @@ export default function App() {
           onDownloadZip={handleDownloadAllZip}
         />
       )}
+      </div>
     </div>
   );
 }

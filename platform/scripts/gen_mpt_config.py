@@ -74,10 +74,27 @@ def main() -> None:
     provider = os.getenv("LLM_PROVIDER", "kimi").lower()
     if provider == "openai":
         llm_provider = "openai"
-        llm_keys = f'openai_api_key = "{os.getenv("OPENAI_API_KEY", "")}"\nopenai_base_url = ""\nopenai_model_name = ""'
+        llm_keys = (
+            f'openai_api_key = "{os.getenv("OPENAI_API_KEY", "")}"\n'
+            f'openai_base_url = "{os.getenv("OPENAI_BASE_URL", "")}"\n'
+            f'openai_model_name = "{os.getenv("OPENAI_MODEL", "")}"'
+        )
+    elif provider == "minimax":
+        # MiniMax International (.io). MPT lo soporta nativamente; sin esto el
+        # generador caía a moonshot con api_key VACÍA y MPT fallaba al usar su LLM.
+        llm_provider = "minimax"
+        llm_keys = (
+            f'minimax_api_key = "{os.getenv("MINIMAX_API_KEY", "")}"\n'
+            f'minimax_base_url = "{os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1")}"\n'
+            f'minimax_model_name = "{os.getenv("MINIMAX_MODEL", "")}"'
+        )
     else:
         llm_provider = "moonshot"
-        llm_keys = f'moonshot_api_key = "{os.getenv("KIMI_API_KEY", "")}"\nmoonshot_base_url = ""\nmoonshot_model_name = ""'
+        llm_keys = (
+            f'moonshot_api_key = "{os.getenv("KIMI_API_KEY", "")}"\n'
+            f'moonshot_base_url = "{os.getenv("KIMI_BASE_URL", "")}"\n'
+            f'moonshot_model_name = "{os.getenv("KIMI_MODEL", "")}"'
+        )
 
     pexels_keys = _toml_string_list(os.getenv("PEXELS_API_KEY", ""))
     listen_host = "0.0.0.0" if os.getenv("IN_DOCKER", "0") == "1" else "127.0.0.1"

@@ -38,7 +38,7 @@ export interface DraftPost {
   target_account_id: string;
   target_account_username: string;
   platform: 'instagram' | 'tiktok' | 'both';
-  video_url: string;
+  video_url?: string;
   script: string;
   caption: string;
   hashtags: string[];
@@ -67,11 +67,15 @@ export interface QueueJob {
   id: string;
   keyword: string;
   target_account: string;
-  status: 'pending' | 'generating' | 'published' | 'failed' | 'awaiting_manual_upload';
+  status: 'pending' | 'scripting' | 'awaiting_approval' | 'generating' | 'awaiting_preview' | 'publishing' | 'published' | 'failed' | 'rejected' | 'awaiting_manual_upload';
   video_path: string | null;
   created_at: string;
   progress?: number;
   media_id?: string;
+  script?: string;
+  caption?: string;
+  error?: string;
+  scheduled_ts?: number | string | null;
 }
 
 export interface LogEntry {
@@ -120,7 +124,7 @@ export interface StackInfo {
 export interface MoneyPrinterConfig {
   repo_url: string;
   bind_address: string;
-  llm_provider: 'gemini' | 'openai' | 'claude' | 'deepseek' | 'ollama';
+  llm_provider: string;  // proveedor REAL leído del .env (minimax/openai/kimi...)
   llm_model: string;
   video_aspect: '9:16' | '16:9' | '1:1';
   video_concat_mode: 'sequential' | 'random';

@@ -191,7 +191,8 @@ def publish_video(account_id: str, video_path: str, caption: str) -> str:
     """Publica un Reel en Instagram y retorna el media_id.
 
     Raises:
-        FileNotFoundError: sesión no creada (hacer login_once primero).
+        FileNotFoundError: sesión no creada (hacer login_once primero) —
+            la plataforma lo registra como fallback manual en vez de dejar el job 'failed'.
         RuntimeError: la cuenta no existe en accounts.json.
         instagrapi.exceptions.*: error de Instagram (p.ej. ChallengeRequired) —
             en ese caso la plataforma registra el fallback manual automáticamente.
@@ -200,11 +201,24 @@ def publish_video(account_id: str, video_path: str, caption: str) -> str:
     if account is None:
         raise RuntimeError(f"Cuenta no existe: {account_id}")
 
-    client = _build_client(account_id, account)
     path = Path(video_path)
     if not path.exists():
         raise FileNotFoundError(f"Vídeo no encontrado: {video_path}")
 
+    # Sin sesión persistente: NO se cae a 'failed' — se activa el fallback manual
+    # (adb push del MP4 al teléfono + registro en logs/fallback_queue.json).
+    if not _session_path(account_id).exists():
+        logger.warning(
+            "No existe sesión para %s — registrando fallback manual (awaiting_manual_upload)",
+            account_id,
+        )
+        _register_manual_fallback(account_id, str(path), "NoSession")
+        raise FileNotFoundError(
+            f"No existe sesión para {account_id}. "
+            "Ejecuta login_once() UNA vez para crearla (nunca se reloguea automáticamente)."
+        )
+
+    client = _build_client(account_id, account)
     logger.info("Subiendo Reel %s para @%s...", path.name, account.get("username"))
     try:
         media = client.clip_upload(str(path), caption)

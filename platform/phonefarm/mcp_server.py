@@ -50,7 +50,7 @@ def create_content_job(
 
     queue = platform_data.load_queue()
     job = {
-        "id": f"job_{len(queue) + 101}",
+        "id": pf._next_numeric_id(queue),
         "keyword": keyword,
         "target_account": target_account or (platform_data.load_accounts()[0]["id"] if platform_data.load_accounts() else ""),
         "niche_id": niche_id,
@@ -94,10 +94,29 @@ def approve_job(job_id: str) -> dict[str, Any]:
         raise ValueError(f"Job no existe: {job_id}")
     if job.get("status") != "awaiting_approval":
         raise ValueError(f"Job {job_id} en estado {job.get('status')}")
-    if not pf._spawn(job_id, lambda j=job: pf._generate_and_publish(j)):
+    # Respeta el pipeline de 3 etapas: approve -> generación (queda en
+    # awaiting_preview); la publicación final la dispara publish_job().
+    if not pf._spawn(job_id, lambda j=job: pf._generate_video(j)):
         raise RuntimeError(f"Job {job_id} ya se está procesando")
     logger.info("[MCP] Guión aprobado: %s", job_id)
-    return {"job_id": job_id, "status": "generating", "message": "Generando y publicando..."}
+    return {"job_id": job_id, "status": "generating", "message": "Generando vídeo (luego awaiting_preview)..."}
+
+
+@mcp.tool()
+def publish_job(job_id: str) -> dict[str, Any]:
+    """Publica un job cuyo vídeo ya está generado (awaiting_preview)."""
+    from phonefarm import platform as pf
+
+    queue = platform_data.load_queue()
+    job = next((j for j in queue if j.get("id") == job_id), None)
+    if job is None:
+        raise ValueError(f"Job no existe: {job_id}")
+    if job.get("status") != "awaiting_preview":
+        raise ValueError(f"Job {job_id} en estado {job.get('status')} (esperado: awaiting_preview)")
+    if not pf._spawn(job_id, lambda j=job: pf._publish_job(j)):
+        raise RuntimeError(f"Job {job_id} ya se está procesando")
+    logger.info("[MCP] Publicación iniciada: %s", job_id)
+    return {"job_id": job_id, "status": "publishing"}
 
 
 @mcp.tool()

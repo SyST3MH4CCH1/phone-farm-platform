@@ -1,15 +1,115 @@
 @import "tailwindcss";
 
+/* ============================================================
+   TH3F4Rm3R Design Tokens (Tailwind v4 @theme)
+   Panel de control REAL — oscuro neutro, sin marca, sin iconos.
+   ============================================================ */
+@theme {
+  --color-surface: #17181A;        /* fondo raíz */
+  --color-surface-2: #1E2023;      /* paneles / modales / tarjetas */
+  --color-surface-3: #232528;      /* headers de panel / sidebar */
+  --color-surface-4: #1A1C1E;      /* inputs / filas hover */
+  --color-line: #2A2C30;           /* bordes universales */
+  --color-accent: #8A8F98;         /* acento gris claro (botones) */
+  --color-accent-2: #A1A6AE;       /* acento secundario */
+  --color-on-accent: #17181A;      /* texto sobre gris claro */
+  --color-muted: #9CA1A8;          /* texto secundario */
+  --color-muted-2: #6B7076;        /* texto terciario */
+  --color-danger: #E05B5B;         /* errores */
+  --color-ok: #6FBF73;             /* ok / online */
+  --color-warn: #D4A84B;           /* warnings */
+}
+
+/* ============================================================
+   THEME: CSS Custom Properties (Dark / Light)
+   ============================================================ */
+.theme-dark {
+  --color-header-bg: #17181A;
+  --color-header-border: #2A2C30;
+  --color-header-text: #E5E5E5;
+  --color-header-muted: #9CA1A8;
+  --color-header-muted2: #6B7076;
+  --color-header-hover: #232528;
+  --color-sidebar-bg: #17181A;
+  --color-sidebar-border: #2A2C30;
+  --color-sidebar-text: #9CA1A8;
+  --color-sidebar-hover: #232528;
+  --color-stack-bg: #17181A;
+  --color-stack-border: #2A2C30;
+  --color-input-bg: #1A1C1E;
+  --color-input-border: #2A2C30;
+  --color-panel-bg: #1E2023;
+  --color-panel-border: #2A2C30;
+  --color-panel-header: #232528;
+}
+
+.theme-light {
+  --color-header-bg: #FFFFFF;
+  --color-header-border: #E2E8F0;
+  --color-header-text: #1E293B;
+  --color-header-muted: #64748B;
+  --color-header-muted2: #94A3B8;
+  --color-header-hover: #F1F5F9;
+  --color-sidebar-bg: #F8FAFC;
+  --color-sidebar-border: #E2E8F0;
+  --color-sidebar-text: #64748B;
+  --color-sidebar-hover: #F1F5F9;
+  --color-stack-bg: #F8FAFC;
+  --color-stack-border: #E2E8F0;
+  --color-input-bg: #FFFFFF;
+  --color-input-border: #CBD5E1;
+  --color-panel-bg: #FFFFFF;
+  --color-panel-border: #E2E8F0;
+  --color-panel-header: #F8FAFC;
+}
+
 @layer utilities {
   .font-mono {
     font-family: 'JetBrains Mono', monospace;
   }
-  .card-border {
-    border: 1px solid rgba(30, 44, 66, 0.6);
+
+  /* --- Botones (planos, texto) --- */
+  .btn-primary {
+    @apply bg-[#8A8F98] hover:bg-[#A1A6AE] text-[#17181A] font-bold rounded-md transition-colors;
   }
-  .status-glow {
-    box-shadow: 0 0 10px rgba(0, 229, 190, 0.4);
+  .btn-secondary {
+    @apply bg-[#232528] hover:bg-[#2A2C30] text-[#A1A6AE] border border-[#33363A] rounded-md font-mono transition-colors;
   }
+  .btn-ghost {
+    @apply text-[#9CA1A8] hover:text-[#E5E5E5] hover:bg-[#232528] rounded-md transition-colors;
+  }
+  .btn-close {
+    @apply p-1 text-[#6B7076] hover:text-[#E5E5E5] hover:bg-[#232528] rounded-md transition-colors;
+  }
+
+  /* --- Superficies (planas) --- */
+  .card {
+    @apply bg-[#1E2023] border border-[#2A2C30] rounded-lg;
+  }
+  .card-hover {
+    @apply hover:border-[#3A3D42] transition-colors;
+  }
+
+  /* --- Inputs --- */
+  .input {
+    @apply bg-[#1A1C1E] border border-[#2A2C30] rounded-md text-[#E5E5E5] placeholder-[#6B7076] focus:outline-none focus:border-[#8A8F98] transition-colors;
+  }
+
+  /* --- Modal shell unificado --- */
+  .modal-overlay {
+    @apply fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 font-mono;
+  }
+  .modal-shell {
+    @apply bg-[#1E2023] border border-[#2A2C30] rounded-lg overflow-hidden flex flex-col max-h-[90vh];
+  }
+  .modal-header {
+    @apply bg-[#232528] px-4 py-3 border-b border-[#2A2C30];
+  }
+
+  /* --- Estados de texto (sin badges de color) --- */
+  .state-ok { @apply text-[#6FBF73]; }
+  .state-warn { @apply text-[#D4A84B]; }
+  .state-err { @apply text-[#E05B5B]; }
 }
 
 /* Custom Uniform TH3F4Rm3R Scrollbars */
@@ -19,16 +119,222 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #0B1220;
+  background: #17181A;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1E2C42;
+  background: #33363A;
   border-radius: 9999px;
-  border: 1px solid #0F1829;
+  border: 1px solid #232528;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #00E5BE;
+  background: #8A8F98;
 }
 
+/* ============================================================
+   react-big-calendar — look GOOGLE CALENDAR (dark mode)
+   Celdas separadas, números de día, eventos como píldoras,
+   vista semana/día con columnas de horas.
+   ============================================================ */
+.rbc-dark {
+  font-family: Roboto, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: #E8EAED;
+}
+/* --- Toolbar estilo Google --- */
+.rbc-dark .rbc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.rbc-dark .rbc-toolbar .rbc-toolbar-label {
+  order: 0;
+  font-size: 22px;
+  font-weight: 400;
+  color: #E8EAED;
+  text-transform: capitalize;
+  padding: 0 12px;
+  flex: 1;
+}
+.rbc-dark .rbc-toolbar .rbc-btn-group:first-of-type {
+  order: -1; /* Hoy/←/→ primero */
+}
+.rbc-dark .rbc-toolbar .rbc-btn-group:last-of-type {
+  order: 1; /* vistas al final */
+}
+.rbc-dark .rbc-toolbar button {
+  background: #3c4043;
+  color: #E8EAED;
+  border: 1px solid #3c4043;
+  border-radius: 9999px;
+  padding: 6px 16px;
+  font-family: Roboto, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.rbc-dark .rbc-toolbar button:hover {
+  background: #4a4d51;
+}
+.rbc-dark .rbc-toolbar button.rbc-active {
+  background: #8ab4f8;
+  color: #202124;
+  border-color: #8ab4f8;
+}
+/* --- Vista mes: celdas separadas tipo Google --- */
+.rbc-dark .rbc-month-view {
+  border: 1px solid #3c4043;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #292a2d;
+}
+.rbc-dark .rbc-month-header {
+  background: #292a2d;
+}
+.rbc-dark .rbc-header {
+  background: #292a2d;
+  color: #9aa0a6;
+  border-bottom: 1px solid #3c4043;
+  padding: 8px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.rbc-dark .rbc-month-row {
+  border-color: #3c4043;
+}
+.rbc-dark .rbc-day-bg {
+  background: #292a2d;
+}
+.rbc-dark .rbc-day-bg + .rbc-day-bg {
+  border-left: 1px solid #3c4043;
+}
+.rbc-dark .rbc-off-range-bg {
+  background: #202124;
+}
+.rbc-dark .rbc-today {
+  background: #323639;
+}
+.rbc-dark .rbc-date-cell {
+  text-align: right;
+  padding: 6px 8px;
+}
+.rbc-dark .rbc-date-cell > .rbc-button-link {
+  color: #e8eaed;
+  font-size: 12px;
+  text-decoration: none;
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+}
+.rbc-dark .rbc-date-cell.rbc-now > .rbc-button-link {
+  background: #8ab4f8;
+  color: #202124;
+  font-weight: 600;
+}
+/* --- Eventos como píldoras --- */
+.rbc-dark .rbc-event {
+  border: none;
+  border-left: 4px solid transparent;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #E8EAED;
+}
+.rbc-dark .rbc-event:focus {
+  outline: 2px solid #8ab4f8;
+  outline-offset: -1px;
+}
+.rbc-dark .rbc-show-more {
+  color: #8ab4f8;
+  font-size: 11px;
+  background: none;
+  border: none;
+  padding: 0 4px;
+  cursor: pointer;
+}
+/* --- Vista semana/día: columnas de horas --- */
+.rbc-dark .rbc-time-view {
+  border: 1px solid #3c4043;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #292a2d;
+}
+.rbc-dark .rbc-time-header {
+  background: #292a2d;
+}
+.rbc-dark .rbc-time-header-content {
+  border-left: 1px solid #3c4043;
+}
+.rbc-dark .rbc-time-header-cell {
+  border-bottom: 1px solid #3c4043;
+}
+.rbc-dark .rbc-time-gutter {
+  color: #9aa0a6;
+  font-size: 10px;
+}
+.rbc-dark .rbc-time-content {
+  border-top: 1px solid #3c4043;
+}
+.rbc-dark .rbc-timeslot-group {
+  border-bottom: 1px solid #3c4043;
+}
+.rbc-dark .rbc-day-slot .rbc-time-slot {
+  border-top: 1px solid #33363a;
+}
+.rbc-dark .rbc-day-slot .rbc-events-container {
+  border-left: 1px solid #3c4043;
+}
+.rbc-dark .rbc-current-time-indicator {
+  background: #ea4335;
+  height: 2px;
+}
+.rbc-dark .rbc-current-time-indicator::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: #ea4335;
+}
+/* --- Agenda --- */
+.rbc-dark .rbc-agenda-view {
+  border: 1px solid #3c4043;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #292a2d;
+}
+.rbc-dark .rbc-agenda-table {
+  color: #E8EAED;
+}
+.rbc-dark .rbc-agenda-table thead th {
+  background: #323639;
+  border-color: #3c4043;
+  color: #9aa0a6;
+  text-transform: uppercase;
+  font-size: 10px;
+  padding: 8px;
+}
+.rbc-dark .rbc-agenda-table tbody td {
+  border-color: #3c4043;
+  padding: 8px;
+}
+.rbc-dark .rbc-agenda-event-cell a {
+  color: #8ab4f8;
+  text-decoration: none;
+}
+.rbc-dark .rbc-agenda-empty {
+  color: #9aa0a6;
+  padding: 24px;
+  text-align: center;
+}

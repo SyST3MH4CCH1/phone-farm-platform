@@ -2,15 +2,28 @@
 
 **Phone Farm Control Center** — panel de control para granjas de teléfonos Android (ADB): gestión de cuentas de redes sociales, proxies SOCKS5, cola de generación de contenido con IA (MoneyPrinterTurbo + Gemini) y logs en vivo.
 
-> ⚠️ **Estado:** el backend es un *mock funcional* — la publicación, el bridge ADB y el pipeline de vídeo están simulados para desarrollo. Ver [docs/AUDIT.md](docs/AUDIT.md) para el análisis completo y el roadmap de integración real.
+> ⚠️ **Estado:** integración **real** (sin mocks). El backend Flask (`platform/`) es la fuente de verdad; este panel React es la interfaz de operación. Ver [docs/AUDIT.md](docs/AUDIT.md) para seguridad y [docs/INTERCONEXION.md](docs/INTERCONEXION.md) para el mapa completo de cómo se conectan todos los procesos.
 
 ## Stack
 
 - **Frontend:** React 19 + Vite 6 + Tailwind 4 (panel oscuro tipo terminal)
-- **Backend:** Express 4 (TypeScript, ejecutado con tsx)
-- **IA:** Google Gemini (`@google/genai`) para guiones virales
-- **Agentes:** servidor **MCP** (Model Context Protocol) en `/mcp` — 15 tools para operar la granja desde agentes
-- **Runtime:** Node 20+ / Bun 1.x
+- **Backend panel:** Express 4 (TypeScript, ejecutado con tsx) — sirve la SPA y hace proxy a Flask
+- **Backend real:** Python Flask (`platform/`) — orquesta cuentas, proxies, cola, MPT, instagrapi, taktik
+- **IA:** LLM vía MiniMax/OpenAI/Kimi para guiones (configurable con `LLM_PROVIDER`)
+- **Agentes:** servidor **MCP** en `platform/phonefarm/mcp_server.py` (`http://127.0.0.1:5001/mcp`) — 15 tools
+- **Runtime:** Node 20+ / Bun 1.x · Python 3.12
+
+## Documentación
+
+| Documento | Qué cubre |
+|---|---|
+| **[docs/INTERCONEXION.md](docs/INTERCONEXION.md)** | 🔗 Mapa de procesos, puertos, auth por capa y flujo end-to-end |
+| **[docs/MIGRACION-GPU.md](docs/MIGRACION-GPU.md)** | 🚀 Runbook para migrar a máquina con GPU dedicada + RAM (instalación, datos, NVENC) |
+| [docs/PLAN-LOCAL-VPS.md](docs/PLAN-LOCAL-VPS.md) | División Local vs VPS (3 arquitecturas + checklist) |
+| [docs/CAMBIOS-DASHBOARD.md](docs/CAMBIOS-DASHBOARD.md) | Registro de cambios del dashboard (qué/cuándo) |
+| [MANUAL.md](MANUAL.md) | Operación diaria: pipeline, calendario, problemas conocidos |
+| [docs/AUDIT.md](docs/AUDIT.md) | Auditoría de seguridad y estado de remediación |
+| [platform/README.md](platform/README.md) | Backend Python, Docker y despliegue |
 
 ## Requisitos
 
@@ -20,9 +33,11 @@
 
 ```bash
 bun install          # o npm install
-cp .env.example .env # ajusta ADMIN_PASSWORD / GEMINI_API_KEY
+cp .env.example .env # rellena ADMIN_PASSWORD, PHONE_FARM_INTERNAL_TOKEN, claves
 bun run dev          # http://localhost:3000
 ```
+
+> También necesitas el backend Python: `cd platform && python -m phonefarm.platform` (ver [platform/README.md](platform/README.md)).
 
 **Credenciales de demo (solo dev):** `admin/admin123` (admin) · `operator/operator123` (operator).
 
@@ -48,35 +63,19 @@ Toda la API (`/api/*`) exige sesión: cookie `httpOnly` `pf_session` o `Authoriz
 
 ## MCP Server (agentes)
 
-El servidor expone MCP sobre **Streamable HTTP** en `POST /mcp`. Requiere autenticación (cookie o `Authorization: Bearer`).
+El **MCP real** vive en el backend Python: `platform/phonefarm/mcp_server.py` expone Streamable HTTP en **`http://127.0.0.1:5001/mcp`** (loopback, sin auth — confía en que solo procesos locales del host lo llaman).
 
 ```bash
 # Cliente MCP de ejemplo (TypeScript/Node):
 new Client({ name: "mi-agente", version: "1.0.0" })
   .connect(new StreamableHTTPClientTransport({
-    url: "http://127.0.0.1:3000/mcp",
-    authProvider: { getToken: async () => ({ scheme: "bearer", credentials: "<token>" }) }
+    url: "http://127.0.0.1:5001/mcp"
   }));
 ```
 
-**Tools disponibles:** `get_stats`, `list_accounts`, `create_account`, `delete_account`, `start_bot`, `stop_bot`, `list_proxies`, `verify_proxy`, `list_queue`, `create_job`, `process_next_job`, `generate_video`, `get_moneyprinter_config`, `get_bridge_config`, `get_logs`.
+**15 tools:** `create_content_job`, `list_jobs`, `get_drafts`, `approve_job`, `publish_job`, `reject_job`, `generate_script_preview`, `list_content_profiles`, `create_content_profile`, `get_stats`, `list_accounts`, `start_bot`, `stop_bot`, `list_proxies`, `get_logs`.
 
-Ejemplo de invocación (JSON-RPC):
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "tools/call",
-  "params": { "name": "create_job", "arguments": { "keyword": "recetas faciles 5 minutos" } }
-}
-```
-
-### Conectar agentes locales
-
-- **ZCode / Claude / Codex / OpenCode:** registra `http://127.0.0.1:3000/mcp` como MCP server con header `Authorization: Bearer <token>`.
-- **oh-my-codex / ponytail / headroom:** usa la herramienta `generate_video` o `create_job` como paso de un workflow (`$deep-interview`, `$team`, etc.).
-- **opencode-kilo-auth:** el gateway Kilo no es necesario para operar la farm; la farm es la *herramienta*, no el *modelo*.
+> Nota: el antiguo `mcp.ts`/`farm-engine.ts` (raíz) eran código muerto del template original y fueron eliminados el 2026-08-09.
 
 ## Scripts
 
@@ -89,11 +88,12 @@ bun run typecheck  # tsc --noEmit (también es el "lint")
 
 ## Seguridad
 
-- Credenciales por entorno (nunca en código) — `docs/AUDIT.md §2.1`
-- Sesión con cookie `httpOnly` + `SameSite=Strict`; tokens validados en toda la API — `§2.3`
-- Sin bypass de autenticación ni en servidor ni en cliente — `§2.2, §2.4`
-- API keys solo por entorno (`GEMINI_API_KEY`, `PEXELS_API_KEY`) — `§2.5`
-- Secret scan (gitleaks) en CI
+- Sesiones **multi-usuario** en memoria con expiración + RBAC `admin`/`operator` (AUDIT-001/002/008)
+- Comparación de credenciales **timing-safe**; token solo en cookie, nunca en el body (AUDIT-006/007)
+- Proxy Express→Flask con `X-Internal-Auth` desde entorno (sin fallback embebido)
+- `/engagement/*` y `/videos/*` protegidos por sesión (antes eran vía abierta)
+- `/api/source` y `/api/download-zip` solo `admin`; download-zip redacta seriales/hosts
+- `.env` no trackeado; claves ADB y dumps de UI fuera del repo
 
 ## Auditoría
 
