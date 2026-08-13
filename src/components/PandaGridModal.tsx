@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiFetch } from '../api';
 
 export interface PandaDevice {
   serial: string;
@@ -34,7 +35,7 @@ export const PandaGridModal: React.FC<PandaGridModalProps> = ({ onClose }) => {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch('/api/adb/devices', { signal: AbortSignal.timeout(8000) });
+        const res = await apiFetch('/api/adb/devices', { signal: AbortSignal.timeout(8000) });
         const data = await res.json();
         if (res.ok) {
           setDevices(data.devices || []);
@@ -57,7 +58,7 @@ export const PandaGridModal: React.FC<PandaGridModalProps> = ({ onClose }) => {
   const openMirror = async (serial: string) => {
     setMirrorMsg((m) => ({ ...m, [serial]: 'abriendo…' }));
     try {
-      const res = await fetch('/api/adb/mirror', {
+      const res = await apiFetch('/api/adb/mirror', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serial }),

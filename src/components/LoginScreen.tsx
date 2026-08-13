@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthUser } from '../types';
+import { apiFetch } from '../api';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: AuthUser) => void;
@@ -17,7 +18,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setErrorMsg(null);
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -41,21 +42,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleQuickLogin = (userRole: 'admin' | 'operator') => {
-    const creds = userRole === 'admin'
-      ? { u: 'admin', p: 'admin123' }
-      : { u: 'operator', p: 'operator123' };
-    setUsername(creds.u);
-    setPassword(creds.p);
-    // Submit programático del formulario tras aplicar las credenciales.
-    // requestAnimationFrame asegura que los inputs controlados ya reflejan
-    // los nuevos valores cuando el submit lee el state.
-    requestAnimationFrame(() => {
-      const form = document.getElementById('login-form') as HTMLFormElement | null;
-      form?.requestSubmit();
-    });
-  };
-
   return (
     <div className="min-h-screen bg-[#17181A] text-[#E5E5E5] flex flex-col justify-between p-4 md:p-8 font-mono relative overflow-hidden">
       {/* Ambient background grid & lighting */}
@@ -77,7 +63,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
         <div className="hidden sm:flex items-center gap-2 text-xs text-[#9CA1A8] bg-[#1E2023] border border-[#2A2C30] px-3 py-1.5 rounded-lg">
           <span className="w-2 h-2 rounded-full bg-[#8A8F98] animate-pulse" />
-          <span>Servidor Node/Express: <strong className="text-[#E5E5E5]">http://0.0.0.0:3000</strong></span>
+          <span>Servidor Node/Express: <strong className="text-[#E5E5E5]">http://127.0.0.1:3000</strong></span>
         </div>
       </header>
 
@@ -146,36 +132,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               )}
             </button>
           </form>
-
-          {/* Preset Demo Logins */}
-          <div className="pt-3 border-t border-[#2A2C30] space-y-2">
-            <span className="block text-[10px] uppercase text-[#6B7076] text-center tracking-wider">
-              Acceso Rápido de Demostración:
-            </span>
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('admin')}
-                className="bg-[#1A1C1E] hover:bg-[#33363A] border border-[#2A2C30] rounded-lg px-3 py-2 text-left flex flex-col transition-colors"
-              >
-                <span className="text-[#E5E5E5] font-bold flex items-center justify-between">
-                  Admin Master
-                </span>
-                <span className="text-[10px] text-[#6B7076]">admin / admin123</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('operator')}
-                className="bg-[#1A1C1E] hover:bg-[#33363A] border border-[#2A2C30] rounded-lg px-3 py-2 text-left flex flex-col transition-colors"
-              >
-                <span className="text-[#E5E5E5] font-bold flex items-center justify-between">
-                  Técnico ADB
-                </span>
-                <span className="text-[10px] text-[#6B7076]">operator / operator123</span>
-              </button>
-            </div>
-          </div>
         </div>
       </main>
 

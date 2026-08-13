@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '../api';
 
 interface AdbBridgeModalProps {
   onClose: () => void;
@@ -28,7 +29,7 @@ export const AdbBridgeModal: React.FC<AdbBridgeModalProps> = ({ onClose, onRefre
     setTesting(true);
 
     try {
-      const res = await fetch('/api/adb/test-connection', {
+      const res = await apiFetch('/api/adb/test-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

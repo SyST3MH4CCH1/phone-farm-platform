@@ -10,6 +10,7 @@ import fs from "fs";
 import { exec, execFile } from "child_process";
 import JSZip from "jszip";
 import { randomBytes } from "crypto";
+import helmet from "helmet";
 import type { AppConfig } from "./config";
 import { SessionStore, safeEqual, newSessionToken, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, SessionUser } from "./sessions";
 
@@ -29,6 +30,8 @@ export interface AppDeps {
 /** Límite de líneas del buffer de logs (paso 12). */
 export const MAX_LOG_LINES = 64 * 1024;
 
+export const CSRF_COOKIE = "pf_csrf";
+
 export function createApp(config: AppConfig, deps: AppDeps = {}): express.Express {
   const app = express();
   const store = deps.sessionStore ?? new SessionStore();
@@ -42,6 +45,36 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
     }));
 
   app.disable("x-powered-by");
+  // Tailscale Serve / reverse proxy TLS conectan desde loopback: confiar solo
+  // en proxies de loopback para X-Forwarded-* (nunca XFF arbitrario).
+  app.set("trust proxy", "loopback");
+
+  // Nonce CSP por request (para /panda, cuya página usa <script> inline).
+  app.use((req, res, next) => {
+    res.locals.cspNonce = randomBytes(16).toString("base64");
+    next();
+  });
+
+  const behindHttps = config.publicBaseUrl.startsWith("https://");
+  app.use(helmet({
+    contentSecurityPolicy: config.nodeEnv === "production" ? {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", (req, res) => `'nonce-${(res as any).locals.cspNonce}'`],
+        "style-src": ["'self'", "'unsafe-inline'"], // estilos inline del código existente
+        "img-src": ["'self'", "data:", "blob:"],
+        "connect-src": ["'self'"],
+        "frame-ancestors": ["'none'"],
+        // upgrade-insecure-requests solo tras TLS: en loopback rompería la UI.
+        "upgrade-insecure-requests": behindHttps ? [] : null,
+      },
+    } : false,
+    // HSTS solo cuando el acceso público es HTTPS (Tailscale Serve).
+    strictTransportSecurity: behindHttps ? { maxAge: 31536000, includeSubDomains: false } : false,
+    referrerPolicy: { policy: "no-referrer" },
+  }));
+
   app.use(express.json({ limit: "256kb" }));
 
   // --- Helpers de autenticación ---
@@ -146,6 +179,41 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
   }
 
   const cookieAttrs = `HttpOnly; Path=/; SameSite=Strict; ${config.cookieSecure ? "Secure; " : ""}`;
+  // Cookie CSRF de doble envío: legible por JS (no HttpOnly) pero SameSite=Strict.
+  const csrfCookieAttrs = `Path=/; SameSite=Strict; ${config.cookieSecure ? "Secure; " : ""}`;
+
+  /**
+   * Protección CSRF para mutaciones: (a) comprobación de Origin/Referer contra
+   * allowlist y (b) token de doble envío (header X-CSRF-Token == cookie pf_csrf).
+   * Login queda exento (es quien crea la cookie CSRF).
+   */
+  function csrfProtect(req: express.Request, res: express.Response, next: express.NextFunction) {
+    if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+    if (req.path === "/api/auth/login") return next();
+
+    const origin = req.headers.origin || req.headers.referer;
+    if (origin) {
+      let originHost: string;
+      try { originHost = new URL(origin).origin; } catch {
+        return res.status(403).json({ error: "Origen no permitido." });
+      }
+      const allowed = new Set([
+        new URL(config.publicBaseUrl).origin,
+        `http://127.0.0.1:${config.port}`,
+        `http://localhost:${config.port}`,
+      ]);
+      if (!allowed.has(originHost)) {
+        return res.status(403).json({ error: "Origen no permitido." });
+      }
+    }
+
+    const header = req.headers["x-csrf-token"];
+    const cookie = parseCookies(req)[CSRF_COOKIE];
+    if (typeof header !== "string" || !cookie || !safeEqual(header, cookie)) {
+      return res.status(403).json({ error: "Token CSRF inválido o ausente." });
+    }
+    next();
+  }
 
   app.post("/api/auth/login", loginRateLimit, (req, res) => {
     const { username, password } = req.body || {};
@@ -169,18 +237,21 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
       expiresAt: Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
     };
     store.set(token, user); // no pisar otras sesiones: un token por login
-    res.setHeader(
-      "Set-Cookie",
-      `${SESSION_COOKIE}=${token}; ${cookieAttrs}Max-Age=${SESSION_MAX_AGE_SECONDS}`
-    );
+    res.setHeader("Set-Cookie", [
+      `${SESSION_COOKIE}=${token}; ${cookieAttrs}Max-Age=${SESSION_MAX_AGE_SECONDS}`,
+      `${CSRF_COOKIE}=${randomBytes(18).toString("hex")}; ${csrfCookieAttrs}Max-Age=${SESSION_MAX_AGE_SECONDS}`,
+    ]);
     // Nunca devolver el token en el body (va solo en cookie HttpOnly).
     return res.json({ success: true, user: { id: user.id, username: user.username, role: user.role, email: user.email } });
   });
 
   // Logout exige sesión y solo revoca LA sesión actual (no todas).
-  app.post("/api/auth/logout", requireAuth, (req, res) => {
+  app.post("/api/auth/logout", requireAuth, csrfProtect, (req, res) => {
     store.delete(getToken(req));
-    res.setHeader("Set-Cookie", `${SESSION_COOKIE}=; ${cookieAttrs}Max-Age=0`);
+    res.setHeader("Set-Cookie", [
+      `${SESSION_COOKIE}=; ${cookieAttrs}Max-Age=0`,
+      `${CSRF_COOKIE}=; ${csrfCookieAttrs}Max-Age=0`,
+    ]);
     res.json({ success: true, message: "Sesión cerrada correctamente" });
   });
 
@@ -193,9 +264,9 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
     }
   });
 
-  // --- API protegida (requiere sesión del panel) ---
-  app.use("/api", requireAuth);
-  app.use("/engagement", requireAuth);
+  // --- API protegida (requiere sesión del panel + CSRF en mutaciones) ---
+  app.use("/api", requireAuth, csrfProtect);
+  app.use("/engagement", requireAuth, csrfProtect);
   app.use("/videos", requireAuth);
 
   // 1. Stats (real, desde Flask)
@@ -681,6 +752,7 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
   // Requiere sesión (requireAuth). Los datos ADB se renderizan con nodos DOM
   // y textContent (paso 10), nunca innerHTML.
   app.get("/panda", requireAuth, (_req, res) => {
+    const nonce = res.locals.cspNonce;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(`<!doctype html>
 <html lang="es">
@@ -723,11 +795,12 @@ button:hover{filter:brightness(1.1)}
   </div>
 </header>
 <div class="grid" id="grid"></div>
-<script>
+<script nonce="${nonce}">
 const grid=document.getElementById('grid');
 const countEl=document.getElementById('count');
 const INTERVAL=1200;
 let timers=[];
+function getCookie(name){const m=document.cookie.match(new RegExp('(?:^|; )'+name+'=([^;]*)'));return m?decodeURIComponent(m[1]):'';}
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n;}
 async function loadDevices(){
   try{
@@ -741,7 +814,7 @@ async function loadDevices(){
 }
 function mirror(serial){
   const msg=document.getElementById('msg-'+serial);
-  fetch('/api/adb/mirror',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({serial})})
+  fetch('/api/adb/mirror',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':getCookie('pf_csrf')},body:JSON.stringify({serial})})
     .then(r=>r.json()).then(j=>{ msg.textContent = j.success? '✓ scrcpy abierto' : (j.error||'error'); })
     .catch(()=>{ msg.textContent='error de red'; });
   setTimeout(()=>{ msg.textContent=''; },4000);

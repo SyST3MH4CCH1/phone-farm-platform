@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../api';
 
 interface CodeViewerModalProps {
   isOpen: boolean;
@@ -32,7 +33,7 @@ export const CodeViewerModal: React.FC<CodeViewerModalProps> = ({
 
     (async () => {
       try {
-        const res = await fetch('/api/source');
+        const res = await apiFetch('/api/source');
         if (res.status === 403 || res.status === 404) {
           if (!cancelled) setErrorMsg('Desactivado (EXPOSE_SOURCE=false) o requiere admin');
           return;
@@ -71,7 +72,7 @@ export const CodeViewerModal: React.FC<CodeViewerModalProps> = ({
 
     (async () => {
       try {
-        const res = await fetch(`/api/source/${encodeURIComponent(selectedFile)}`);
+        const res = await apiFetch(`/api/source/${encodeURIComponent(selectedFile)}`);
         if (res.status === 403 || res.status === 404) {
           if (!cancelled) setErrorMsg('Desactivado (EXPOSE_SOURCE=false) o requiere admin');
           return;

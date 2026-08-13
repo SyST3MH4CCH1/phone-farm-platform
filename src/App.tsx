@@ -15,6 +15,7 @@ import { MoneyPrinterModal } from './components/MoneyPrinterModal';
 import { PostPreviewModal } from './components/PostPreviewModal';
 import { AccountDetailModal } from './components/AccountDetailModal';
 import { VersionControlModal } from './components/VersionControlModal';
+import { apiFetch } from './api';
 
 // Estado inicial VACÍO — los datos REALES se cargan desde el backend Flask.
 // CERO datos de ejemplo: la UI refleja exclusivamente el estado del servidor.
@@ -82,7 +83,7 @@ export default function App() {
   const handleToggleMaster = async () => {
     let turningOn = (stats.active_bots || 0) === 0;
     try {
-      const fresh = await fetch('/api/stats').then(r => r.ok ? r.json() : null);
+      const fresh = await apiFetch('/api/stats').then(r => r.ok ? r.json() : null);
       if (fresh) turningOn = (fresh.active_bots || 0) === 0;
     } catch { /* usar estado local */ }
     const targetAccounts = accounts.filter(a => turningOn ? !a.bot_active : a.bot_active);
@@ -93,7 +94,7 @@ export default function App() {
     let ok = 0, fail = 0;
     for (const acc of targetAccounts) {
       try {
-        const res = await fetch(turningOn ? '/engagement/start' : '/engagement/stop', {
+        const res = await apiFetch(turningOn ? '/engagement/start' : '/engagement/stop', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ account_id: acc.id })
@@ -117,7 +118,7 @@ export default function App() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const res = await fetch('/api/auth/me');
+        const res = await apiFetch('/api/auth/me');
         if (res.ok) {
           const data = await res.json();
           if (data.authenticated && data.user) {
@@ -137,7 +138,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await apiFetch('/api/auth/logout', { method: 'POST' });
     } catch (e) {
       // ignore
     }
@@ -150,11 +151,11 @@ export default function App() {
     // allSettled: un endpoint lento (p.ej. verify de proxy online) NO debe
     // bloquear el render de los demás (antes Promise.all los congelaba).
     const [statsRes, accountsRes, proxiesRes, queueRes, devicesRes] = await Promise.allSettled([
-      fetch('/api/stats').then(r => r.ok ? r.json() : null),
-      fetch('/api/accounts').then(r => r.ok ? r.json() : null),
-      fetch('/api/proxies').then(r => r.ok ? r.json() : null),
-      fetch('/api/queue').then(r => r.ok ? r.json() : null),
-      fetch('/api/adb/devices').then(r => r.ok ? r.json() : null)
+      apiFetch('/api/stats').then(r => r.ok ? r.json() : null),
+      apiFetch('/api/accounts').then(r => r.ok ? r.json() : null),
+      apiFetch('/api/proxies').then(r => r.ok ? r.json() : null),
+      apiFetch('/api/queue').then(r => r.ok ? r.json() : null),
+      apiFetch('/api/adb/devices').then(r => r.ok ? r.json() : null)
     ]);
     const val = <T,>(p: PromiseSettledResult<T | null>): T | null =>
       p.status === 'fulfilled' ? p.value : null;
@@ -184,7 +185,7 @@ export default function App() {
     if (!currentUser) return;
     const fetchStack = async () => {
       try {
-        const res = await fetch('/api/stack', { signal: AbortSignal.timeout(8000) });
+        const res = await apiFetch('/api/stack', { signal: AbortSignal.timeout(8000) });
         if (res.ok) setStack(await res.json());
       } catch (e) { /* stack no disponible */ }
     };
@@ -226,7 +227,7 @@ export default function App() {
 
     const endpoint = acc.bot_active ? '/engagement/stop' : '/engagement/start';
     try {
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ account_id: accountId })
@@ -244,7 +245,7 @@ export default function App() {
 
   const handleAddAccount = async (newAcc: Partial<Account>) => {
     try {
-      const res = await fetch('/api/accounts', {
+      const res = await apiFetch('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newAcc)
@@ -263,7 +264,7 @@ export default function App() {
 
   const handleDeleteAccount = async (accountId: string) => {
     try {
-      const res = await fetch(`/api/accounts/${accountId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/accounts/${accountId}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         addLog('ERROR', 'PlatformServer', `Borrado rechazado (${accountId}): ${data?.error || res.status}`);
@@ -278,7 +279,7 @@ export default function App() {
   // Queue Operations
   const handleAddJob = async (keyword: string, targetAccount: string) => {
     try {
-      const res = await fetch('/api/queue', {
+      const res = await apiFetch('/api/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword, target_account: targetAccount })
@@ -297,7 +298,7 @@ export default function App() {
 
   // Programar publicación futura desde el calendario (scheduled_time ISO -> scheduler real)
   const handleScheduleJob = async (keyword: string, targetAccount: string, scheduledTime: string) => {
-    const res = await fetch('/api/queue', {
+    const res = await apiFetch('/api/queue', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keyword, target_account: targetAccount, scheduled_time: scheduledTime })
@@ -312,7 +313,7 @@ export default function App() {
 
   // Re-programar job existente (drag&drop del calendario)
   const handleRescheduleJob = async (jobId: string, scheduledTime: string) => {
-    const res = await fetch(`/api/queue/${jobId}/schedule`, {
+    const res = await apiFetch(`/api/queue/${jobId}/schedule`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scheduled_time: scheduledTime })
@@ -328,7 +329,7 @@ export default function App() {
   const handleProcessNextJob = async () => {
     setIsProcessingJob(true);
     try {
-      const res = await fetch('/api/queue/next', { method: 'POST' });
+      const res = await apiFetch('/api/queue/next', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         addLog('INFO', 'Generator', `Pipeline iniciado para ${data?.id || 'job'} (processing)`);
@@ -344,7 +345,7 @@ export default function App() {
 
   const handleApproveJob = async (jobId: string) => {
     try {
-      const res = await fetch(`/api/queue/${jobId}/approve`, {
+      const res = await apiFetch(`/api/queue/${jobId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -363,7 +364,7 @@ export default function App() {
 
   const handleRejectJob = async (jobId: string) => {
     try {
-      const res = await fetch(`/api/queue/${jobId}/reject`, { method: 'POST' });
+      const res = await apiFetch(`/api/queue/${jobId}/reject`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         addLog('ERROR', 'Queue', `Reject rechazado (${jobId}): ${data?.error || res.status}`);
@@ -378,7 +379,7 @@ export default function App() {
 
   const handleDeleteJob = async (jobId: string) => {
     try {
-      const res = await fetch(`/api/queue/${jobId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/queue/${jobId}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         addLog('WARN', 'Queue', `Borrar ${jobId}: ${data?.error || 'Flask no implementa DELETE /api/queue/:id'}`);
@@ -394,7 +395,7 @@ export default function App() {
   // Aprobar PUBLICACIÓN del vídeo ya generado (awaiting_preview -> published)
   const handlePublishJob = async (jobId: string) => {
     try {
-      const res = await fetch(`/api/queue/${jobId}/publish`, {
+      const res = await apiFetch(`/api/queue/${jobId}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -414,7 +415,7 @@ export default function App() {
   // Proxy Operations
   const handleAddProxy = async (newProxy: Partial<ProxyItem>) => {
     try {
-      const res = await fetch('/api/proxies', {
+      const res = await apiFetch('/api/proxies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newProxy)
@@ -433,7 +434,7 @@ export default function App() {
 
   const handleVerifyProxy = async (proxyId: string) => {
     try {
-      const res = await fetch('/api/proxies/verify', {
+      const res = await apiFetch('/api/proxies/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proxy_id: proxyId })
@@ -484,7 +485,7 @@ export default function App() {
     try {
       const options: RequestInit = { method, headers: { 'Content-Type': 'application/json' } };
       if (body) options.body = JSON.stringify(body);
-      const res = await fetch(endpoint, options);
+      const res = await apiFetch(endpoint, options);
       const data = await res.json().catch(() => ({}));
       if (res.ok) refreshBackendData();
       return data;
@@ -502,7 +503,7 @@ export default function App() {
     if (!scriptTxt && !jobHasVideo) {
       // No hay draft todavía; pedir a MPT un guión real (preview sin encolar)
       try {
-        const res = await fetch('/api/content/preview', {
+        const res = await apiFetch('/api/content/preview', {
           method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({keyword: job.keyword, niche_id: 'general'})
         });
         if (res.ok) {
@@ -535,7 +536,7 @@ export default function App() {
     if (!activePreviewDraft) return;
     const jobId = activePreviewDraft.job_id;
     try {
-      const res = await fetch(`/api/queue/${jobId}/approve`, {
+      const res = await apiFetch(`/api/queue/${jobId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ caption: updatedCaption, platform })

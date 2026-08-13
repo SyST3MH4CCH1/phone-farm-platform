@@ -70,6 +70,25 @@ if ($rootTok -match '=""$' -and $platTok -match '=""$') {
     Write-Host "  ✓ Token interno generado y sincronizado en ambos .env" -ForegroundColor Green
 }
 
+# Generar credenciales del panel fuertes si quedaron vacías (paso 2: el server
+# NO arranca con passwords demo ni cortos — ver server/config.ts).
+function New-StrongSecret {
+    param([int]$Bytes = 24)
+    $buf = New-Object byte[] $Bytes
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($buf)
+    [Convert]::ToBase64String($buf).TrimEnd('=').Replace('+', 'x').Replace('/', 'y')
+}
+$envRootPath = Join-Path $Root ".env"
+foreach ($pair in @(@('ADMIN_PASSWORD', 'admin'), @('OPERATOR_PASSWORD', 'operator'))) {
+    $name = $pair[0]
+    $line = (Select-String -Path $envRootPath -Pattern "^$name=" -EA SilentlyContinue).Line
+    if ($line -match "^$name=\"\"" -or $line -match "^$name=[^""]{0,15}$") {
+        $strong = New-StrongSecret
+        (Get-Content $envRootPath -Raw) -replace "(?m)^$name=.*$", "$name=`"$strong`"" | Set-Content $envRootPath
+        Write-Host "  ✓ $name generada (fuerte, aleatoria)" -ForegroundColor Green
+    }
+}
+
 # ---------------------------------------------------------------- 2. npm
 Write-Host "`n[2/6] Dependencias Node..." -ForegroundColor Yellow
 if (-not $SkipInstall -and -not (Test-Path (Join-Path $Root "node_modules"))) {

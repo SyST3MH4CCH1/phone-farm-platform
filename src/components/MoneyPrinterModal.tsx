@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MoneyPrinterConfig, Account } from '../types';
+import { apiFetch } from '../api';
 
 interface MoneyPrinterModalProps {
   accounts: Account[];
@@ -43,7 +44,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
 
   // Fetch current MoneyPrinterTurbo config
   useEffect(() => {
-    fetch('/api/moneyprinter/config')
+    apiFetch('/api/moneyprinter/config')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data) setConfig(data);
@@ -55,7 +56,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
     if (e) e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch('/api/moneyprinter/config', {
+      const res = await apiFetch('/api/moneyprinter/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
@@ -74,7 +75,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
     setTestingPexels(true);
     setPexelsResult(null);
     try {
-      const res = await fetch('/api/moneyprinter/test-pexels', {
+      const res = await apiFetch('/api/moneyprinter/test-pexels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pexels_api_key: config.pexels_api_key })
@@ -103,7 +104,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
     setGenResult(null);
 
     try {
-      const res = await fetch('/api/moneyprinter/generate', {
+      const res = await apiFetch('/api/moneyprinter/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
