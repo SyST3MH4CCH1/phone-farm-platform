@@ -186,6 +186,9 @@ def _register_manual_fallback(account_id: str, video_path: str, reason: str) -> 
         "status": "awaiting_manual_upload",
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     })
+    # Paso 12: cola de fallback acotada (máx. 500 entradas).
+    if len(entries) > 500:
+        entries = entries[-500:]
     FALLBACK_QUEUE_FILE.write_text(
         json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8"
     )

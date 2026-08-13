@@ -786,6 +786,39 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     }
   });
 
+  // Health/readiness mínimos (paso 12): sin revelar configuración.
+  app.get("/healthz", (_req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  app.get("/readyz", async (_req, res) => {
+    const checks: Record<string, boolean> = {};
+    try {
+      deps.db.prepare("SELECT 1").get();
+      checks.db = true;
+    } catch {
+      checks.db = false;
+    }
+    try {
+      const r = await (deps.flaskFetch ?? defaultFlaskFetch)(`${config.flaskBase}/readyz`, {
+        method: "GET",
+        headers: { "X-Internal-Auth": INTERNAL_TOKEN },
+        signal: AbortSignal.timeout(4000),
+      });
+      checks.flask = r.status === 200;
+    } catch {
+      checks.flask = false;
+    }
+    try {
+      const r = await safeFetchInternal(`${config.mptApiUrl}/ping`, { signal: AbortSignal.timeout(3000) }, internalHosts);
+      checks.mpt = r.ok;
+    } catch {
+      checks.mpt = false;
+    }
+    const ready = Object.values(checks).every(Boolean);
+    res.status(ready ? 200 : 503).json({ ready, checks });
+  });
+
   // 8. Download ZIP (solo admin + redacción de campos sensibles)
   app.get("/api/download-zip", requireRole("admin"), async (_req, res) => {
     try {

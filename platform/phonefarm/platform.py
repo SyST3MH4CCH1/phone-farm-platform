@@ -73,8 +73,9 @@ def setup_logging() -> None:
         return
     root.setLevel(logging.INFO)
 
-    file_handler = logging.handlers.TimedRotatingFileHandler(
-        LOGS_DIR / "platform.log", when="midnight", backupCount=14, encoding="utf-8"
+    # Paso 12: rotación POR TAMAÑO (10 MB) + retención acotada (10 ficheros).
+    file_handler = logging.handlers.RotatingFileHandler(
+        LOGS_DIR / "platform.log", maxBytes=10 * 1024 * 1024, backupCount=10, encoding="utf-8"
     )
     file_handler.setFormatter(
         logging.Formatter("%(asctime)s | %(levelname)-7s | %(name)s | %(message)s")
@@ -116,6 +117,8 @@ class LogBuffer:
         return self._lines[-n:]
 
     def subscribe(self) -> queue_module.Queue:
+        if len(self._subscribers) >= MAX_SSE_SUBSCRIBERS:
+            raise RuntimeError(f"límite de suscriptores SSE alcanzado ({MAX_SSE_SUBSCRIBERS})")
         sub: queue_module.Queue = queue_module.Queue(maxsize=200)
         for line in self._lines[-20:]:  # arranque con el historial reciente
             sub.put_nowait(line)
@@ -166,6 +169,16 @@ logging.getLogger().addFilter(_redact_filter)
 _queue_threads: dict[str, threading.Thread] = {}
 _queue_lock = threading.RLock()
 
+# Paso 12: límites operativos configurables (ver platform/.env.example).
+MAX_CONCURRENT_JOBS = int(os.getenv("PHONEFARM_MAX_CONCURRENT_JOBS", "2"))
+MAX_SSE_SUBSCRIBERS = int(os.getenv("PHONEFARM_MAX_SSE_SUBSCRIBERS", "32"))
+JOB_MAX_AGE_MIN = int(os.getenv("PHONEFARM_JOB_MAX_AGE_MIN", "120"))
+MAX_VIDEO_BYTES = int(os.getenv("PHONEFARM_MAX_VIDEO_MB", "500")) * 1024 * 1024
+MIN_FREE_BYTES = int(os.getenv("PHONEFARM_MIN_FREE_GB", "2")) * 1024 ** 3
+
+# Semáforo global de workers (los hilos por job lo adquieren al arrancar).
+_worker_sem = threading.BoundedSemaphore(MAX_CONCURRENT_JOBS)
+
 JOB_STATUSES = {
     "pending", "scripting", "awaiting_approval", "generating",
     "awaiting_preview", "ready_for_publish", "publishing", "published",
@@ -206,8 +219,12 @@ def _script_job(job: dict[str, Any]) -> None:
     from phonefarm import content
 
     job_id = job["id"]
+    if not _worker_sem.acquire(blocking=False):
+        logger.warning("[%s] Worker pool lleno (%d) — job queda pendiente", job_id, MAX_CONCURRENT_JOBS)
+        return
     try:
         job["status"] = "scripting"
+        job["started_at"] = time.time()
         _sync_job(job)
         logger.info("[%s] Generando guión para keyword=%r (nicho=%s)",
                     job_id, job.get("keyword"), job.get("niche_id") or "general")
@@ -234,6 +251,7 @@ def _script_job(job: dict[str, Any]) -> None:
         _sync_job(job)
     finally:
         _queue_threads.pop(job_id, None)
+        _worker_sem.release()
 
 
 def _generate_video(job: dict[str, Any]) -> None:
@@ -245,8 +263,11 @@ def _generate_video(job: dict[str, Any]) -> None:
     from phonefarm import generator
 
     job_id = job["id"]
+    if not _worker_sem.acquire(blocking=False):
+        return
     try:
         job["status"] = "generating"
+        job["started_at"] = time.time()
         _sync_job(job)
         logger.info("[%s] Generando reel con MPT (script %d chars, %d terms)...",
                     job_id, len(job.get("script", "")), len(job.get("terms", [])))
@@ -271,6 +292,7 @@ def _generate_video(job: dict[str, Any]) -> None:
     finally:
         _sync_job(job)
         _queue_threads.pop(job_id, None)
+        _worker_sem.release()
 
 
 def _publish_job(job: dict[str, Any]) -> None:
@@ -278,6 +300,8 @@ def _publish_job(job: dict[str, Any]) -> None:
     from phonefarm import publisher
 
     job_id = job["id"]
+    if not _worker_sem.acquire(blocking=False):
+        return
     try:
         account_id = job.get("target_account", "")
         video_path = job.get("video_path", "")
@@ -286,6 +310,7 @@ def _publish_job(job: dict[str, Any]) -> None:
         caption = job.get("caption") or f"{job.get('keyword', '')} #reels #viral"
         logger.info("[%s] Publicando en cuenta %s...", job_id, account_id)
         job["status"] = "publishing"
+        job["started_at"] = time.time()
         _sync_job(job)
 
         media_id = publisher.publish_video(account_id, video_path, caption)
@@ -302,6 +327,7 @@ def _publish_job(job: dict[str, Any]) -> None:
     finally:
         _sync_job(job)
         _queue_threads.pop(job_id, None)
+        _worker_sem.release()
 
 
 def _is_manual_fallback(exc: Exception) -> bool:
@@ -314,10 +340,50 @@ def _is_manual_fallback(exc: Exception) -> bool:
 
 # --- Scheduler: jobs programados ----------------------------------------------
 
+def _reap_stale_jobs() -> None:
+    """Marca como failed los jobs atascados (paso 12: recuperación).
+
+    Un worker muerto (crash/restart) deja scripting/generating/publishing
+    sin terminar; si superan JOB_MAX_AGE_MIN se reconcilian.
+    """
+    now = time.time()
+    queue = load_queue()
+    changed = False
+    for job in queue:
+        if job.get("status") not in ("scripting", "generating", "publishing"):
+            continue
+        started = job.get("started_at") or job.get("created_at")
+        try:
+            age_min = (now - float(started)) / 60
+        except (TypeError, ValueError):
+            age_min = 0
+        if age_min > JOB_MAX_AGE_MIN:
+            job["status"] = "failed"
+            job["error"] = f"interrumpido: sin progreso en {int(age_min)} min (límite {JOB_MAX_AGE_MIN})"
+            job["progress"] = job.get("progress", 0)
+            _sync_job(job)
+            changed = True
+            logger.warning("[%s] Job atascado reconciliado a failed", job["id"])
+    return changed
+
+
+def _reconcile_after_restart() -> None:
+    """Al arrancar: reconcilia workers/bots que murieron con el proceso."""
+    _reap_stale_jobs()
+    # bots de engagement huérfanos (bot_active quedó en true sin proceso)
+    accounts = load_accounts()
+    for acc in accounts:
+        if acc.get("bot_active"):
+            acc["bot_active"] = False
+            logger.warning("bot_active reconciliado a False: %s", acc.get("id"))
+    save_accounts(accounts)
+
+
 def scheduler_loop() -> None:
-    """Cada 30 s procesa los jobs pending con scheduled_time vencido."""
+    """Cada 30 s procesa jobs programados y reconcilia los atascados."""
     while True:
         try:
+            _reap_stale_jobs()
             now = time.time()
             for job in load_queue():
                 if job.get("status") != "pending":
@@ -358,8 +424,8 @@ def auth_internal() -> Any:
     loopback; cualquier otro origen con esos headers recibe 403.
     """
     path = request.path
-    if path == "/" or path == "/favicon.ico":
-        return None  # página HTML pública, sin datos
+    if path in ("/", "/favicon.ico", "/healthz", "/readyz"):
+        return None  # páginas públicas mínimas (sin datos ni configuración)
     if request.headers.get("X-Internal-Auth") != INTERNAL_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
     remote = request.remote_addr or ""
@@ -1201,6 +1267,39 @@ def stream_logs():
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@app.get("/healthz")
+def healthz():
+    """Health mínimo público (sin configuración): proceso vivo + BD."""
+    from phonefarm.platform_data import _conn
+
+    try:
+        _conn().execute("SELECT 1").fetchone()
+        db_ok = True
+    except Exception:  # noqa: BLE001
+        db_ok = False
+    return jsonify({"status": "ok" if db_ok else "degraded", "db": db_ok})
+
+
+@app.get("/readyz")
+def readyz():
+    """Readiness: BD, clave maestra y workers (sin revelar configuración)."""
+    from phonefarm.platform_data import _conn, _key
+
+    checks: dict[str, bool] = {}
+    try:
+        _conn().execute("SELECT 1").fetchone()
+        checks["db"] = True
+    except Exception:  # noqa: BLE001
+        checks["db"] = False
+    try:
+        _key()
+        checks["key"] = True
+    except Exception:  # noqa: BLE001
+        checks["key"] = False
+    checks["workers"] = MAX_CONCURRENT_JOBS > 0
+    return jsonify({"ready": all(checks.values()), "checks": checks})
+
+
 @app.get("/")
 def index():
     return send_from_directory(TEMPLATES_DIR, "dashboard.html")
@@ -1236,6 +1335,12 @@ if __name__ == "__main__":
     except Exception as exc:
         logger.critical("No se puede arrancar sin BD: %s", exc)
         raise SystemExit(f"[FATAL] BD SQLite no disponible: {exc}")
+
+    # Paso 12: recuperar estado tras un restart (jobs atascados, bots huérfanos).
+    try:
+        _reconcile_after_restart()
+    except Exception as exc:  # noqa: BLE001 — nunca impide arrancar
+        logger.error("reconciliación de arranque falló: %s", exc)
 
     # En Docker, Flask escucha en 0.0.0.0 (el loopback lo garantiza el bind
     # "127.0.0.1:5000:5000" del compose). Local: solo 127.0.0.1.

@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -739,3 +740,88 @@ def test_ready_bloqueado_por_moderacion(flask_client):
     res = flask_client.post(f"/api/queue/{job_id}/ready", json={}, headers=_hdr())
     assert res.status_code == 409
     assert "moderación" in res.get_json()["error"]
+
+
+# ---------------------------------------------------------------------------
+# Paso 12 — límites y recuperación
+# ---------------------------------------------------------------------------
+
+def test_reap_stale_jobs(crypto_env, monkeypatch: pytest.MonkeyPatch):
+    import phonefarm.platform as pf
+    import phonefarm.platform_data as pd
+
+    monkeypatch.setattr(pf, "JOB_MAX_AGE_MIN", 1)  # 1 minuto para el test
+    pd.save_queue([{
+        "id": "job_1", "status": "scripting", "started_at": time.time() - 300,
+        "keyword": "x", "progress": 0,
+    }, {
+        "id": "job_2", "status": "generating", "started_at": time.time() - 10,
+        "keyword": "y", "progress": 0,
+    }])
+    assert pf._reap_stale_jobs() is True
+    jobs = {j["id"]: j for j in pd.load_queue()}
+    assert jobs["job_1"]["status"] == "failed"
+    assert "interrumpido" in jobs["job_1"]["error"]
+    assert jobs["job_2"]["status"] == "generating"  # aún joven
+
+
+def test_reconcile_after_restart(crypto_env, monkeypatch: pytest.MonkeyPatch):
+    import phonefarm.platform as pf
+    import phonefarm.platform_data as pd
+
+    monkeypatch.setattr(pf, "JOB_MAX_AGE_MIN", 1)
+    pd.save_accounts([{"id": "acc_1", "username": "u1", "bot_active": True, "status": "active"}])
+    pd.save_queue([{"id": "job_1", "status": "publishing", "started_at": time.time() - 300, "keyword": "x"}])
+    pf._reconcile_after_restart()
+    assert pd.load_accounts()[0]["bot_active"] is False
+    assert pd.load_queue()[0]["status"] == "failed"
+
+
+def test_sse_subscriber_limit(crypto_env, monkeypatch: pytest.MonkeyPatch):
+    import phonefarm.platform as pf
+
+    monkeypatch.setattr(pf, "MAX_SSE_SUBSCRIBERS", 3)
+    subs = [pf.log_buffer.subscribe() for _ in range(3)]
+    import pytest as _p
+
+    with _p.raises(RuntimeError):
+        pf.log_buffer.subscribe()
+    for s in subs:
+        pf.log_buffer.unsubscribe(s)
+
+
+def test_readyz_flask(crypto_env):
+    import phonefarm.platform as pf
+
+    pf.app.config.update(TESTING=True)
+    c = pf.app.test_client()
+    # /readyz es público (sin token) y no revela configuración
+    res = c.get("/readyz")
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["ready"] is True
+    assert "checks" in body and "db" in body["checks"] and "key" in body["checks"]
+    raw = res.data.decode()
+    assert "INTERNAL_TOKEN" not in raw and "api_key" not in raw
+
+
+def test_video_size_limit_detecta_content_length(crypto_env, monkeypatch: pytest.MonkeyPatch):
+    """Content-Length por encima del límite se rechaza antes de descargar."""
+    import phonefarm.generator as gen
+
+    monkeypatch.setattr(gen, "MAX_VIDEO_BYTES", 1024)
+    from phonefarm.net import EgressError
+
+    class FakeResp:
+        ok = True
+        headers = {"Content-Length": "999999"}
+        status_code = 200
+
+        def iter_content(self, chunk_size=1):
+            yield b""
+
+    import phonefarm.net as netmod
+
+    monkeypatch.setattr(netmod, "safe_get", lambda *a, **k: FakeResp())
+    with pytest.raises(gen.GeneratorError):
+        gen._download_video("/tasks/x.mp4", crypto_env / "out.mp4")

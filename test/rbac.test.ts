@@ -239,3 +239,25 @@ describe("paso 10 — backup cifrado con reautenticación", () => {
     expect(JSON.stringify(body)).not.toContain("pass-secreto-1");
   });
 });
+
+describe("paso 12 — healthz/readyz", () => {
+  it("/healthz responde ok sin configuración", async () => {
+    const app = createApp(testConfig(), { db: seedDb() });
+    const res = await request(app).get("/healthz");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: "ok" });
+  });
+
+  it("/readyz reporta checks sin secretos", async () => {
+    const app = createApp(testConfig(), {
+      db: seedDb(),
+      flaskFetch: async () => ({ status: 200, text: async () => JSON.stringify({ ready: true, checks: {} }) }),
+    });
+    const res = await request(app).get("/readyz");
+    expect([200, 503]).toContain(res.status); // mpt en 127.0.0.1:8080 probablemente caído
+    expect(res.body).toHaveProperty("ready");
+    expect(res.body).toHaveProperty("checks");
+    expect(res.body.checks.db).toBe(true); // BD local siempre comprobada
+    expect(JSON.stringify(res.body)).not.toContain("token");
+  });
+});

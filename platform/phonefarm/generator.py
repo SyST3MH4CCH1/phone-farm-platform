@@ -47,6 +47,8 @@ VIDEO_ASPECT = os.getenv("MPT_VIDEO_ASPECT", "9:16")  # "9:16" | "16:9" | "1:1"
 VOICE_NAME = os.getenv("MPT_VOICE_NAME", "es-ES-AlvaroNeural")
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 TASK_POLL_INTERVAL_S = 5
+MAX_VIDEO_BYTES = int(os.getenv("PHONEFARM_MAX_VIDEO_MB", "500")) * 1024 * 1024
+MIN_FREE_BYTES = int(os.getenv("PHONEFARM_MIN_FREE_GB", "2")) * 1024 ** 3
 # Mini PCs lentos: la composición de 11+ clips puede tardar 30-40 min.
 TASK_TIMEOUT_S = int(os.getenv("MPT_TASK_TIMEOUT_S", "3600"))
 
@@ -71,12 +73,22 @@ def mpt_health() -> bool:
         return False
 
 
+def _check_disk_quota() -> None:
+    """Cuota de disco mínima antes de generar (paso 12)."""
+    import shutil
+
+    free = shutil.disk_usage(VIDEOS_DIR if VIDEOS_DIR.exists() else VIDEOS_DIR.parent).free
+    if free < MIN_FREE_BYTES:
+        raise GeneratorError(f"disco casi lleno: {free / 2**30:.1f} GB libres (mínimo {MIN_FREE_BYTES / 2**30:.0f} GB)")
+
+
 def _submit_task(keyword: str, script: str = "", terms: list[str] | None = None) -> str:
     """Crea una tarea de vídeo en MPT y devuelve el task_id.
 
     Si se proveen script y/o terms, MPT NO necesita su LLM propio
     (evita depender de la api_key del config.toml de MPT).
     """
+    _check_disk_quota()
     payload = {
         "video_subject": keyword,
         "video_script": script,
@@ -253,8 +265,19 @@ def _download_video(uri: str, dest: Path) -> None:
         response = safe_get(url, headers=_mpt_headers(), timeout=180, stream=True)
         if not response.ok:
             raise GeneratorError(f"Descarga MPT falló (HTTP {response.status_code}): {url[:200]}")
+        # Paso 12: límite de tamaño de vídeo (evita agotar disco).
+        declared = int(response.headers.get("Content-Length") or 0)
+        if declared > MAX_VIDEO_BYTES:
+            raise GeneratorError(f"vídeo declarado de {declared / 2**20:.0f} MB supera el límite ({MAX_VIDEO_BYTES / 2**20:.0f} MB)")
+        written = 0
         with open(dest, "wb") as fh:
-            shutil.copyfileobj(response.raw, fh)
+            for chunk in response.iter_content(chunk_size=1024 * 256):
+                written += len(chunk)
+                if written > MAX_VIDEO_BYTES:
+                    fh.close()
+                    dest.unlink(missing_ok=True)
+                    raise GeneratorError(f"vídeo supera el límite de {MAX_VIDEO_BYTES / 2**20:.0f} MB")
+                fh.write(chunk)
 
         if _validate_mp4(dest):
             logger.info("Vídeo descargado y VALIDADO: %s (%d bytes)", dest.name, dest.stat().st_size)
