@@ -430,3 +430,118 @@ def test_internal_audit_endpoint(flask_client, crypto_env):
     assert row["actor"] == "admin" and row["action"] == "auth.login"
     assert row["request_id"] == "req-123"
     assert row["hash"] and row["prev_hash"] is None  # primera entrada de la cadena
+
+
+# ---------------------------------------------------------------------------
+# Paso 7 — MCP: Bearer auth, scopes y rate limit
+# ---------------------------------------------------------------------------
+
+def _create_mcp_token(crypto_env, scopes: str, name: str = "agent-test") -> str:
+    import subprocess
+
+    res = subprocess.run(
+        [sys.executable, "-m", "phonefarm.mcp_tokens", "create",
+         "--name", name, "--scopes", scopes, "--expires-days", "7"],
+        capture_output=True, text=True, cwd=str(Path(__file__).resolve().parent.parent),
+    )
+    assert res.returncode == 0, res.stderr
+    token = [l for l in res.stdout.splitlines() if l.startswith("pfmcp_")][0]
+    return token.strip()
+
+
+def _stub_asgi_app(messages: list):
+    """App ASGI stub que registra que fue alcanzada y responde 200."""
+    async def app(scope, receive, send):
+        messages.append(scope["type"])
+        body = b'{"ok": true}'
+        await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"application/json")]})
+        await send({"type": "http.response.body", "body": body})
+    return app
+
+
+def test_mcp_sin_token_401(crypto_env):
+    from starlette.testclient import TestClient
+
+    from phonefarm.mcp_server import BearerAuthMiddleware
+
+    reached: list = []
+    client = TestClient(BearerAuthMiddleware(_stub_asgi_app(reached)))
+    r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    assert r.status_code == 401
+    r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                    headers={"Authorization": "Bearer token-invalido"})
+    assert r.status_code == 401
+    assert reached == []  # la app aguas abajo nunca se alcanza sin token válido
+
+
+def test_mcp_con_token_valido_pasa(crypto_env):
+    from starlette.testclient import TestClient
+
+    from phonefarm.mcp_server import BearerAuthMiddleware
+
+    token = _create_mcp_token(crypto_env, "read")
+    reached: list = []
+    client = TestClient(BearerAuthMiddleware(_stub_asgi_app(reached)))
+    r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                    headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    assert reached  # el request autenticado llegó a la app
+
+
+def test_mcp_scope_denegado(crypto_env):
+    """Token con scope read no puede publicar (scope publish)."""
+    import asyncio
+
+    from phonefarm.mcp_server import _current_principal, mcp
+
+    token = _create_mcp_token(crypto_env, "read")
+    from phonefarm.mcp_tokens import token_is_valid
+
+    principal = token_is_valid(token)
+    assert principal is not None
+
+    async def run():
+        _current_principal.set(principal)
+        try:
+            await mcp.call_tool("publish_job", {"job_id": "job_1"})
+            return None
+        except PermissionError as exc:
+            return str(exc)
+
+    err = asyncio.run(run())
+    assert err and "publish" in err
+
+
+def test_mcp_scope_permitido_audita(crypto_env):
+    import asyncio
+
+    from phonefarm.mcp_server import _current_principal, mcp
+    from phonefarm.mcp_tokens import token_is_valid
+
+    token = _create_mcp_token(crypto_env, "read")
+    principal = token_is_valid(token)
+
+    async def run():
+        _current_principal.set(principal)
+        return await mcp.call_tool("list_jobs", {"status": ""})
+
+    result = asyncio.run(run())
+    assert result is not None  # tools/list_jobs devuelve la cola (vacía o no)
+    import phonefarm.platform_data as pd
+    from phonefarm.audit import verify_chain
+
+    assert verify_chain(pd._conn()) == []
+
+
+def test_mcp_rate_limit_por_token(crypto_env, monkeypatch: pytest.MonkeyPatch):
+    from phonefarm import mcp_server
+
+    monkeypatch.setattr(mcp_server, "_RATE_MAX", 2)  # límite bajo para el test
+    token = _create_mcp_token(crypto_env, "read")
+    from phonefarm.mcp_tokens import token_is_valid
+
+    principal = token_is_valid(token)
+    assert principal is not None
+    assert mcp_server._rate_limit(principal["id"]) is True
+    assert mcp_server._rate_limit(principal["id"]) is True
+    assert mcp_server._rate_limit(principal["id"]) is False  # excedido

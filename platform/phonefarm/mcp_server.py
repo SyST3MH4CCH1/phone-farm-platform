@@ -1,26 +1,119 @@
 """mcp_server — Servidor MCP (Streamable HTTP) de la Phone Farm REAL.
 
-Expone el pipeline de creación de contenido (encolar, aprobar, rechazar,
-vista previa, nichos) y las operaciones de la granja para que agentes
-(Claude, Codex, ZCode, oh-my-codex, etc.) operen la plataforma real.
+Seguridad (paso 7):
+- Autenticación Bearer obligatoria: `Authorization: Bearer <token>` (tokens de
+  servicio en `service_tokens`, solo hash; ver phonefarm/mcp_tokens.py).
+- Scopes por tool (read | queue.write | engagement | approve | publish | admin).
+- Rate limit por token (tabla rate_limits).
+- Auditoría de cada tool call (actor = mcp:<principal>, cadena HMAC).
+- MCP_ENABLED por defecto desactivado en platform.py.
 
 Se sirve con uvicorn en el puerto 5001 (ruta /mcp) como hilo de platform.py.
 """
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
+import os
 import threading
+import time
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from phonefarm import content, engagement, platform_data
+from phonefarm.mcp_tokens import hash_token, token_is_valid
 
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("phone-farm")
+# --- scopes por tool ---------------------------------------------------------
+
+TOOL_SCOPES: dict[str, str] = {
+    # contenido
+    "create_content_job": "queue.write",
+    "list_jobs": "read",
+    "get_drafts": "read",
+    "approve_job": "approve",
+    "publish_job": "publish",
+    "reject_job": "queue.write",
+    "generate_script_preview": "queue.write",   # consume LLM
+    "list_content_profiles": "read",
+    "create_content_profile": "queue.write",
+    # granja
+    "get_stats": "read",
+    "list_accounts": "read",
+    "start_bot": "engagement",
+    "stop_bot": "engagement",
+    "list_proxies": "read",
+    "get_logs": "read",
+}
+
+# contexto con el token autenticado por el middleware ASGI
+_current_principal: contextvars.ContextVar[dict | None] = contextvars.ContextVar("mcp_principal", default=None)
+
+# --- rate limit por token ----------------------------------------------------
+
+_RATE_WINDOW_S = 60
+_RATE_MAX = 60  # llamadas/minuto por token
+
+
+def _rate_limit(token_id: str) -> bool:
+    """True si la llamada está permitida; registra la llamada."""
+    from phonefarm.platform_data import _conn
+
+    conn = _conn()
+    now = int(time.time())
+    key = f"mcp:{token_id}"
+    row = conn.execute("SELECT count, window_start FROM rate_limits WHERE key=?", (key,)).fetchone()
+    if row is None or row["window_start"] + _RATE_WINDOW_S <= now:
+        with conn:
+            conn.execute(
+                "INSERT INTO rate_limits (key, count, window_start) VALUES (?,1,?) "
+                "ON CONFLICT(key) DO UPDATE SET count=1, window_start=excluded.window_start",
+                (key, now),
+            )
+        return True
+    if row["count"] >= _RATE_MAX:
+        return False
+    with conn:
+        conn.execute("UPDATE rate_limits SET count=count+1 WHERE key=?", (key,))
+    return True
+
+
+class AuthedFastMCP(FastMCP):
+    """FastMCP con scope check y auditoría por tool call."""
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]):
+        principal = _current_principal.get()
+        if principal is None:
+            raise PermissionError("no autenticado")
+        required = TOOL_SCOPES.get(name)
+        if required and required not in principal["scopes"]:
+            raise PermissionError(
+                f"scope '{required}' requerido para {name} (token tiene: {sorted(principal['scopes'])})"
+            )
+        from phonefarm.audit import log_action
+        from phonefarm.platform_data import _conn
+
+        try:
+            result = await super().call_tool(name, arguments)
+            log_action(
+                _conn(), actor=f"mcp:{principal['principal']}", role="system",
+                action=f"mcp.{name}", object=None,
+                meta={"args": {k: v for k, v in arguments.items() if k not in ("password", "script", "caption")}},
+            )
+            return result
+        except Exception as exc:  # noqa: BLE001 — se audita el fallo y se propaga
+            log_action(
+                _conn(), actor=f"mcp:{principal['principal']}", role="system",
+                action=f"mcp.{name}.failed", meta={"error": type(exc).__name__},
+            )
+            raise
+
+
+mcp = AuthedFastMCP("phone-farm")
 
 
 def _job_payload(job: dict[str, Any]) -> dict[str, Any]:
@@ -38,13 +131,13 @@ def create_content_job(
     target_account: str = "",
     niche_id: str = "general",
     scheduled_time: str = "",
-    auto_approve: bool = False,
     script: str = "",
 ) -> dict[str, Any]:
     """Encola un trabajo de creación de contenido (keyword -> guión -> vídeo).
 
-    Si auto_approve es true salta la revisión humana; si no, quedará en
-    awaiting_approval esperando approve_job().
+    TODO job pasa por revisión humana: queda en awaiting_approval hasta que un
+    admin apruebe (approve_job) y la publicación requiere estado
+    ready_for_publish (publish_job) + aprobación registrada.
     """
     from phonefarm import platform as pf
 
@@ -59,7 +152,7 @@ def create_content_job(
         "created_at": __import__("time").strftime("%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime()),
         "progress": 0,
         "script": script,
-        "auto_approve": auto_approve,
+        "version": 1,
         "scheduled_ts": pf._parse_schedule(scheduled_time),
     }
     queue.append(job)
@@ -85,7 +178,7 @@ def get_drafts() -> list[dict[str, Any]]:
 
 @mcp.tool()
 def approve_job(job_id: str) -> dict[str, Any]:
-    """Aprueba el guión de un draft: genera el vídeo con MPT y lo publica."""
+    """Aprueba el guión de un draft (scope approve): genera el vídeo con MPT."""
     from phonefarm import platform as pf
 
     queue = platform_data.load_queue()
@@ -94,8 +187,8 @@ def approve_job(job_id: str) -> dict[str, Any]:
         raise ValueError(f"Job no existe: {job_id}")
     if job.get("status") != "awaiting_approval":
         raise ValueError(f"Job {job_id} en estado {job.get('status')}")
-    # Respeta el pipeline de 3 etapas: approve -> generación (queda en
-    # awaiting_preview); la publicación final la dispara publish_job().
+    # Pipeline de 3 etapas: approve -> generación (queda en awaiting_preview);
+    # la publicación final exige ready_for_publish + scope publish.
     if not pf._spawn(job_id, lambda j=job: pf._generate_video(j)):
         raise RuntimeError(f"Job {job_id} ya se está procesando")
     logger.info("[MCP] Guión aprobado: %s", job_id)
@@ -104,15 +197,16 @@ def approve_job(job_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def publish_job(job_id: str) -> dict[str, Any]:
-    """Publica un job cuyo vídeo ya está generado (awaiting_preview)."""
+    """Publica un job (scope publish). Exige estado ready_for_publish (la
+    aprobación de publicación queda registrada en auditoría)."""
     from phonefarm import platform as pf
 
     queue = platform_data.load_queue()
     job = next((j for j in queue if j.get("id") == job_id), None)
     if job is None:
         raise ValueError(f"Job no existe: {job_id}")
-    if job.get("status") != "awaiting_preview":
-        raise ValueError(f"Job {job_id} en estado {job.get('status')} (esperado: awaiting_preview)")
+    if job.get("status") != "ready_for_publish":
+        raise ValueError(f"Job {job_id} en estado {job.get('status')} (esperado: ready_for_publish)")
     if not pf._spawn(job_id, lambda j=job: pf._publish_job(j)):
         raise RuntimeError(f"Job {job_id} ya se está procesando")
     logger.info("[MCP] Publicación iniciada: %s", job_id)
@@ -136,7 +230,7 @@ def reject_job(job_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def generate_script_preview(keyword: str, niche_id: str = "general", script: str = "") -> dict[str, Any]:
-    """Vista previa de guión + caption + hashtags SIN encolar nada."""
+    """Vista previa de guión + caption + hashtags SIN encolar nada (consume LLM)."""
     return content.preview(keyword, niche_id, script or None)
 
 
@@ -201,13 +295,13 @@ def list_accounts() -> list[dict[str, Any]]:
 
 @mcp.tool()
 def start_bot(account_id: str) -> dict[str, Any]:
-    """Inicia el bot de engagement (taktik-bot) en la cuenta indicada."""
+    """Inicia el bot de engagement (taktik-bot) en la cuenta indicada (scope engagement)."""
     return engagement.start_bot(account_id)
 
 
 @mcp.tool()
 def stop_bot(account_id: str) -> dict[str, Any]:
-    """Detiene el bot de engagement de la cuenta."""
+    """Detiene el bot de engagement de la cuenta (scope engagement)."""
     return engagement.stop_bot(account_id)
 
 
@@ -225,18 +319,58 @@ def get_logs(limit: int = 50) -> list[str]:
     return pf.log_buffer.tail(max(1, min(int(limit), 200)))
 
 
+# ---------------------------------------------------------------------------
+# ASGI middleware: Bearer auth + rate limit (envuelve streamable_http_app)
+# ---------------------------------------------------------------------------
+
+class BearerAuthMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in (scope.get("headers") or [])}
+        auth = headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+
+        if not token:
+            return await self._reject(send, 401, "token Bearer requerido")
+        principal = token_is_valid(token)
+        if principal is None:
+            return await self._reject(send, 401, "token inválido, expirado o revocado")
+        if not _rate_limit(principal["id"]):
+            return await self._reject(send, 429, "rate limit excedido (60 llamadas/min por token)")
+
+        _current_principal.set(principal)
+        return await self.app(scope, receive, send)
+
+    @staticmethod
+    async def _reject(send, status: int, message: str):
+        body = json.dumps({"error": message}).encode("utf-8")
+        await send({
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        })
+        await send({"type": "http.response.body", "body": body})
+
+
 def start_mcp_server(port: int = 5001) -> None:
-    """Arranca el MCP server (Streamable HTTP) en un hilo con uvicorn."""
-    import os
+    """Arranca el MCP server (Streamable HTTP autenticado) en un hilo uvicorn."""
     import uvicorn
 
-    app = mcp.streamable_http_app()
+    app = BearerAuthMiddleware(mcp.streamable_http_app())
     # En Docker escucha 0.0.0.0 (el loopback lo garantiza el bind del compose
     # "127.0.0.1:5001:5001"); local: solo 127.0.0.1.
     bind_host = "0.0.0.0" if os.getenv("IN_DOCKER", "0") == "1" else "127.0.0.1"
 
     def run() -> None:
-        logger.info("MCP server (Streamable HTTP) en http://%s:%d/mcp", bind_host, port)
+        logger.info("MCP server (Streamable HTTP, Bearer auth) en http://%s:%d/mcp", bind_host, port)
         uvicorn.run(app, host=bind_host, port=port, log_level="warning")
 
     threading.Thread(target=run, daemon=True, name="mcp-server").start()
