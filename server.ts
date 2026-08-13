@@ -11,15 +11,17 @@ dotenv.config();
 import { createServer as createViteServer } from "vite";
 import { loadConfig } from "./server/config";
 import { createApp } from "./server/app";
+import { openDb, assertAdminExists, defaultDbPath } from "./server/db";
 
 async function main() {
   const config = loadConfig();
 
-  // Guardas de arranque (endurecidas en el paso 2).
-  if (config.nodeEnv === "production" && (!config.adminPassword || !config.operatorPassword)) {
-    console.error("[FATAL] En producción debe definir ADMIN_PASSWORD y OPERATOR_PASSWORD (ver .env.example).");
-    process.exit(1);
-  }
+  // Guardas de arranque (paso 3): el panel no arranca sin BD migrada ni admin inicial.
+  const dbPath = defaultDbPath();
+  const db = openDb(dbPath);
+  assertAdminExists(db, dbPath);
+  db.close();
+
   if (!config.internalToken) {
     console.warn("[WARN] PHONE_FARM_INTERNAL_TOKEN no definido — backend Flask rechazará las llamadas hasta configurarlo.");
   }

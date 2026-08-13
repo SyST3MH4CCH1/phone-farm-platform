@@ -1020,6 +1020,23 @@ def videos(filename: str):
 if __name__ == "__main__":
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    # --- Guardas de arranque (paso 3): clave maestra + migraciones SQLite ---
+    try:
+        from phonefarm.keystore import ensure_master_key
+        ensure_master_key()
+        logger.info("clave maestra disponible")
+    except Exception as exc:  # MasterKeyError u otro
+        logger.critical("No se puede arrancar sin clave maestra: %s", exc)
+        raise SystemExit(f"[FATAL] clave maestra no disponible: {exc}")
+    try:
+        from phonefarm.db import open_migrated
+        db_path = os.getenv("PHONEFARM_DB_PATH", str(DATA_DIR / "data" / "phonefarm.db"))
+        open_migrated(db_path)
+        logger.info("BD SQLite lista: %s", db_path)
+    except Exception as exc:
+        logger.critical("No se puede arrancar sin BD: %s", exc)
+        raise SystemExit(f"[FATAL] BD SQLite no disponible: {exc}")
+
     # En Docker, Flask escucha en 0.0.0.0 (el loopback lo garantiza el bind
     # "127.0.0.1:5000:5000" del compose). Local: solo 127.0.0.1.
     bind_host = "0.0.0.0" if os.getenv("IN_DOCKER") == "1" else "127.0.0.1"
