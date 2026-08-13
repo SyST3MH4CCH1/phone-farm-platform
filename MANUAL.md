@@ -267,7 +267,17 @@ Navegador ──(cookie pf_session)──▶ Express:3000 ──(X-Internal-Auth
                                           └──▶ adb :5037 ──▶ teléfonos USB
 ```
 
-- **Solo el 3000** puede estar expuesto a la red. Todo lo demás es loopback.
+- **NADA** se expone a la red directamente: Express :3000 escucha SOLO en 127.0.0.1
+  (acceso remoto con Tailscale Serve HTTPS — [`docs/ACCESO-SEGURO.md`](docs/ACCESO-SEGURO.md)).
 - **Dos `.env`:** el de la raíz (Express) y `platform/.env` (Flask). `PHONE_FARM_INTERNAL_TOKEN` (raíz) **debe ser igual** a `INTERNAL_TOKEN` (platform).
-- **Persistencia:** `platform/*.json` es lo activo en nativo; `platform/data/` es solo semilla Docker.
+- **Persistencia (desde la remediación 2026-08-13):** SQLite `platform/data/phonefarm.db`
+  (WAL) con campos cifrados AES-256-GCM; clave maestra DPAPI (`platform/data/master.key`).
+  Los `*.json` en claro se migran con `python -m phonefarm.migrate --commit`.
+- **Usuarios del panel:** `platform\scripts\create-admin.ps1` (scrypt en BD; el primer
+  admin es obligatorio para arrancar).
+- **Backups:** `platform\scripts\export-data.ps1` / `restore-backup.ps1` (.pfbackup
+  cifrado con passphrase; nunca ZIP en claro).
+- **Tokens MCP:** `python -m phonefarm.mcp_tokens create` (ver [`docs/MCP-INTEGRATION.md`](docs/MCP-INTEGRATION.md)).
+- **Auditoría:** eventos encadenados con HMAC en `audit_log` (verificar con
+  `python -c "from phonefarm.audit import verify_chain; from phonefarm.platform_data import _conn; print(verify_chain(_conn()))"`).
 - **Detalle completo:** [`docs/INTERCONEXION.md`](docs/INTERCONEXION.md).
