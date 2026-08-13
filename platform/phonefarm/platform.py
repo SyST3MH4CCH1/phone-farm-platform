@@ -777,6 +777,15 @@ def api_queue_ready(job_id: str):
     if not job.get("video_path"):
         return jsonify({"error": "El job no tiene vídeo generado"}), 409
 
+    # Paso 11: moderación/configuración de contenido ANTES de publicable.
+    from phonefarm import content
+
+    reasons = content.moderate(job.get("keyword", ""), job.get("script", ""), job.get("caption", ""))
+    if reasons:
+        _audit("job.ready_blocked", job_id, {"reasons": reasons})
+        logger.warning("[%s] Bloqueado por moderación: %s", job_id, reasons)
+        return jsonify({"error": "Contenido bloqueado por moderación", "reasons": reasons}), 409
+
     job["status"] = "ready_for_publish"
     _sync_job(job)
     logger.info("[%s] Marcado ready_for_publish por el operador", job_id)
