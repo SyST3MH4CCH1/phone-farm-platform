@@ -18,8 +18,15 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+    if column not in cols:
+        conn.execute(ddl)
+
 # Migraciones versionadas: el índice es user_version destino.
-MIGRATIONS: list[str] = [
+# Una entrada puede ser SQL (executescript) o callable(conn) para cambios
+# condicionales (p.ej. ADD COLUMN en BDs existentes).
+MIGRATIONS: list[Any] = [
     # --- v1: esquema inicial (pasos 3-7) ---
     """
     CREATE TABLE users (
@@ -63,6 +70,7 @@ MIGRATIONS: list[str] = [
         username     TEXT,
         enc_password TEXT,
         status       TEXT NOT NULL DEFAULT 'new',
+        meta         TEXT,                     -- json sin datos sensibles
         created_at   TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -119,6 +127,8 @@ MIGRATIONS: list[str] = [
         info       TEXT
     );
     """,
+    # --- v2: columna meta en proxies (solo si falta — compatibilidad v1) ---
+    lambda conn: _ensure_column(conn, "proxies", "meta", "ALTER TABLE proxies ADD COLUMN meta TEXT"),
 ]
 
 
@@ -142,11 +152,14 @@ def current_version(conn: sqlite3.Connection) -> int:
 def migrate(conn: sqlite3.Connection) -> int:
     """Aplica migraciones pendientes en transacciones; devuelve la versión final."""
     version = current_version(conn)
-    for target, sql in enumerate(MIGRATIONS, start=1):
+    for target, step in enumerate(MIGRATIONS, start=1):
         if target <= version:
             continue
         with conn:  # transacción
-            conn.executescript(sql)
+            if callable(step):
+                step(conn)
+            else:
+                conn.executescript(step)
             conn.execute(f"PRAGMA user_version={target}")
         logger.info("migración aplicada: user_version %d -> %d", version, target)
         version = target

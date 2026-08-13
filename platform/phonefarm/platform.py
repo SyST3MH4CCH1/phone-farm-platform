@@ -372,10 +372,15 @@ def cors_loopback_only(response: Response) -> Response:
 
 # --- Accounts ----------------------------------------------------------------
 
+def _account_dto(acc: dict[str, Any]) -> dict[str, Any]:
+    """DTO redactado (paso 4): nunca password ni ruta de sesión por API."""
+    return {k: v for k, v in acc.items() if k not in ("password", "session_file")}
+
+
 @app.get("/api/accounts")
 def api_accounts():
-    # Nunca exponer contraseñas por API (quedan solo en accounts.json)
-    return jsonify([{k: v for k, v in acc.items() if k != "password"} for acc in load_accounts()])
+    # Nunca exponer contraseñas ni rutas de sesión por API (paso 4)
+    return jsonify([_account_dto(acc) for acc in load_accounts()])
 
 
 @app.post("/api/accounts")
@@ -413,9 +418,8 @@ def api_accounts_create():
     }
     accounts.append(account)
     save_accounts(accounts)
-    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     logger.info("Cuenta creada: %s (@%s, ADB %s)", account["id"], username, device_serial)
-    return jsonify(account), 201
+    return jsonify(_account_dto(account)), 201
 
 
 @app.delete("/api/accounts/<account_id>")
@@ -489,7 +493,7 @@ def api_proxies_create():
     proxies.append(proxy)
     save_proxies(proxies)
     logger.info("Proxy creado: %s (%s:%d)", proxy["id"], host, port)
-    return jsonify(proxy), 201
+    return jsonify({k: v for k, v in proxy.items() if k != "pass"}), 201
 
 
 @app.post("/api/proxies/verify")
@@ -803,10 +807,10 @@ def api_engagement_stop():
 
 @app.post("/api/accounts/<account_id>/instagram/login")
 def api_instagram_login(account_id: str):
-    """Login inicial de Instagram para crear la sesión persistida (sessions/).
+    """Login inicial de Instagram: crea la sesión CIFRADA en BD (paso 4).
 
-    Necesario para jobs en awaiting_manual_upload por 'No existe sesión'.
-    Cooldown de 5 min entre intentos por cuenta (en publisher.login_once).
+    Solo admin (paso 5); el username viene del body pero la identidad real de
+    la cuenta es `:id`. Cooldown de 5 min entre intentos por cuenta.
     """
     from phonefarm import publisher
 
@@ -816,8 +820,9 @@ def api_instagram_login(account_id: str):
     if not username or not password:
         return jsonify({"error": "username y password son obligatorios"}), 400
     try:
-        session_path = publisher.login_once(account_id, username, password)
-        return jsonify({"ok": True, "account_id": account_id, "session": session_path})
+        publisher.login_once(account_id, username, password)
+        # La sesión queda cifrada en BD; nunca se devuelve ruta ni secreto.
+        return jsonify({"ok": True, "account_id": account_id})
     except Exception as exc:  # noqa: BLE001 — instagrapi challenge / 2FA / credenciales
         logger.warning("Login IG fallido para %s: %s", account_id, exc)
         return jsonify({"ok": False, "error": str(exc)[:500]}), 502
@@ -980,7 +985,7 @@ def adb_account_from_device():
     accounts.append(account)
     save_accounts(accounts)
     logger.info("Cuenta ADB creada: %s (@%s, %s)", account["id"], username, serial)
-    return jsonify(account), 201
+    return jsonify(_account_dto(account)), 201
 
 @app.get("/stream/logs")
 def stream_logs():

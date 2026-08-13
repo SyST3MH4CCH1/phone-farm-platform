@@ -61,29 +61,45 @@ GALAXY_A52_DEVICE: dict[str, Any] = {
 
 
 # ---------------------------------------------------------------------------
-# Persistencia de sesiones
+# Persistencia de sesiones (paso 4: cifradas en SQLite, nunca en claro)
 # ---------------------------------------------------------------------------
 
-def _session_path(account_id: str) -> Path:
-    return SESSIONS_DIR / f"{account_id}.json"
-
-
 def _load_settings(account_id: str) -> dict[str, Any]:
-    """Carga la sesión persistente. Lanza FileNotFoundError si no existe."""
-    path = _session_path(account_id)
-    if not path.exists():
+    """Carga la sesión persistente cifrada. Lanza FileNotFoundError si no existe."""
+    from phonefarm.crypto import decrypt_json
+    from phonefarm.platform_data import _conn, _key
+
+    row = _conn().execute(
+        "SELECT enc_json FROM social_sessions WHERE account_id = ?", (account_id,)
+    ).fetchone()
+    if row is None:
         raise FileNotFoundError(
             f"No existe sesión para {account_id}. "
             "Ejecuta login_once() UNA vez para crearla (nunca se reloguea automáticamente)."
         )
-    with open(path, "r", encoding="utf-8") as fh:
-        return json.load(fh)
+    return decrypt_json(_key(), "social_sessions", account_id, row["enc_json"])
 
 
 def _save_settings(account_id: str, settings: dict[str, Any]) -> None:
-    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(_session_path(account_id), "w", encoding="utf-8") as fh:
-        json.dump(settings, fh, indent=2)
+    from phonefarm.crypto import encrypt_json
+    from phonefarm.platform_data import _conn, _key
+
+    envelope = encrypt_json(_key(), "social_sessions", account_id, settings)
+    with _conn():
+        _conn().execute(
+            "INSERT INTO social_sessions (account_id, enc_json, updated_at) VALUES (?,?,datetime('now')) "
+            "ON CONFLICT(account_id) DO UPDATE SET enc_json=excluded.enc_json, updated_at=datetime('now')",
+            (account_id, envelope),
+        )
+
+
+def _has_session(account_id: str) -> bool:
+    from phonefarm.platform_data import _conn
+
+    row = _conn().execute(
+        "SELECT 1 FROM social_sessions WHERE account_id = ?", (account_id,)
+    ).fetchone()
+    return row is not None
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +146,7 @@ def login_once(account_id: str, username: str, password: str) -> str:
     client.login(username, password)
     _save_settings(account_id, client.get_settings())
     logger.info("Sesión creada para %s (username=%s)", account_id, username)
-    return str(_session_path(account_id))
+    return account_id  # la sesión vive cifrada en BD (nunca se devuelve una ruta)
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +223,7 @@ def publish_video(account_id: str, video_path: str, caption: str) -> str:
 
     # Sin sesión persistente: NO se cae a 'failed' — se activa el fallback manual
     # (adb push del MP4 al teléfono + registro en logs/fallback_queue.json).
-    if not _session_path(account_id).exists():
+    if not _has_session(account_id):
         logger.warning(
             "No existe sesión para %s — registrando fallback manual (awaiting_manual_upload)",
             account_id,
