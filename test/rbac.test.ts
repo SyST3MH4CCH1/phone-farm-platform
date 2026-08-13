@@ -1,0 +1,141 @@
+import { describe, it, expect, beforeAll } from "vitest";
+import request from "supertest";
+import type { Express } from "express";
+import { createApp, CSRF_COOKIE } from "../server/app";
+import { seedDb, testConfig, TEST_ADMIN_PW, TEST_OPERATOR_PW } from "./helpers";
+import { SESSION_COOKIE } from "../server/sessions";
+
+function setCookies(res: { headers: Record<string, unknown> }): string[] {
+  const raw = res.headers["set-cookie"];
+  return Array.isArray(raw) ? (raw as string[]) : raw ? [raw as string] : [];
+}
+
+/** Login y devuelve {sessionCookie, csrfCookie, csrfToken}. */
+async function login(app: Express, username: string, password: string) {
+  const res = await request(app).post("/api/auth/login").send({ username, password });
+  expect(res.status).toBe(200);
+  const cookies = setCookies(res);
+  const sessionCookie = cookies.find((c) => c.startsWith("pf_session="))!.split(";")[0];
+  const csrfCookie = cookies.find((c) => c.startsWith(`${CSRF_COOKIE}=`))!.split(";")[0];
+  return { sessionCookie, csrfCookie, csrf: csrfCookie.split("=")[1] };
+}
+
+function auth(headers: { sessionCookie: string; csrfCookie: string; csrf: string }) {
+  return (req: request.Test) =>
+    req
+      .set("Cookie", `${headers.sessionCookie}; ${headers.csrfCookie}`)
+      .set("X-CSRF-Token", headers.csrf);
+}
+
+describe("paso 5 — sesiones persistentes", () => {
+  it("la sesión sobrevive a un 'reinicio' (nueva app con la misma BD)", async () => {
+    const db = seedDb();
+    const app1 = createApp(testConfig(), { db });
+    const app2 = createApp(testConfig(), { db });
+    const s = await login(app1, "admin", TEST_ADMIN_PW);
+
+    // app2 (proceso "reiniciado") reconoce el token sin volver a loguear
+    const res = await request(app2).get("/api/auth/me").set("Cookie", s.sessionCookie);
+    expect(res.body).toMatchObject({ authenticated: true, user: { username: "admin", role: "admin" } });
+  });
+
+  it("logout revoca SOLO la sesión actual (otra sesión sigue viva)", async () => {
+    const db = seedDb();
+    const app = createApp(testConfig(), { db });
+    const s1 = await login(app, "admin", TEST_ADMIN_PW);
+    const s2 = await login(app, "admin", TEST_ADMIN_PW);
+
+    const out = await auth(s1)(request(app).post("/api/auth/logout"));
+    expect(out.status).toBe(200);
+
+    const me1 = await request(app).get("/api/auth/me").set("Cookie", s1.sessionCookie);
+    const me2 = await request(app).get("/api/auth/me").set("Cookie", s2.sessionCookie);
+    expect(me1.body.authenticated).toBe(false);
+    expect(me2.body.authenticated).toBe(true);
+  });
+});
+
+describe("paso 5 — rate limit de login persistente", () => {
+  it("5 fallos por usuario+IP → 429; con credenciales correctas no se cuenta", async () => {
+    const app = createApp(testConfig(), { db: seedDb() });
+    for (let i = 0; i < 5; i++) {
+      const res = await request(app)
+        .post("/api/auth/login")
+        .send({ username: "admin", password: "mala-password" });
+      expect(res.status).toBe(401);
+    }
+    // sexto intento fallido: bloqueado
+    const blocked = await request(app)
+      .post("/api/auth/login")
+      .send({ username: "admin", password: "mala-password" });
+    expect(blocked.status).toBe(429);
+    // incluso con la contraseña correcta, el usuario+IP está bloqueado
+    const correct = await request(app)
+      .post("/api/auth/login")
+      .send({ username: "admin", password: TEST_ADMIN_PW });
+    expect(correct.status).toBe(429);
+  });
+});
+
+describe("paso 5 — RBAC admin/operator", () => {
+  let app: Express;
+  let admin: { sessionCookie: string; csrfCookie: string; csrf: string };
+  let operator: { sessionCookie: string; csrfCookie: string; csrf: string };
+
+  beforeAll(async () => {
+    app = createApp(testConfig(), {
+      db: seedDb(),
+      flaskFetch: async () => ({ status: 200, text: async () => JSON.stringify({ ok: true }) }),
+    });
+    admin = await login(app, "admin", TEST_ADMIN_PW);
+    operator = await login(app, "operator", TEST_OPERATOR_PW);
+  });
+
+  const mut = (path: string, body: object, who: { sessionCookie: string; csrfCookie: string; csrf: string }) =>
+    auth(who)(request(app).post(path)).send(body);
+
+  it("operator NO puede publicar/aprobar/programar/engagement/credenciales (403)", async () => {
+    for (const path of [
+      "/api/queue/job_1/publish",
+      "/api/queue/job_1/approve",
+      "/api/queue/job_1/schedule",
+      "/api/queue/job_1/reject",
+      "/api/accounts/acc_1/instagram/login",
+      "/api/accounts/from-device",
+      "/api/moneyprinter/generate",
+      "/engagement/start",
+      "/api/proxies/credentials",
+    ]) {
+      const res = await mut(path, {}, operator);
+      expect(res.status).toBe(403);
+    }
+  });
+
+  it("operator SÍ puede crear borradores (POST /api/queue) y marcar ready", async () => {
+    const create = await mut("/api/queue", { keyword: "test" }, operator);
+    expect(create.status).toBe(200); // proxy mock ok
+    const ready = await mut("/api/queue/job_1/ready", {}, operator);
+    expect(ready.status).toBe(200);
+  });
+
+  it("admin puede publicar", async () => {
+    const res = await mut("/api/queue/job_1/publish", {}, admin);
+    expect(res.status).toBe(200);
+  });
+
+  it("moneyprinter/generate NO fuerza auto_approve", async () => {
+    let seenBody: unknown = null;
+    const app2 = createApp(testConfig(), {
+      db: seedDb(),
+      flaskFetch: async (_url, init) => {
+        seenBody = init.body;
+        return { status: 201, text: async () => JSON.stringify({ ok: true }) };
+      },
+    });
+    const a = await login(app2, "admin", TEST_ADMIN_PW);
+    const res = await auth(a)(request(app2).post("/api/moneyprinter/generate")).send({ keyword: "x" });
+    expect(res.status).toBe(201);
+    const body = JSON.parse(seenBody as string);
+    expect(body.auto_approve).toBeUndefined();
+  });
+});

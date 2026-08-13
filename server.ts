@@ -20,13 +20,13 @@ async function main() {
   const dbPath = defaultDbPath();
   const db = openDb(dbPath);
   assertAdminExists(db, dbPath);
-  db.close();
 
   if (!config.internalToken) {
     console.warn("[WARN] PHONE_FARM_INTERNAL_TOKEN no definido — backend Flask rechazará las llamadas hasta configurarlo.");
   }
 
   const app = createApp(config, {
+    db,
     viteMiddleware: config.nodeEnv === "production" ? undefined : await createViteServer({
       server: {
         middlewareMode: true,

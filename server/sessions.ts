@@ -1,9 +1,10 @@
 // ---------------------------------------------------------------------------
-// Sesiones del panel. Almacén desacoplado (paso 1: memoria; paso 5: SQLite)
-// con la misma interfaz: get/set/delete/cleanup + hashing de tokens.
+// Sesiones del panel sobre SQLite (paso 5): solo hashes de tokens, TTL 24h,
+// revocación en logout y al cambiar el password. Sobreviven a reinicios.
 // ---------------------------------------------------------------------------
 
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
+import type Database from "better-sqlite3";
 
 export interface SessionUser {
   id: string;
@@ -28,40 +29,69 @@ export function hashToken(token: string): string {
 }
 
 export class SessionStore {
-  private map = new Map<string, SessionUser>(); // key = sha256(token)
+  constructor(private db: Database.Database) {}
 
   get(token: string | null): SessionUser | null {
     if (!token) return null;
-    const s = this.map.get(hashToken(token));
-    if (!s) return null;
-    if (s.expiresAt < Date.now()) {
-      this.map.delete(hashToken(token));
+    const row = this.db
+      .prepare(
+        `SELECT s.token_hash, s.expires_at, s.revoked, u.id, u.username, u.role
+         FROM sessions s JOIN users u ON u.id = s.user_id
+         WHERE s.token_hash = ?`
+      )
+      .get(hashToken(token)) as
+      | { token_hash: string; expires_at: number; revoked: number; id: string; username: string; role: "admin" | "operator" }
+      | undefined;
+    if (!row || row.revoked) return null;
+    if (row.expires_at < Date.now()) {
+      this.deleteByHash(row.token_hash);
       return null;
     }
-    return s;
+    return {
+      id: row.id,
+      username: row.username,
+      role: row.role,
+      email: `${row.username}@phonefarm.local`,
+      expiresAt: row.expires_at,
+    };
   }
 
   set(token: string, user: SessionUser): void {
-    this.map.set(hashToken(token), user);
+    this.db
+      .prepare(
+        `INSERT INTO sessions (token_hash, user_id, expires_at, created_at, revoked)
+         VALUES (?,?,?,?,0)`
+      )
+      .run(hashToken(token), user.id, user.expiresAt, Date.now());
   }
 
   delete(token: string | null): void {
-    if (token) this.map.delete(hashToken(token));
+    if (token) this.deleteByHash(hashToken(token));
   }
 
-  /** Elimina sesiones expiradas. Devuelve cuántas quedan (para tests/límites). */
+  deleteByHash(tokenHash: string): void {
+    this.db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash);
+  }
+
+  /** Revoca todas las sesiones de un usuario (cambio de password). */
+  revokeAllForUser(userId: string): void {
+    this.db.prepare("UPDATE sessions SET revoked = 1 WHERE user_id = ?").run(userId);
+  }
+
+  /** Elimina sesiones expiradas/revocadas. Devuelve cuántas quedan activas. */
   cleanup(): number {
-    const now = Date.now();
-    for (const [k, s] of this.map) if (s.expiresAt < now) this.map.delete(k);
-    return this.map.size;
+    this.db.prepare("DELETE FROM sessions WHERE expires_at < ? OR revoked = 1").run(Date.now());
+    const row = this.db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE expires_at >= ? AND revoked = 0").get(Date.now()) as { n: number };
+    return row.n;
   }
 
   get size(): number {
-    return this.map.size;
+    const row = this.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number };
+    return row.n;
   }
 }
 
-/** Crea una sesión nueva con token aleatorio (un token por login). */
+/** Crea un token de sesión nuevo (un token por login). */
 export function newSessionToken(): string {
   return `token_pf_${randomBytes(18).toString("hex")}`;
 }

@@ -41,7 +41,7 @@ import psutil
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, request, send_from_directory
 
-from phonefarm.platform_data import load_accounts, load_proxies, load_queue, save_accounts, save_proxies, save_queue
+from phonefarm.platform_data import load_accounts, load_proxies, load_queue, save_accounts, save_proxies, save_queue, find_account
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")  # antes de resolver DATA_DIR: PHONE_FARM_DATA_DIR viene del .env
@@ -159,19 +159,22 @@ _queue_lock = threading.RLock()
 
 JOB_STATUSES = {
     "pending", "scripting", "awaiting_approval", "generating",
-    "awaiting_preview", "publishing", "published",
+    "awaiting_preview", "ready_for_publish", "publishing", "published",
     "awaiting_manual_upload", "failed", "rejected",
 }
 
 
 def _sync_job(updated: dict[str, Any]) -> list[dict[str, Any]]:
-    """Persiste el estado del job en queue.json (reescritura completa)."""
+    """Persiste el estado del job (versión bump en cada transición de estado)."""
     queue = load_queue()
     for idx, item in enumerate(queue):
         if item.get("id") == updated["id"]:
+            if item.get("status") != updated.get("status"):
+                updated["version"] = int(updated.get("version", 1)) + 1
             queue[idx] = updated
             break
     else:
+        updated.setdefault("version", 1)
         queue.append(updated)
     save_queue(queue)
     return queue
@@ -210,15 +213,11 @@ def _script_job(job: dict[str, Any]) -> None:
         job["niche_id"] = profile.get("id", "general")
         _sync_job(job)
 
-        if job.get("auto_approve"):
-            logger.info("[%s] auto_approve activo — continuando a generación", job_id)
-            _generate_video(job)
-            _publish_job(job)
-        else:
-            job["status"] = "awaiting_approval"
-            _sync_job(job)
-            logger.info("[%s] Guión listo para aprobación (caption de %d chars)",
-                        job_id, len(job.get("caption", "")))
+        # Paso 5: sin auto_approve — TODO job pasa por revisión humana.
+        job["status"] = "awaiting_approval"
+        _sync_job(job)
+        logger.info("[%s] Guión listo para aprobación (caption de %d chars)",
+                    job_id, len(job.get("caption", "")))
     except Exception as exc:  # noqa: BLE001
         logger.error("[%s] Fallo en scripting: %s", job_id, exc)
         job["status"] = "failed"
@@ -351,6 +350,23 @@ def auth_internal() -> Any:
     return None
 
 
+def require_role(*roles: str):
+    """RBAC en Flask (paso 5): el rol llega vía X-Role (lo inyecta el proxy
+    Express; Flask solo lo acepta con token interno válido — paso 6 audita)."""
+    def deco(fn):
+        from functools import wraps
+
+        @wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any):
+            if request.headers.get("X-Role") not in roles:
+                return jsonify({"error": f"Requiere rol: {'/'.join(roles)}"}), 403
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    return deco
+
+
 @app.after_request
 def cors_loopback_only(response: Response) -> Response:
     """CORS restringido a orígenes loopback (127.0.0.1 / localhost)."""
@@ -384,6 +400,7 @@ def api_accounts():
 
 
 @app.post("/api/accounts")
+@require_role("admin")
 def api_accounts_create():
     body = request.get_json(silent=True) or {}
     username = (body.get("username") or "").strip()
@@ -423,6 +440,7 @@ def api_accounts_create():
 
 
 @app.delete("/api/accounts/<account_id>")
+@require_role("admin")
 def api_accounts_delete(account_id: str):
     from phonefarm import engagement
 
@@ -469,6 +487,7 @@ def api_proxies():
 
 
 @app.post("/api/proxies")
+@require_role("admin")
 def api_proxies_create():
     body = request.get_json(silent=True) or {}
     host = (body.get("host") or "").strip()
@@ -497,6 +516,7 @@ def api_proxies_create():
 
 
 @app.post("/api/proxies/verify")
+@require_role("admin")
 def api_proxies_verify():
     """Verificación explícita de un proxy (endpoint adicional)."""
     from phonefarm import proxy_manager
@@ -545,6 +565,9 @@ def api_queue_create():
     target_account = (body.get("target_account") or "").strip()
     if not keyword:
         return jsonify({"error": "keyword es obligatoria"}), 400
+    # Paso 5: auto_approve ELIMINADO — todo job pasa por revisión humana.
+    if body.get("auto_approve") not in (None, False):
+        return jsonify({"error": "auto_approve ya no está soportado (aprobación humana obligatoria)"}), 400
     if target_account and not any(a.get("id") == target_account for a in load_accounts()):
         return jsonify({"error": f"Cuenta destino no existe: {target_account}"}), 400
     from phonefarm import content
@@ -563,15 +586,13 @@ def api_queue_create():
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "progress": 0,
         "script": body.get("script") or "",
-        # auto_approve=true -> salta la revisión humana (script -> generar -> publicar)
-        "auto_approve": bool(body.get("auto_approve")),
+        "version": 1,
         # programación: "2026-08-03T12:00:00Z" o timestamp
         "scheduled_ts": _parse_schedule(body.get("scheduled_time")),
     }
     queue.append(job)
     save_queue(queue)
-    logger.info("Job encolado: %s (keyword=%r, nicho=%s, auto=%s)",
-                job["id"], keyword, job["niche_id"], job["auto_approve"])
+    logger.info("Job encolado: %s (keyword=%r, nicho=%s)", job["id"], keyword, job["niche_id"])
     return jsonify(job), 201
 
 
@@ -611,6 +632,7 @@ def api_queue_next():
 
 
 @app.post("/api/queue/<job_id>/approve")
+@require_role("admin")
 def api_queue_approve(job_id: str):
     """Etapa 2: aprueba el GUION -> genera el vídeo con MPT -> awaiting_preview.
 
@@ -631,26 +653,60 @@ def api_queue_approve(job_id: str):
     return jsonify(job), 202
 
 
-@app.post("/api/queue/<job_id>/publish")
-def api_queue_publish(job_id: str):
-    """Etapa 3: aprueba la PUBLICACION del vídeo ya generado -> publishing -> published."""
+@app.post("/api/queue/<job_id>/ready")
+def api_queue_ready(job_id: str):
+    """El OPERADOR marca el vídeo previsualizado como "listo para publicar".
+
+    Transición: awaiting_preview -> ready_for_publish. Solo admin puede
+    publicar (endpoint /publish exige este estado + versión + confirmación).
+    """
     queue = load_queue()
     job = next((j for j in queue if j.get("id") == job_id), None)
     if job is None:
         return jsonify({"error": f"Job no existe: {job_id}"}), 404
     if job.get("status") != "awaiting_preview":
-        return jsonify({"error": f"El job {job_id} está en estado {job.get('status')}, no en espera de publicación"}), 409
+        return jsonify({"error": f"El job {job_id} está en estado {job.get('status')}, no en espera de revisión de vídeo"}), 409
     if not job.get("video_path"):
         return jsonify({"error": "El job no tiene vídeo generado"}), 409
+
+    job["status"] = "ready_for_publish"
+    _sync_job(job)
+    logger.info("[%s] Marcado ready_for_publish por el operador", job_id)
+    return jsonify(job)
+
+
+@app.post("/api/queue/<job_id>/publish")
+@require_role("admin")
+def api_queue_publish(job_id: str):
+    """Etapa 3: PUBLICACIÓN (solo admin). Exige ready_for_publish + versión
+    esperada + confirmación explícita (paso 5: sin autoaprobación)."""
+    body = request.get_json(silent=True) or {}
+    if body.get("confirm") is not True:
+        return jsonify({"error": "confirmación explícita requerida (confirm: true)"}), 400
+
+    queue = load_queue()
+    job = next((j for j in queue if j.get("id") == job_id), None)
+    if job is None:
+        return jsonify({"error": f"Job no existe: {job_id}"}), 404
+    if job.get("status") != "ready_for_publish":
+        return jsonify({"error": f"El job {job_id} está en estado {job.get('status')}; debe estar en ready_for_publish"}), 409
+    if not job.get("video_path"):
+        return jsonify({"error": "El job no tiene vídeo generado"}), 409
+
+    # Concurrencia optimista: la versión vista por el cliente debe coincidir.
+    expected = body.get("expected_version")
+    if not isinstance(expected, int) or expected != int(job.get("version", 1)):
+        return jsonify({"error": f"El job {job_id} cambió desde que lo revisaste (versión {job.get('version')})"}), 409
 
     if not _spawn(job_id, lambda j=job: _publish_job(j)):
         return jsonify({"error": f"El job {job_id} ya se está procesando"}), 409
 
-    logger.info("[%s] Publicación APROBADA — publicando vídeo %s", job_id, job.get("video_path"))
+    logger.info("[%s] Publicación APROBADA (admin) — publicando vídeo %s", job_id, job.get("video_path"))
     return jsonify(job), 202
 
 
 @app.post("/api/queue/<job_id>/schedule")
+@require_role("admin")
 def api_queue_schedule(job_id: str):
     """Re-programa un job (drag&drop del calendario): actualiza scheduled_ts.
 
@@ -676,6 +732,7 @@ def api_queue_schedule(job_id: str):
 
 
 @app.post("/api/queue/<job_id>/reject")
+@require_role("admin")
 def api_queue_reject(job_id: str):
     """Rechaza el guión (awaiting_approval) o el vídeo previsualizado (awaiting_preview)."""
     queue = load_queue()
@@ -691,6 +748,7 @@ def api_queue_reject(job_id: str):
 
 
 @app.delete("/api/queue/<job_id>")
+@require_role("admin")
 def api_queue_delete(job_id: str):
     """Elimina un job de la cola (y su MP4 local si existe)."""
     queue = load_queue()
@@ -778,6 +836,7 @@ def api_content_preview():
 # --- Engagement --------------------------------------------------------------
 
 @app.post("/engagement/start")
+@require_role("admin")
 def api_engagement_start():
     from phonefarm import engagement
 
@@ -792,6 +851,7 @@ def api_engagement_start():
 
 
 @app.post("/engagement/stop")
+@require_role("admin")
 def api_engagement_stop():
     from phonefarm import engagement
 
@@ -806,21 +866,25 @@ def api_engagement_stop():
 
 
 @app.post("/api/accounts/<account_id>/instagram/login")
+@require_role("admin")
 def api_instagram_login(account_id: str):
-    """Login inicial de Instagram: crea la sesión CIFRADA en BD (paso 4).
+    """Login inicial de Instagram (SOLO admin, paso 5): crea la sesión cifrada.
 
-    Solo admin (paso 5); el username viene del body pero la identidad real de
-    la cuenta es `:id`. Cooldown de 5 min entre intentos por cuenta.
+    La identidad de la cuenta viene EXCLUSIVAMENTE de `:id`: se usa el
+    username almacenado en la BD (se ignora el del body — PF-SEC-008).
+    Cooldown de 5 min entre intentos por cuenta (publisher.login_once).
     """
     from phonefarm import publisher
 
+    account = find_account(account_id)
+    if account is None:
+        return jsonify({"error": f"Cuenta no existe: {account_id}"}), 404
     body = request.get_json(silent=True) or {}
-    username = (body.get("username") or "").strip()
     password = body.get("password") or ""
-    if not username or not password:
-        return jsonify({"error": "username y password son obligatorios"}), 400
+    if not password:
+        return jsonify({"error": "password es obligatorio"}), 400
     try:
-        publisher.login_once(account_id, username, password)
+        publisher.login_once(account_id, account["username"], password)
         # La sesión queda cifrada en BD; nunca se devuelve ruta ni secreto.
         return jsonify({"ok": True, "account_id": account_id})
     except Exception as exc:  # noqa: BLE001 — instagrapi challenge / 2FA / credenciales
@@ -944,6 +1008,7 @@ def adb_devices_list():
 
 
 @app.post("/api/accounts/from-device")
+@require_role("admin")
 def adb_account_from_device():
     """Registra una cuenta automáticamente desde un dispositivo ADB autorizado."""
     body = request.get_json(silent=True) or {}

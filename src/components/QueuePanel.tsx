@@ -9,7 +9,8 @@ interface QueuePanelProps {
   isProcessing: boolean;
   onOpenPreview?: (job: QueueJob) => void;
   onApproveJob?: (jobId: string) => void;
-  onPublishJob?: (jobId: string) => void;
+  onPublishJob?: (jobId: string, version: number) => void;
+  onMarkReady?: (jobId: string) => void;
   onRejectJob?: (jobId: string) => void;
   onDeleteJob?: (jobId: string) => void;
 }
@@ -23,6 +24,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
   onOpenPreview,
   onApproveJob,
   onPublishJob,
+  onMarkReady,
   onRejectJob,
   onDeleteJob
 }) => {
@@ -45,6 +47,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
       case 'awaiting_approval': return <span className="text-[#D4A84B]">revisión</span>;
       case 'rejected': return <span className="text-[#E05B5B]">rechazado</span>;
       case 'awaiting_preview': return <span className="text-[#6FBF73]">vídeo listo — preview</span>;
+      case 'ready_for_publish': return <span className="text-[#8FBF6F]">listo para publicar</span>;
       case 'publishing': return <span className="text-[#A1A6AE]">publicando...</span>;
       case 'scripting': return <span className="text-[#A1A6AE]">guión...</span>;
       default: return <span className="text-[#6B7076]">pendiente</span>;
@@ -141,9 +144,15 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                           Rechazar
                         </button>
                       )}
-                      {job.status === 'awaiting_preview' && onPublishJob && (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); onPublishJob(job.id); }}
-                          className={`${btnBase} bg-[#232528] hover:bg-[#2A2C30] text-[#6FBF73]`} title="Aprobar publicación del vídeo ya generado">
+                      {job.status === 'awaiting_preview' && onMarkReady && (
+                        <button type="button" onClick={(e) => { e.stopPropagation(); onMarkReady(job.id); }}
+                          className={`${btnBase} bg-[#232528] hover:bg-[#2A2C30] text-[#A1A6AE]`} title="Marcar el vídeo como listo para publicar (lo publica un admin)">
+                          Listo
+                        </button>
+                      )}
+                      {job.status === 'ready_for_publish' && onPublishJob && (
+                        <button type="button" onClick={(e) => { e.stopPropagation(); onPublishJob(job.id, job.version || 1); }}
+                          className={`${btnBase} bg-[#232528] hover:bg-[#2A2C30] text-[#6FBF73]`} title="Publicar (admin; requiere confirmación y versión esperada)">
                           Publicar
                         </button>
                       )}

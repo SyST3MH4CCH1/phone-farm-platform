@@ -392,13 +392,30 @@ export default function App() {
     }
   };
 
-  // Aprobar PUBLICACIÓN del vídeo ya generado (awaiting_preview -> published)
-  const handlePublishJob = async (jobId: string) => {
+  // Marcar vídeo como "listo para publicar" (operator; lo publica un admin)
+  const handleMarkReady = async (jobId: string) => {
+    try {
+      const res = await apiFetch(`/api/queue/${jobId}/ready`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addLog('ERROR', 'Queue', `Marcar listo rechazado (${jobId}): ${data?.error || res.status}`);
+        return;
+      }
+      addLog('INFO', 'Queue', `Job ${jobId} marcado listo para publicar`);
+      refreshBackendData();
+    } catch (err) {
+      addLog('ERROR', 'Queue', `ready falló: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // Aprobar PUBLICACIÓN del vídeo ya generado (ready_for_publish -> publishing)
+  // Con confirmación explícita + versión esperada (concurrencia optimista).
+  const handlePublishJob = async (jobId: string, version: number) => {
     try {
       const res = await apiFetch(`/api/queue/${jobId}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify({ confirm: true, expected_version: version })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -685,6 +702,7 @@ export default function App() {
             onOpenPreview={handleOpenPreviewForJob}
             onApproveJob={handleApproveJob}
             onPublishJob={handlePublishJob}
+            onMarkReady={handleMarkReady}
             onRejectJob={handleRejectJob}
             onDeleteJob={handleDeleteJob}
           />

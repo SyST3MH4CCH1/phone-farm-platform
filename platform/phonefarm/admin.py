@@ -111,7 +111,10 @@ def cmd_reset(args: argparse.Namespace) -> int:
     if not row:
         sys.exit(f"[ERROR] usuario {args.username!r} no existe")
     pdb.update_password(conn, row["id"], hash_password(password))
-    print(f"OK: password de {args.username!r} actualizado")
+    # Paso 5: cambiar el password revoca TODAS las sesiones del usuario.
+    with conn:
+        conn.execute("UPDATE sessions SET revoked = 1 WHERE user_id = ?", (row["id"],))
+    print(f"OK: password de {args.username!r} actualizado (sesiones revocadas)")
     return 0
 
 

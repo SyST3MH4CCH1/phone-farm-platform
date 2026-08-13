@@ -275,3 +275,105 @@ def test_migrate_commit_es_idempotente(crypto_env):
     # segunda ejecución sin JSON en claro → "ya migrado"
     assert mig.commit(crypto_env) == 0
     assert len(pd.load_accounts()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Paso 5 — RBAC en Flask, fin de auto_approve, publicación con versión
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def flask_client(crypto_env, monkeypatch: pytest.MonkeyPatch):
+    """Cliente de prueba de la app Flask con token interno y rol por defecto."""
+    import phonefarm.platform as pf
+
+    monkeypatch.setenv("INTERNAL_TOKEN", "test-internal-token")
+    pf.INTERNAL_TOKEN = "test-internal-token"
+    pf.app.config.update(TESTING=True)
+    # aislar la cola en la BD de prueba
+    return pf.app.test_client()
+
+
+def _hdr(role: str = "admin") -> dict[str, str]:
+    return {"X-Internal-Auth": "test-internal-token", "X-Role": role}
+
+
+def test_queue_create_rechaza_auto_approve(flask_client):
+    res = flask_client.post("/api/queue", json={"keyword": "x", "auto_approve": True}, headers=_hdr())
+    assert res.status_code == 400
+    assert "auto_approve" in res.get_json()["error"]
+
+
+def test_require_role_en_publicacion(flask_client):
+    # token interno válido pero SIN X-Role → 403 (Flask no confía en llamadas sin identidad)
+    res = flask_client.post("/api/queue/job_1/publish",
+                            json={"confirm": True, "expected_version": 1},
+                            headers={"X-Internal-Auth": "test-internal-token"})
+    assert res.status_code == 403
+
+
+def test_publish_exige_estado_ready_version_y_confirmacion(flask_client, monkeypatch):
+    import phonefarm.platform as pf
+
+    monkeypatch.setattr(pf, "_spawn", lambda jid, target: True)  # no lanzar worker real
+
+    created = flask_client.post("/api/queue", json={"keyword": "test"}, headers=_hdr()).get_json()
+    job_id = created["id"]
+    assert created["status"] == "pending"
+
+    # publicar sin ready_for_publish → 409
+    res = flask_client.post(f"/api/queue/{job_id}/publish",
+                            json={"confirm": True, "expected_version": 1}, headers=_hdr())
+    assert res.status_code == 409
+
+    # marcar ready (awaiting_preview → ready_for_publish) y publicar
+    res = flask_client.post(f"/api/queue/{job_id}/ready", json={}, headers=_hdr())
+    assert res.status_code == 409  # aún no hay vídeo (awaiting_preview no alcanzado)
+    # simular el estado real del pipeline
+    from phonefarm.platform_data import load_queue, save_queue
+
+    queue = load_queue()
+    for j in queue:
+        if j["id"] == job_id:
+            j["status"] = "awaiting_preview"
+            j["video_path"] = "/tmp/fake.mp4"
+    save_queue(queue)
+
+    res = flask_client.post(f"/api/queue/{job_id}/ready", json={}, headers=_hdr())
+    assert res.status_code == 200
+    assert res.get_json()["status"] == "ready_for_publish"
+
+    # sin confirmación → 400; versión incorrecta → 409
+    res = flask_client.post(f"/api/queue/{job_id}/publish", json={"expected_version": 1}, headers=_hdr())
+    assert res.status_code == 400
+    res = flask_client.post(f"/api/queue/{job_id}/publish",
+                            json={"confirm": True, "expected_version": 999}, headers=_hdr())
+    assert res.status_code == 409
+
+    # flujo correcto → 202 y lanza el worker
+    res = flask_client.post(f"/api/queue/{job_id}/publish",
+                            json={"confirm": True, "expected_version": 2}, headers=_hdr())
+    assert res.status_code == 202
+
+
+def test_operator_no_puede_publicar_ni_aprobar(flask_client):
+    op = _hdr(role="operator")
+    res = flask_client.post("/api/queue/job_1/publish", json={"confirm": True, "expected_version": 1}, headers=op)
+    assert res.status_code == 403
+    res = flask_client.post("/api/queue/job_1/approve", json={}, headers=op)
+    assert res.status_code == 403
+    res = flask_client.post("/api/accounts/acc_1/instagram/login", json={"password": "x"}, headers=op)
+    assert res.status_code == 403
+
+
+def test_login_ig_admin_usa_username_almacenado(flask_client, monkeypatch):
+    import phonefarm.platform_data as pd
+    from phonefarm import publisher
+
+    pd.save_accounts([{"id": "acc_01", "username": "real_user", "password": "x", "status": "active"}])
+    calls: list[tuple] = []
+    monkeypatch.setattr(publisher, "login_once", lambda aid, username, password: calls.append((aid, username, password)) or aid)
+    res = flask_client.post("/api/accounts/acc_01/instagram/login",
+                            json={"username": "otro_user", "password": "secreto"},
+                            headers=_hdr("admin"))
+    assert res.status_code == 200
+    assert calls == [("acc_01", "real_user", "secreto")]  # identidad desde :id, no del body

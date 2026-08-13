@@ -1,25 +1,14 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
-import { loadConfig } from "../server/config";
 import { createApp } from "../server/app";
-
-function testConfig() {
-  return loadConfig({
-    NODE_ENV: "test",
-    ADMIN_USERNAME: "admin",
-    ADMIN_PASSWORD: "test-admin-password-123456",
-    OPERATOR_USERNAME: "operator",
-    OPERATOR_PASSWORD: "test-operator-password-1234",
-    PHONE_FARM_INTERNAL_TOKEN: ""test-token-placeholder"",
-  });
-}
+import { seedDb, testConfig, TEST_ADMIN_PW } from "./helpers";
 
 describe("createApp — smoke de seguridad", () => {
   let app: Express;
 
   beforeAll(() => {
-    app = createApp(testConfig());
+    app = createApp(testConfig(), { db: seedDb() });
   });
 
   it("la app se construye sin abrir puertos", () => {
@@ -35,7 +24,7 @@ describe("createApp — smoke de seguridad", () => {
   it("login con credenciales válidas → 200, cookie HttpOnly + SameSite=Strict, sin token en body", async () => {
     const res = await request(app)
       .post("/api/auth/login")
-      .send({ username: "admin", password: "test-admin-password-123456" });
+      .send({ username: "admin", password: TEST_ADMIN_PW });
     expect(res.status).toBe(200);
     expect(res.body.user).toMatchObject({ role: "admin" });
     expect(res.body.token).toBeUndefined();
@@ -60,8 +49,9 @@ describe("createApp — smoke de seguridad", () => {
   it("API desconocida con sesión → 404 JSON", async () => {
     const login = await request(app)
       .post("/api/auth/login")
-      .send({ username: "admin", password: "test-admin-password-123456" });
-    const cookie = login.headers["set-cookie"]?.[0]?.split(";")[0] || "";
+      .send({ username: "admin", password: TEST_ADMIN_PW });
+    const headers = login.headers["set-cookie"];
+    const cookie = (Array.isArray(headers) ? headers[0] : String(headers)).split(";")[0];
     const res = await request(app).get("/api/no-existe").set("Cookie", cookie);
     expect(res.status).toBe(404);
     expect(res.body).toHaveProperty("error");

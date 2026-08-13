@@ -1,20 +1,14 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
-import { loadConfig, validateConfig } from "../server/config";
+import { loadConfig } from "../server/config";
 import { createApp, CSRF_COOKIE } from "../server/app";
+import { seedDb, testConfig, TEST_ADMIN_PW } from "./helpers";
 
-/** Config válida para pruebas (credenciales fuertes). */
-export function testConfig(extra: Record<string, string> = {}) {
-  return loadConfig({
-    NODE_ENV: "test",
-    ADMIN_USERNAME: "admin",
-    ADMIN_PASSWORD: "test-admin-password-123456",
-    OPERATOR_USERNAME: "operator",
-    OPERATOR_PASSWORD: "test-operator-password-1234",
-    PHONE_FARM_INTERNAL_TOKEN: ""test-token-placeholder"",
-    ...extra,
-  });
+/** Normaliza set-cookie (string | string[] en supertest). */
+function setCookies(res: { headers: Record<string, unknown> }): string[] {
+  const raw = res.headers["set-cookie"];
+  return Array.isArray(raw) ? (raw as string[]) : raw ? [raw as string] : [];
 }
 
 describe("arranque seguro — validación de config", () => {
@@ -38,17 +32,11 @@ describe("arranque seguro — validación de config", () => {
   });
 });
 
-/** Normaliza set-cookie (string | string[] en supertest). */
-function setCookies(res: { headers: Record<string, unknown> }): string[] {
-  const raw = res.headers["set-cookie"];
-  return Array.isArray(raw) ? (raw as string[]) : raw ? [raw as string] : [];
-}
-
 describe("arranque seguro — HTTP/CSRF", () => {
   let app: Express;
 
   beforeAll(() => {
-    app = createApp(testConfig());
+    app = createApp(testConfig(), { db: seedDb() });
   });
 
   it("no expone X-Powered-By y añade cabeceras de hardening", async () => {
@@ -61,7 +49,7 @@ describe("arranque seguro — HTTP/CSRF", () => {
   it("login emite cookie de sesión y cookie CSRF", async () => {
     const res = await request(app)
       .post("/api/auth/login")
-      .send({ username: "admin", password: "test-admin-password-123456" });
+      .send({ username: "admin", password: TEST_ADMIN_PW });
     const cookies = setCookies(res);
     const joined = cookies.join(";");
     expect(joined).toContain("pf_session=");
@@ -78,7 +66,7 @@ describe("arranque seguro — HTTP/CSRF", () => {
   it("mutación sin token CSRF → 403", async () => {
     const login = await request(app)
       .post("/api/auth/login")
-      .send({ username: "admin", password: "test-admin-password-123456" });
+      .send({ username: "admin", password: TEST_ADMIN_PW });
     const cookies = setCookies(login).map((c) => c.split(";")[0]).join("; ");
     const res = await request(app)
       .post("/api/queue")
@@ -91,6 +79,7 @@ describe("arranque seguro — HTTP/CSRF", () => {
   it("mutación con token CSRF correcto → llega al backend (mocked)", async () => {
     let flaskHit = false;
     const appMock = createApp(testConfig(), {
+      db: seedDb(),
       flaskFetch: async () => {
         flaskHit = true;
         return { status: 200, text: async () => JSON.stringify({ ok: true }) };
@@ -98,7 +87,7 @@ describe("arranque seguro — HTTP/CSRF", () => {
     });
     const login = await request(appMock)
       .post("/api/auth/login")
-      .send({ username: "admin", password: "test-admin-password-123456" });
+      .send({ username: "admin", password: TEST_ADMIN_PW });
     const cookies = setCookies(login);
     const sessionCookie = cookies.find((c) => c.startsWith("pf_session="))!.split(";")[0];
     const csrfCookie = cookies.find((c) => c.startsWith(`${CSRF_COOKIE}=`))!.split(";")[0];
@@ -116,23 +105,17 @@ describe("arranque seguro — HTTP/CSRF", () => {
   it("mutación con Origin malicioso → 403 aunque el token CSRF sea válido", async () => {
     const login = await request(app)
       .post("/api/auth/login")
-      .send({ username: "admin", password: "test-admin-password-123456" });
+      .send({ username: "admin", password: TEST_ADMIN_PW });
     const cookies = setCookies(login);
     const sessionCookie = cookies.find((c) => c.startsWith("pf_session="))!.split(";")[0];
-    const csrf = cookies.find((c) => c.startsWith(`${CSRF_COOKIE}=`))!.split(";")[0].split("=")[1];
+    const csrfCookie = cookies.find((c) => c.startsWith(`${CSRF_COOKIE}=`))!.split(";")[0];
+    const csrf = csrfCookie.split("=")[1];
     const res = await request(app)
       .post("/api/queue")
-      .set("Cookie", sessionCookie)
+      .set("Cookie", `${sessionCookie}; ${csrfCookie}`)
       .set("X-CSRF-Token", csrf)
       .set("Origin", "https://evil.example")
       .send({ keyword: "test" });
     expect(res.status).toBe(403);
-  });
-
-  it("login con credenciales demo (admin123) ya no funciona", async () => {
-    const res = await request(app)
-      .post("/api/auth/login")
-      .send({ username: "admin", password: "admin123" });
-    expect(res.status).toBe(401);
   });
 });

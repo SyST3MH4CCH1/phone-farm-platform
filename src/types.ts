@@ -67,7 +67,8 @@ export interface QueueJob {
   id: string;
   keyword: string;
   target_account: string;
-  status: 'pending' | 'scripting' | 'awaiting_approval' | 'generating' | 'awaiting_preview' | 'publishing' | 'published' | 'failed' | 'rejected' | 'awaiting_manual_upload';
+  status: 'pending' | 'scripting' | 'awaiting_approval' | 'generating' | 'awaiting_preview' | 'ready_for_publish' | 'publishing' | 'published' | 'failed' | 'rejected' | 'awaiting_manual_upload';
+  version?: number;
   video_path: string | null;
   created_at: string;
   progress?: number;

@@ -11,11 +11,16 @@ import { exec, execFile } from "child_process";
 import JSZip from "jszip";
 import { randomBytes } from "crypto";
 import helmet from "helmet";
+import type Database from "better-sqlite3";
 import type { AppConfig } from "./config";
 import { SessionStore, safeEqual, newSessionToken, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, SessionUser } from "./sessions";
+import { verifyPassword } from "./passwords";
+import { LoginRateLimiter } from "./rate-limit";
 
 // --- Dependencias inyectables (tests) ---
 export interface AppDeps {
+  /** BD SQLite compartida con Flask (users/sessions/rate_limits). Obligatoria. */
+  db: Database.Database;
   sessionStore?: SessionStore;
   /** Proxy a Flask: sustituible en tests para no abrir puertos. */
   flaskFetch?: (path: string, init: { method: string; headers: Record<string, string>; body?: string; signal: AbortSignal }) => Promise<{ status: number; text: () => Promise<string> }>;
@@ -32,9 +37,13 @@ export const MAX_LOG_LINES = 64 * 1024;
 
 export const CSRF_COOKIE = "pf_csrf";
 
-export function createApp(config: AppConfig, deps: AppDeps = {}): express.Express {
+export function createApp(config: AppConfig, deps: AppDeps): express.Express {
+  if (!deps.db) {
+    throw new Error("[FATAL] createApp requiere deps.db (BD SQLite compartida)");
+  }
   const app = express();
-  const store = deps.sessionStore ?? new SessionStore();
+  const store = deps.sessionStore ?? new SessionStore(deps.db);
+  const loginLimiter = new LoginRateLimiter(deps.db);
   const hostExec = deps.hostExec ?? ((file: string, args: string[], timeout = 8000) =>
     new Promise<string>((resolve) => {
       execFile(file, args, { timeout }, (err, stdout) => resolve(err ? "" : stdout));
@@ -117,8 +126,11 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
     };
   }
 
-  // Limpieza periódica de sesiones expiradas (cada 10 min).
-  const cleanupTimer = setInterval(() => store.cleanup(), 10 * 60 * 1000);
+  // Limpieza periódica de sesiones y rate limits expirados (cada 10 min).
+  const cleanupTimer = setInterval(() => {
+    store.cleanup();
+    loginLimiter.cleanup();
+  }, 10 * 60 * 1000);
   cleanupTimer.unref();
 
   // --- Proxy a Flask (auth interno entre servicios) ---
@@ -133,16 +145,24 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
     jsonBody?: unknown,
     timeoutMs = 20000,
   ) {
+    // Identidad del actor propagada a Flask (paso 5/6): solo la inyecta el
+    // proxy Express; Flask la acepta únicamente desde loopback con token válido.
+    const user = (_req as any).user as SessionUser | undefined;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Origin: "http://127.0.0.1:3000",
+      "X-Internal-Auth": INTERNAL_TOKEN,
+    };
+    if (user) {
+      headers["X-Actor"] = user.username;
+      headers["X-Role"] = user.role;
+    }
     try {
       const r = await (deps.flaskFetch ?? defaultFlaskFetch)(
         `${config.flaskBase}${flaskPath}`,
         {
           method,
-          headers: {
-            "Content-Type": "application/json",
-            Origin: "http://127.0.0.1:3000",
-            "X-Internal-Auth": INTERNAL_TOKEN,
-          },
+          headers,
           body: jsonBody === undefined ? undefined : JSON.stringify(jsonBody),
           signal: AbortSignal.timeout(timeoutMs),
         }
@@ -160,23 +180,6 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
   }
 
   // --- AUTH (local al panel) ---
-
-  // Rate limiting simple por IP para /api/auth/login (Map con TTL; paso 5 -> SQLite).
-  const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-  function loginRateLimit(req: express.Request, res: express.Response, next: express.NextFunction) {
-    const ip = req.ip || req.socket.remoteAddress || "unknown";
-    const now = Date.now();
-    const entry = loginAttempts.get(ip);
-    if (!entry || entry.resetAt < now) {
-      loginAttempts.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
-      return next();
-    }
-    entry.count += 1;
-    if (entry.count > 10) {
-      return res.status(429).json({ error: "Demasiados intentos. Espera 15 minutos." });
-    }
-    next();
-  }
 
   const cookieAttrs = `HttpOnly; Path=/; SameSite=Strict; ${config.cookieSecure ? "Secure; " : ""}`;
   // Cookie CSRF de doble envío: legible por JS (no HttpOnly) pero SameSite=Strict.
@@ -215,28 +218,38 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
     next();
   }
 
-  app.post("/api/auth/login", loginRateLimit, (req, res) => {
+  // Login contra la tabla users (scrypt) con rate limit persistente por
+  // usuario+IP (5/15min) y por IP (20/15min). Sin credenciales de .env.
+  app.post("/api/auth/login", (req, res) => {
     const { username, password } = req.body || {};
     const u = typeof username === "string" ? username : "";
     const p = typeof password === "string" ? password : "";
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
 
-    let role: "admin" | "operator" | null = null;
-    if (safeEqual(u, config.adminUsername) && safeEqual(p, config.adminPassword)) role = "admin";
-    else if (safeEqual(u, config.operatorUsername) && safeEqual(p, config.operatorPassword)) role = "operator";
+    const limit = loginLimiter.check(u, ip);
+    if (!limit.ok) {
+      return res.status(429).json({ error: `Demasiados intentos. Espera ${limit.retryAfterSeconds}s.` });
+    }
 
-    if (!role) {
+    const userRow = deps.db
+      .prepare("SELECT id, username, role, password_hash FROM users WHERE username = ?")
+      .get(u) as { id: string; username: string; role: "admin" | "operator"; password_hash: string } | undefined;
+
+    if (!userRow || !verifyPassword(p, userRow.password_hash)) {
+      loginLimiter.recordFailure(u, ip);
       return res.status(401).json({ error: "Credenciales inválidas." });
     }
+    loginLimiter.recordSuccess(u, ip);
 
     const token = newSessionToken();
     const user: SessionUser = {
-      id: `usr_${randomBytes(4).toString("hex")}`,
-      username: u,
-      role,
-      email: `${u}@phonefarm.local`,
+      id: userRow.id,
+      username: userRow.username,
+      role: userRow.role,
+      email: `${userRow.username}@phonefarm.local`,
       expiresAt: Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
     };
-    store.set(token, user); // no pisar otras sesiones: un token por login
+    store.set(token, user); // un token por login; persistido en SQLite
     res.setHeader("Set-Cookie", [
       `${SESSION_COOKIE}=${token}; ${cookieAttrs}Max-Age=${SESSION_MAX_AGE_SECONDS}`,
       `${CSRF_COOKIE}=${randomBytes(18).toString("hex")}; ${csrfCookieAttrs}Max-Age=${SESSION_MAX_AGE_SECONDS}`,
@@ -359,9 +372,9 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
   app.post("/api/accounts", requireRole("admin"), (req, res) => flask(req, res, "POST", "/api/accounts", req.body));
   app.delete("/api/accounts/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/accounts/${req.params.id}`));
 
-  // Engagement bots (real -> inicia/detiene taktik-bot en Flask)
-  app.post("/engagement/start", (req, res) => flask(req, res, "POST", "/engagement/start", req.body));
-  app.post("/engagement/stop", (req, res) => flask(req, res, "POST", "/engagement/stop", req.body));
+  // Engagement bots (real -> inicia/detiene taktik-bot en Flask) — SOLO admin
+  app.post("/engagement/start", requireRole("admin"), (req, res) => flask(req, res, "POST", "/engagement/start", req.body));
+  app.post("/engagement/stop", requireRole("admin"), (req, res) => flask(req, res, "POST", "/engagement/stop", req.body));
 
   // 3. Proxies (admin para mutaciones)
   app.get("/api/proxies", (req, res) => flask(req, res, "GET", "/api/proxies"));
@@ -370,14 +383,17 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
   app.post("/api/proxies/verify", (req, res) => flask(req, res, "POST", "/api/proxies/verify", req.body));
 
   // 4. Queue (cola real de Flask)
+  // RBAC (paso 5): operator consulta/crea borradores y marca "listo";
+  // admin aprueba, publica, programa, rechaza y elimina.
   app.get("/api/queue", (req, res) => flask(req, res, "GET", "/api/queue"));
   app.post("/api/queue", (req, res) => flask(req, res, "POST", "/api/queue", req.body));
   app.post("/api/queue/next", (req, res) => flask(req, res, "POST", "/api/queue/next", req.body));
   app.get("/api/drafts", (req, res) => flask(req, res, "GET", "/api/drafts"));
-  app.post("/api/queue/:id/approve", (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/approve`, req.body));
-  app.post("/api/queue/:id/publish", (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/publish`, req.body));
-  app.post("/api/queue/:id/reject", (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/reject`, req.body));
-  app.post("/api/queue/:id/schedule", (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/schedule`, req.body));
+  app.post("/api/queue/:id/ready", (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/ready`, req.body));
+  app.post("/api/queue/:id/approve", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/approve`, req.body));
+  app.post("/api/queue/:id/publish", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/publish`, req.body));
+  app.post("/api/queue/:id/reject", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/reject`, req.body));
+  app.post("/api/queue/:id/schedule", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/schedule`, req.body));
   app.delete("/api/queue/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/queue/${req.params.id}`));
 
   // MP4 generados: el proxy genérico a Flask NO sirve binarios (parsea a JSON),
@@ -394,13 +410,14 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
     res.sendFile(full);
   });
 
-  // Login de Instagram (único, crea sessions/<id>.json)
-  app.post("/api/accounts/:id/instagram/login", (req, res) =>
+  // Login de Instagram (único; SOLO admin — paso 5). La identidad de la cuenta
+  // viene de :id; Flask ignora el username del cliente (paso 8).
+  app.post("/api/accounts/:id/instagram/login", requireRole("admin"), (req, res) =>
     flask(req, res, "POST", `/api/accounts/${req.params.id}/instagram/login`, req.body));
 
   // Credenciales del proxy: Flask no implementa /api/proxies/credentials.
   // Redirigimos a /api/proxies/verify, que sí persiste y verifica.
-  app.post("/api/proxies/credentials", (req, res) =>
+  app.post("/api/proxies/credentials", requireRole("admin"), (req, res) =>
     flask(req, res, "POST", "/api/proxies/verify", req.body));
   app.post("/api/queue/from-preview", (req, res) => flask(req, res, "POST", "/api/queue/from-preview", req.body));
   app.post("/api/content/preview", (req, res) => flask(req, res, "POST", "/api/content/preview", req.body));
@@ -482,9 +499,10 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
     res.json({ success: true, saved: changed, note: "Reinicia el stack para aplicar (.env se lee en arranque)." });
   });
 
-  // Generar reel = crear job real en Flask. (Paso 5: sin auto_approve.)
-  app.post("/api/moneyprinter/generate", (req, res) => {
-    const body = { ...(req.body || {}), auto_approve: true };
+  // Generar reel = crear job real en Flask (solo admin). Sin auto_approve:
+  // el job pasa SIEMPRE por aprobación humana (paso 5).
+  app.post("/api/moneyprinter/generate", requireRole("admin"), (req, res) => {
+    const { auto_approve: _removed, ...body } = req.body || {};
     return flask(req, res, "POST", "/api/queue", body);
   });
 
@@ -544,8 +562,8 @@ export function createApp(config: AppConfig, deps: AppDeps = {}): express.Expres
     }
   });
 
-  // Crear cuenta desde dispositivo ADB autorizado
-  app.post("/api/accounts/from-device", (req, res) => flask(req, res, "POST", "/api/accounts/from-device", req.body));
+  // Crear cuenta desde dispositivo ADB autorizado (solo admin)
+  app.post("/api/accounts/from-device", requireRole("admin"), (req, res) => flask(req, res, "POST", "/api/accounts/from-device", req.body));
 
   // (Paso 9: sin host/puerto del cliente; usa config.adbHost/config.adbPort.)
   app.post("/api/adb/test-connection", async (req, res) => {
