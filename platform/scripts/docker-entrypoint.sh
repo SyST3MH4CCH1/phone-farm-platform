@@ -1,16 +1,10 @@
 #!/usr/bin/env bash
-# Entrypoint del contenedor platform: prepara datos y arranca Flask + MCP.
+# Entrypoint del contenedor platform: prepara directorios y arranca Flask + MCP.
+# Paso 13: no se siembran JSON en claro (el almacén es SQLite cifrado; la
+# migración de legado se hace con python -m phonefarm.migrate --commit).
 set -e
 
-mkdir -p /app/data/sessions /app/data/videos /app/data/logs
-
-# Semillas de datos si el volumen está vacío
-for f in accounts.json proxies.json queue.json content_profiles.json; do
-  if [ ! -f "/app/data/$f" ]; then
-    cp "/app/$f" "/app/data/$f" 2>/dev/null || true
-    echo "[entrypoint] Semilla creada: /app/data/$f"
-  fi
-done
+mkdir -p /app/data/sessions /app/data/videos /app/data/logs /app/data/backups /app/tmp
 
 # Generar config segura de MoneyPrinterTurbo si no existe
 if [ ! -f /app/mpt-config.toml ]; then

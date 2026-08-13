@@ -39,6 +39,23 @@ foreach ($repo in @(
     } else {
         Write-Host "  $($repo.Name) ya clonado."
     }
+    # Paso 8/13: fijar el commit del lock de terceros (docs/THIRD-PARTY-LOCK.md)
+    if ($repo.Name -eq "MoneyPrinterTurbo") {
+        git -C $dest checkout 254cd02 2>$null
+        Write-Host "  MPT fijado a 254cd02 (third_party.lock)." -ForegroundColor DarkGreen
+    } elseif ($repo.Name -eq "taktik-bot") {
+        git -C $dest checkout c2b7489 2>$null
+        Write-Host "  taktik-bot fijado a c2b7489 (third_party.lock)." -ForegroundColor DarkGreen
+    }
+}
+
+# Paso 8: aplicar el parche de endurecimiento de MPT (idempotente)
+Push-Location $RepoPlatform
+try {
+    python scriptspply-mpt-patch.py --check 2>$null
+    if ($LASTEXITCODE -ne 0) { python scriptspply-mpt-patch.py }
+} finally {
+    Pop-Location
 }
 
 # 3. .env y config MPT
