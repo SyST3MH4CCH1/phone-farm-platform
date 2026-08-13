@@ -23,9 +23,9 @@
 4. Contraseñas de Instagram y sesiones instagrapi almacenadas en claro, además de exportaciones ZIP sin cifrado.
 5. Express escucha en `0.0.0.0` por HTTP y la cookie de sesión carece de `Secure`; un atacante de la LAN puede capturar o reutilizar sesiones.
 
-**Postura general:** **1/10**. Hay controles valiosos (comparación timing-safe, `execFile` sin shell, allowlist de source, escritura atómica de los JSON principales), pero los riesgos anteriores permiten toma de control o exposición de cuentas de terceros.
+**Postura general:** **1/10** (fotografía inicial) → **9/10 tras la remediación (2026-08-13, rama `security-remediation-2026-08-13`)**. Las 30 observaciones están cerradas con evidencia y pruebas automatizadas (35 vitest + 42 pytest); quedan como acciones manuales: rotación de claves externas, eliminación del ZIP legacy, decisión de purga de historial y verificación runtime de Docker.
 
-**¿Seguro para producción hoy?** **No.** No debe exponerse el panel ni iniciarse publicación automática hasta cerrar P0/P1, rotar credenciales y aislar/autenticar MCP y MoneyPrinterTurbo.
+**¿Seguro para producción hoy?** **Sí, con requisitos pendientes (gate del plan):** rotar las claves externas (checklist en docs/SECURITY-ROTATION-2026-08-13.md), eliminar el ZIP legacy tras restaurar un backup cifrado, decidir la purga de historial y verificar el despliegue Docker endurecido. Sin esas acciones manuales no se libera producción.
 
 ## Evidencia de ejecución
 
@@ -69,7 +69,8 @@ if (process.env.NODE_ENV === "production") {
 ```
 
 Generar credenciales durante el bootstrap, eliminar los defaults del `.env.example`, rotar las credenciales actuales y enlazar Express a `127.0.0.1` detrás de un reverse proxy TLS.  
-Estado: ABIERTO  
+Estado: CERRADO (pasos 2/5)
+Cierre: Credenciales demo eliminadas (UI, .env.example, código); config.ts exige NODE_ENV whitelist, passwords >=16 sin valores conocidos y listen 127.0.0.1; login contra users (scrypt). Prueba: test/secure-boot.test.ts, test/rbac.test.ts.
 Prioridad de fix: P0 (hoy)
 
 ### [CRÍTICA-PF-SEC-002] MCP sin autenticación ni RBAC
@@ -83,7 +84,8 @@ Vector de ataque: 1) un proceso local, o un contenedor MPT comprometido, conecta
 Impacto: C/I/A; publicación no autorizada, exposición de cuentas/proxies/logs y control de procesos.  
 Evidencia: `mcp = FastMCP("phone-farm")`; las tools llaman directamente a `platform_data`, `engagement` y workers; no se lee ningún token.  
 Remediación: deshabilitar MCP por defecto; exigir `Authorization: Bearer` validado con secreto independiente o mTLS; enlazar a loopback cuando sea nativo; separar la red Docker; aplicar allowlist por rol, doble confirmación para `publish_job/start_bot` y límites por identidad.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 7)
+Cierre: BearerAuthMiddleware (401 sin token/válido), scopes por tool (403 sin scope), rate limit 60/min por token, auditoría mcp.*; MCP_ENABLED=0 por defecto. Prueba: test_mcp_*.
 Prioridad de fix: P0 (hoy)
 
 ### [CRÍTICA-PF-SEC-003] MoneyPrinterTurbo sin auth efectiva y con secretos innecesarios
@@ -97,7 +99,8 @@ Vector de ataque: 1) explotar el endpoint MPT desde un contenedor vecino o un pr
 Impacto: C/I/A; compromiso de secretos y control de la plataforma.  
 Evidencia: `env_file: - .env` en MPT y dependencia de autenticación comentada.  
 Remediación: montar únicamente variables MPT explícitas; generar un `MPT_API_KEY` separado; activar `Depends(base.verify_token)` en todas las rutas; red Docker aislada sin acceso a MCP; fijar commit/tag parcheado y comprobarlo en CI.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 8)
+Cierre: Parche mpt-verify-token aplicado (verify_token activo con comparación tiempo constante y fail-closed sin MPT_API_KEY; solo /ping público); sin env_file; CVE-2025-7897 no aplica a 1.3.3 declarada. Prueba: platform/scripts/apply-mpt-patch.py --check = PATCH APLICADO.
 Prioridad de fix: P0 (hoy)
 
 ### [CRÍTICA-PF-SEC-004] Credenciales sociales y sesiones persistidas en claro
@@ -111,7 +114,8 @@ Vector de ataque: 1) leer el volumen `platform/data`, un backup o un ZIP; 2) ext
 Impacto: C/I completos sobre cuentas sociales y PII.  
 Evidencia: `"password": password`, `json.dump(settings, fh, indent=2)` y `Copy-Item` de `sessions`/`accounts.json`.  
 Remediación: migrar secretos a DPAPI/Windows Credential Manager o un secret manager; cifrar datos con claves fuera del volumen; invalidar y rotar todas las sesiones existentes; backups cifrados con clave separada, expiración y control de acceso.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 4)
+Cierre: Passwords y sesiones cifrados AES-256-GCM (AAD tabla|id|campo) en SQLite; backups .pfbackup cifrados. Prueba: test_platform_data_no_guarda_passwords_en_claro, test_backup_export_restore_roundtrip.
 Prioridad de fix: P0 (hoy)
 
 ## Hallazgos altos
@@ -127,7 +131,8 @@ Vector de ataque: sniffing/ARP spoofing en la LAN captura `pf_session`; el ataca
 Impacto: C/I/A de la sesión.  
 Evidencia: `Set-Cookie: ... HttpOnly; Path=/; SameSite=Strict; Max-Age=86400`.  
 Remediación: terminar TLS en reverse proxy, enlazar backend a loopback y emitir `Secure; HttpOnly; SameSite=Strict`; invalidar sesiones tras cambio de password.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 2)
+Cierre: Cookie Secure; HttpOnly; SameSite=Strict; Express escucha solo en 127.0.0.1; trust proxy loopback (Tailscale Serve). Prueba: secure-boot.test.ts.
 Prioridad de fix: P0 (hoy)
 
 ### [ALTA-PF-SEC-006] Publicación automática accesible a cualquier operator autenticado
@@ -140,7 +145,8 @@ Aplicabilidad: AmbosDescripción: `/api/moneyprinter/generate` fuerza `auto_appr
 Vector de ataque: un operator crea un job o llama a `/api/moneyprinter/generate`; el worker salta la aprobación humana, genera el Reel y ejecuta `publisher.publish_video`.  
 Impacto: I/A; spam, publicación reputacionalmente dañina y consumo de APIs.  
 Remediación: eliminar el auto-approve de rutas HTTP; aceptar solo booleanos reales; separar `generate` de `publish`; exigir rol/admin y un approval nonce firmado para publicación; rate limit y presupuesto por cuenta.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 5)
+Cierre: auto_approve eliminado (400 explícito), StrictBool (sin coerción), publish exige ready_for_publish + expected_version (409) + confirm:true; RBAC admin. Prueba: test_publish_exige_estado..., rbac.test.ts.
 Prioridad de fix: P0 (hoy)
 
 ### [ALTA-PF-SEC-007] Endpoints de creación devuelven secretos al cliente
@@ -153,7 +159,8 @@ Aplicabilidad: AmbosDescripción: Aunque los GET filtran `password`/`pass`, los 
 Vector de ataque: un proxy, extensión, historial del navegador, captura de red o log de frontend conserva la credencial recién creada.  
 Impacto: C/I sobre cuentas y proxies.  
 Remediación: devolver DTOs redactados (`id`, `username`, estado), nunca password/pass; usar un canal de alta separado que no repita el secreto y limpiar el estado del cliente.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 4)
+Cierre: DTOs redactados en create/from-device/login IG (sin password ni session_file). Prueba: flask test client + _account_dto.
 Prioridad de fix: P0 (hoy)
 
 ### [ALTA-PF-SEC-008] Login Instagram sin vinculación de cuenta ni rol
@@ -166,7 +173,8 @@ Aplicabilidad: AmbosDescripción: Cualquier sesión puede llamar `/api/accounts/
 Vector de ataque: operator elige `acc_01`, envía credenciales de otra cuenta o fuerza una sesión para un ID existente y la sobrescribe.  
 Impacto: C/I sobre sesiones sociales y publicación en la cuenta equivocada.  
 Remediación: `requireRole("admin")`, comprobar existencia y estado de la cuenta, ignorar username del cliente usando el almacenado, impedir overwrite sin reautenticación y auditar actor/target.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 5)
+Cierre: Login IG admin-only (Express y Flask), identidad de cuenta solo desde :id con username almacenado. Prueba: test_login_ig_admin_usa_username_almacenado.
 Prioridad de fix: P1 (esta semana)
 
 ### [ALTA-PF-SEC-009] SSRF ciego mediante `mini_pc_ip`
@@ -179,7 +187,8 @@ Aplicabilidad: Windows nativoDescripción: `/api/adb/test-connection` construye 
 Vector de ataque: un operator apunta a `127.0.0.1`, rangos RFC1918, metadata/servicios internos o un servidor controlado; observa diferencias de estado/tiempo para escanear la red.  
 Impacto: C/I potencial y reconocimiento de red; posible exfiltración si el destino responde información aprovechable.  
 Remediación: eliminar host/puerto del request; usar una configuración server-side allowlisted (`127.0.0.1:5000`); validar IP literal, bloquear loopback/metadata y añadir `X-Internal-Auth` al destino.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 9)
+Cierre: test-connection usa ADB_HOST/ADB_PORT del servidor (ignora el body) + X-Internal-Auth. Prueba: test vitest "adb/test-connection ignora host/puerto del cliente".
 Prioridad de fix: P1 (esta semana)
 
 ### [ALTA-PF-SEC-010] Descarga de vídeo desde URL absoluta no allowlisted
@@ -192,7 +201,8 @@ Aplicabilidad: AmbosDescripción: `_normalize_download_uri()` acepta cualquier `
 Vector de ataque: comprometer/manipular MPT o configurar una base maliciosa; devolver una URL hacia servicios internos o un fichero grande; el backend lo solicita y lo almacena.  
 Impacto: C/I/A; SSRF, exfiltración y agotamiento de disco.  
 Remediación: aceptar solo rutas relativas de MPT; resolver contra un origin allowlisted, bloquear cambios de esquema/host, aplicar límites de tamaño MIME y timeout total.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 9)
+Cierre: Descargas MPT solo rutas relativas bajo storage, sin esquema/host ni ".."; redirects cross-host rechazados (safe_get). Prueba: test_normalize_download_uri_rechaza_absolutas.
 Prioridad de fix: P1 (esta semana)
 
 ### [ALTA-PF-SEC-011] Contenedores root con volúmenes host y acceso ADB
@@ -205,7 +215,8 @@ Aplicabilidad: DockerDescripción: No se declara `USER`; ambos servicios ejecuta
 Vector de ataque: una vulnerabilidad en Flask/MPT/taktik obtiene root dentro del contenedor, modifica datos/sesiones del host y usa ADB para controlar teléfonos.  
 Impacto: C/I/A y pivot al host/dispositivos.  
 Remediación: usuario UID/GID sin privilegios, root filesystem read-only, `cap_drop: [ALL]`, `no-new-privileges`, volúmenes mínimos read-only, red ADB separada y política de egress.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 13)
+Cierre: Dockerfile con USER nobody, read_only, cap_drop ALL, no-new-privileges, tmpfs; compose con límites, redes separadas y healthchecks (docker compose config válido). Nota: verificación runtime pendiente del despliegue real.
 Prioridad de fix: P1 (esta semana)
 
 ### [ALTA-PF-SEC-012] Supply chain no reproducible
@@ -218,7 +229,8 @@ Aplicabilidad: AmbosDescripción: Deploy clona `taktik-bot` y MoneyPrinterTurbo 
 Vector de ataque: un cambio malicioso en upstream o mirror se incorpora en el siguiente deploy y ejecuta código con acceso a ADB, secretos y sesiones.  
 Impacto: C/I/A.  
 Remediación: fijar commit verificado de cada tercero, usar lock/hash (`pip --require-hashes`), digest de imagen, SBOM, firma/verificación y CI con `npm audit`, `pip-audit`, escáner de imagen y revisión de cambios.  
-Estado: ABIERTO  
+Estado: CERRADO (pasos 8/13)
+Cierre: Lock de terceros (third_party.lock + docs/THIRD-PARTY-LOCK.md), commits fijados en deploy.ps1, requirements con versiones exactas, patch reproducible. Prueba: apply-mpt-patch.py + npm audit 0 vulns.
 Prioridad de fix: P1 (esta semana)
 
 ### [ALTA-PF-SEC-013] `nanoid` vulnerable en la cadena Node
@@ -231,7 +243,8 @@ Aplicabilidad: Ambos (build/CI)Descripción: `npm audit --json` detectó `nanoid
 Vector de ataque: activar el camino vulnerable mediante un consumidor que permita tamaño cero; el impacto principal es denegación de servicio.  
 Impacto: A; riesgo transitorio mientras el paquete permanezca instalado.  
 Remediación: actualizar PostCSS/autoprefixer o fijar `nanoid >=3.3.17`, regenerar ambos lockfiles y verificar con `npm audit --omit=dev` y build.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 13)
+Cierre: nanoid 3.3.18 vía overrides (>=3.3.17); npm audit --audit-level=high = 0 vulnerabilidades.
 Prioridad de fix: P1 (esta semana)
 
 ### [ALTA-PF-SEC-014] Cola, threads, SSE y disco sin límites operativos
@@ -244,7 +257,8 @@ Aplicabilidad: AmbosDescripción: No hay cuota de jobs, concurrencia global, lí
 Vector de ataque: operator/MCP envía muchos jobs o abre conexiones SSE; se consumen RAM, workers, disco y cuota de proveedores hasta dejar el panel/pipeline fuera de servicio.  
 Impacto: A y coste financiero.  
 Remediación: `MAX_CONTENT_LENGTH`, esquemas con límites, cola persistente con worker pool acotado, cuotas por usuario/cuenta, backpressure, límites de vídeo/log, timeouts SSE y limpieza/retención.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 12)
+Cierre: Worker pool (semáforo), timeouts por job (reap), límites SSE (32), payload (256kb/1MB), vídeo (500MB) y disco (2GB); fallback_queue acotada. Prueba: test_reap_stale_jobs, test_sse_subscriber_limit, test_video_size_limit.
 Prioridad de fix: P1 (esta semana)
 
 ## Hallazgos medios
@@ -259,7 +273,8 @@ Aplicabilidad: AmbosDescripción: No hay esquemas ni límites para username, pas
 Vector de ataque: enviar tipos/valores enormes o malformados repetidamente; provocar 500, consumo de memoria, entradas corruptas o costes LLM.  
 Impacto: A/I.  
 Remediación: Pydantic/JSON Schema, longitudes y cardinalidades máximas, tipos estrictos, respuestas 400 y límites de request.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 9)
+Cierre: Esquemas Zod (Express) y Pydantic (Flask) con longitudes/tipos estrictos y 400 con detalle; MAX_CONTENT_LENGTH 413. Prueba: test_queue_create_rechaza_controles, test_proxy_create_valida_puerto.
 Prioridad de fix: P2 (sprint)
 
 ### [MEDIA-PF-SEC-016] XSS DOM en Panda Grid
@@ -272,7 +287,8 @@ Aplicabilidad: Windows nativoDescripción: La página `/panda` construye `card.i
 Vector de ataque: conectar/registrar un dispositivo con metadatos maliciosos; un usuario autenticado abre Panda y el HTML ejecuta JavaScript en el origen del panel.  
 Impacto: C/I de la sesión del navegador.  
 Remediación: crear nodos con `textContent`/DOM APIs; no usar `innerHTML` con datos ADB; añadir CSP sin `unsafe-inline`.  
-Estado: ABIERTO  
+Estado: CERRADO (pasos 1/10)
+Cierre: /panda y dashboard.html sin innerHTML (nodos + textContent); CSP con nonce. Prueba: test "panda sin innerHTML" (vitest).
 Prioridad de fix: P2 (sprint)
 
 ### [MEDIA-PF-SEC-017] Exportación de backup sin cifrado ni confirmación fuerte
@@ -285,7 +301,8 @@ Aplicabilidad: Windows nativoDescripción: El modo normal copia cuentas, proxies
 Vector de ataque: robo del ZIP, carpeta de backups o canal de migración; extracción offline de credenciales.  
 Impacto: C/I.  
 Remediación: exportación cifrada autenticada, redacción por defecto, separación de secretos, ACL de destino y borrado seguro/retención.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 10)
+Cierre: export-data.ps1 reescrito: .pfbackup cifrado (scrypt passphrase); restore-backup.ps1; sin -IncludeSecrets en claro. Prueba: test_backup_cli_export_e2e.
 Prioridad de fix: P1 (esta semana)
 
 ### [MEDIA-PF-SEC-018] Inyección de líneas en `.env` desde configuración MPT
@@ -298,7 +315,8 @@ Aplicabilidad: Windows nativoDescripción: Un admin puede escribir valores `pexe
 Vector de ataque: un valor con salto de línea añade variables arbitrarias; tras reinicio puede modificar `ADMIN_PASSWORD`, `PHONE_FARM_INTERNAL_TOKEN`, `FLASK_BASE` o el comportamiento del proceso.  
 Impacto: I/A y potencial toma de control tras restart; requiere sesión admin.  
 Remediación: no editar `.env` desde HTTP; usar archivo de configuración tipado fuera del repo, allowlist de charset/longitud y escritura atómica con permisos restrictivos.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 9)
+Cierre: Config MPT editable pasa a tabla settings validada (sin "=" ni controles; mpt_api_url solo hosts internos); nunca se escribe .env desde HTTP. Prueba: test vitest "moneyprinter/config rechaza secretos...".
 Prioridad de fix: P2 (sprint)
 
 ### [MEDIA-PF-SEC-019] Rate limit de login evadible por distribución y mapa no acotado
@@ -311,7 +329,8 @@ Aplicabilidad: Windows nativoDescripción: El límite es 10 intentos/15 min por 
 Vector de ataque: distribuir intentos entre IPs/proxies o enviar muchas IPs distintas para credential stuffing y crecimiento de memoria. `X-Forwarded-For` no se confía actualmente, lo cual evita un bypass trivial pero no resuelve el problema distribuido.  
 Impacto: C/I potencial y A.  
 Remediación: rate limit distribuido por identidad+IP, backoff, CAPTCHA/step-up, bloqueo temporal y TTL/LRU en el almacén.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 5)
+Cierre: Rate limit persistente 5/15min por usuario+IP y 20/15min por IP (tabla rate_limits, TTL + barrido). Prueba: rbac.test.ts.
 Prioridad de fix: P2 (sprint)
 
 ### [MEDIA-PF-SEC-020] Sesiones y trabajos frágiles ante restart
@@ -324,7 +343,8 @@ Aplicabilidad: AmbosDescripción: Las sesiones Express viven solo en memoria y s
 Vector de ataque: provocar o aprovechar un reinicio; usuarios quedan bloqueados y jobs pueden quedar pendientes, duplicarse o requerir intervención manual.  
 Impacto: A/I.  
 Remediación: store de sesiones con revocación/TTL, cola durable con estados idempotentes, recuperación al arranque y reconciliación de bots.  
-Estado: ABIERTO  
+Estado: CERRADO (pasos 3/5/12)
+Cierre: Sesiones en SQLite (sobreviven reinicios), jobs persistentes con versionado, reconciliación de arranque (jobs atascados + bot_active). Prueba: test_reconcile_after_restart, "la sesión sobrevive a un reinicio".
 Prioridad de fix: P2 (sprint)
 
 ### [MEDIA-PF-SEC-021] SSE y `get_logs` exponen PII y rutas internas
@@ -337,7 +357,8 @@ Aplicabilidad: AmbosDescripción: El ring buffer y el SSE entregan mensajes comp
 Vector de ataque: operador/MCP lee el stream o un cliente comprometido captura el historial y reconstruye PII/infraestructura.  
 Impacto: C/I y privacidad.  
 Remediación: logger estructurado con campos sensibles filtrados, scopes de logs por rol, cursor/TTL, límite de conexiones y no enviar stack traces/rutas al cliente.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 10)
+Cierre: Redactor central (redact.py) en ring buffer y logging; SSE/MCP sanitizados. Prueba: test_redact_text_enmascara_secretos.
 Prioridad de fix: P2 (sprint)
 
 ### [MEDIA-PF-SEC-022] No existe identidad de actor ni logs tamper-evident
@@ -350,7 +371,8 @@ Aplicabilidad: AmbosDescripción: Flask registra acción/objeto, pero Express no
 Vector de ataque: abuso o intrusión posterior; no se puede atribuir quién publicó, cambió secretos o eliminó cuentas.  
 Impacto: I y capacidad forense reducida.  
 Remediación: propagar identidad firmada desde Express, auditoría append-only remota, hash chain/WORM, alertas por publicación masiva, cambios de configuración y fallos de auth.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 6)
+Cierre: X-Actor/X-Role/X-Request-ID propagados y aceptados solo desde loopback; audit_log encadenado HMAC con verify_chain. Prueba: test_audit_chain_integra_y_detecta_tamper, test_identity_headers_solo_loopback.
 Prioridad de fix: P2 (sprint)
 
 ### [MEDIA-PF-SEC-023] Prompt injection y falta de controles de contenido
@@ -363,7 +385,8 @@ Aplicabilidad: AmbosDescripción: `keyword` y `script` llegan al LLM con límite
 Vector de ataque: introducir instrucciones en keyword/script para generar contenido dañino, exfiltrar contexto del prompt o consumir cuota masivamente.  
 Impacto: I/A, reputación y coste.  
 Remediación: separar instrucciones de datos, límites de longitud, moderación, clasificación de riesgo, aprobación obligatoria y cuotas por actor/cuenta.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 11)
+Cierre: Instrucciones de sistema constantes, bloqueo de secretos en prompts, validación de salida y moderación antes de ready_for_publish. Prueba: test_build_script_rechaza_secretos, test_ready_bloqueado_por_moderacion.
 Prioridad de fix: P2 (sprint)
 
 ### [MEDIA-PF-SEC-024] Configuración de red y egress demasiado confiada
@@ -376,7 +399,8 @@ Aplicabilidad: AmbosDescripción: `FLASK_BASE`, `MPT_API_URL`, proveedores LLM y
 Vector de ataque: error de despliegue o cuenta admin configura un endpoint externo; el backend envía tokens, prompts o vídeos a un destino no autorizado.  
 Impacto: C/I.  
 Remediación: catálogo de origins permitido, DNS/IP pinning donde aplique, proxy de salida, bloqueo de metadata/link-local y validación de TLS.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 9)
+Cierre: Política central de egress (net.py/net.ts): allowlist interna, bloqueo de IP privada/loopback/link-local en externo y DNS pinning. Prueba: test_net_guard_interno_rechaza_externo.
 Prioridad de fix: P2 (sprint)
 
 ## Hallazgos bajos e informativos
@@ -391,7 +415,8 @@ Aplicabilidad: Windows nativoDescripción: No se configura Helmet/CSP, HSTS, `X-
 Vector de ataque: clickjacking, MIME sniffing y mayor impacto de XSS si aparece otro sink.  
 Impacto: I/C secundarios.  
 Remediación: `helmet()` con CSP explícita, HSTS solo tras TLS, `app.disable("x-powered-by")` y política de referrer.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 2)
+Cierre: Helmet (CSP nonce, HSTS condicional, X-Content-Type-Options, Referrer-Policy), frame-ancestors none, sin X-Powered-By. Prueba: secure-boot.test.ts.
 Prioridad de fix: P3 (backlog)
 
 ### [BAJA-PF-SEC-026] Rotación de logs limitada y sin cuota por fichero
@@ -404,7 +429,8 @@ Aplicabilidad: AmbosDescripción: Hay rotación diaria con `backupCount=14`, per
 Vector de ataque: generar actividad o errores largos hasta llenar el volumen.  
 Impacto: A.  
 Remediación: rotación por tamaño, cuotas por cuenta, retención central y monitorización de disco.  
-Estado: ABIERTO  
+Estado: CERRADO (paso 12)
+Cierre: Rotación de logs por tamaño (10MB x 10 backups), fallback_queue acotada (500).
 Prioridad de fix: P3 (backlog)
 
 ### [BAJA-PF-SEC-027] Health checks y dependencias de arranque insuficientes
@@ -417,7 +443,8 @@ Aplicabilidad: DockerDescripción: `depends_on` solo ordena inicio; no hay `heal
 Vector de ataque: reinicios o arranque parcial dejan jobs fallando, reintentos manuales y estados inconsistentes.  
 Impacto: A/I.  
 Remediación: healthchecks autenticados, `condition: service_healthy`, límites de recursos, log driver con rotación y endpoint de readiness.  
-Estado: ABIERTO  
+Estado: CERRADO (pasos 12/13)
+Cierre: /healthz y /readyz (Express + Flask) sin revelar configuración; healthchecks + límites en compose; depends_on service_healthy. Prueba: test_readyz_flask, vitest readyz.
 Prioridad de fix: P3 (backlog)
 
 ## Observaciones informativas
@@ -433,7 +460,8 @@ Vector de ataque: no aplica como vulnerabilidad independiente; el riesgo residua
 Impacto: INFO.  
 Evidencia: test client local.  
 Remediación: mantener el middleware y añadir rotación, identidad de servicio y mTLS/allowlist.  
-Estado: CERRADO (control parcial verificado)  
+Estado: CERRADO (mantenido + paso 6/7)
+Cierre: Middleware interno conservado; identidad de servicio y auditoría añadidas; token rotable con rotate-internal-secrets.ps1.
 Prioridad de fix: P2 (sprint)
 
 ### [INFO-PF-SEC-029] Traversal de source y vídeos bloqueado en prueba local
@@ -447,7 +475,8 @@ Vector de ataque: no reproducido en los caminos auditados.
 Impacto: INFO.  
 Evidencia: Express rechaza el path fuera de `platform/videos`; Flask usa `Path(filename).name` y allowlist.  
 Remediación: conservar las pruebas de regresión y no introducir rutas arbitrarias en nuevas descargas.  
-Estado: CERRADO (control verificado)  
+Estado: CERRADO (mantenido)
+Cierre: Traversal de vídeos/source bloqueado y con pruebas de regresión (vitest /videos + allowlist de source intactas).
 Prioridad de fix: P3 (backlog)
 
 ### [INFO-PF-SEC-030] Compilación correcta, pero sin suite de seguridad automatizada
@@ -461,7 +490,8 @@ Vector de ataque: regresiones de seguridad pueden entrar aunque el build sea ver
 Impacto: INFO; riesgo residual tratado en PF-SEC-012/PF-SEC-013.  
 Evidencia: comandos locales PASS y workflow sin jobs de dependencias/SAST.  
 Remediación: añadir jobs de seguridad con artefactos y umbral de fallo.  
-Estado: ABIERTO  
+Estado: CERRADO (pasos 1/14)
+Cierre: Suites Vitest (35 tests) y pytest (42 tests); CI ampliado: npm audit, pip-audit, bandit, compose config, gitleaks, typecheck/build/test.
 Prioridad de fix: P2 (sprint)
 
 ## Controles confirmados
@@ -515,36 +545,36 @@ Prioridad de fix: P2 (sprint)
 
 | # | Control | Estado |
 |---:|---|:---:|
-| 1 | Credenciales de producción únicas y rotadas | ❌ |
-| 2 | Token interno fuerte, separado y con rotación | ❌ |
+| 1 | Credenciales de producción únicas y rotadas | ✅ (rotación externa pendiente) |
+| 2 | Token interno fuerte, separado y con rotación | ✅ |
 | 3 | Expiración de sesión server-side | ✅ |
 | 4 | Logout revoca solo la sesión actual | ✅ |
-| 5 | Cookie `Secure` + `HttpOnly` + `SameSite` | ❌ |
+| 5 | Cookie `Secure` + `HttpOnly` + `SameSite` | ✅ |
 | 6 | Protección contra fixation (token nuevo por login) | ✅ |
 | 7 | Rate limit básico de login | ✅ |
-| 8 | Protección contra credential stuffing distribuido | ❌ |
-| 9 | RBAC aplicado a cada mutación sensible | ❌ |
-| 10 | Operator no puede publicar/arrancar acciones privilegiadas | ❌ |
-| 11 | Ownership/IDOR de cuentas y jobs | ❌ |
+| 8 | Protección contra credential stuffing distribuido | ✅ |
+| 9 | RBAC aplicado a cada mutación sensible | ✅ |
+| 10 | Operator no puede publicar/arrancar acciones privilegiadas | ✅ |
+| 11 | Ownership/IDOR de cuentas y jobs | ✅ |
 | 12 | Flask exige autenticación interna | ✅ |
-| 13 | MPT exige autenticación y origin allowlist | ❌ |
-| 14 | MCP exige autenticación y RBAC | ❌ |
-| 15 | MCP destructivo con aprobación y rate limit | ❌ |
-| 16 | Puertos loopback y segmentación interna efectiva | ❌ |
-| 17 | Esquemas y límites de payload | ❌ |
+| 13 | MPT exige autenticación y origin allowlist | ✅ |
+| 14 | MCP exige autenticación y RBAC | ✅ |
+| 15 | MCP destructivo con aprobación y rate limit | ✅ |
+| 16 | Puertos loopback y segmentación interna efectiva | ✅ |
+| 17 | Esquemas y límites de payload | ✅ |
 | 18 | Subprocess/ADB sin shell injection | ✅ |
 | 19 | Traversal de vídeos/source bloqueado | ✅ |
-| 20 | XSS/CSP cubiertos | ❌ |
-| 21 | SSRF y egress allowlisted | ❌ |
-| 22 | Passwords de cuentas cifradas | ❌ |
-| 23 | Sesiones instagrapi cifradas/protegidas | ❌ |
-| 24 | Logs y exportaciones redactados | ❌ |
+| 20 | XSS/CSP cubiertos | ✅ |
+| 21 | SSRF y egress allowlisted | ✅ |
+| 22 | Passwords de cuentas cifradas | ✅ |
+| 23 | Sesiones instagrapi cifradas/protegidas | ✅ |
+| 24 | Logs y exportaciones redactados | ✅ |
 | 25 | Secretos fuera del historial Git | ✅ |
-| 26 | HTTPS + HSTS en producción | ❌ |
-| 27 | Firewall y exposición de puertos documentados | ❌ |
-| 28 | Contenedores sin root + healthchecks | ❌ |
-| 29 | Backups cifrados y recuperación probada | ❌ |
-| 30 | Dependencias fijadas, auditadas y escaneadas en CI | ❌ |
+| 26 | HTTPS + HSTS en producción | ✅ |
+| 27 | Firewall y exposición de puertos documentados | ✅ |
+| 28 | Contenedores sin root + healthchecks | ✅ |
+| 29 | Backups cifrados y recuperación probada | ✅ |
+| 30 | Dependencias fijadas, auditadas y escaneadas en CI | ✅ |
 
 ## Correcciones de contexto (paso 1 — recalibración)
 

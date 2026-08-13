@@ -2,7 +2,9 @@
 
 Tracker del programa de remediación (pasos 0-14) aprobado el 2026-08-13.
 Rama de trabajo: `security-remediation-2026-08-13`.
-Fuente de hallazgos: `docs/SECURITY-AUDIT-2026-08-13.md` (30 observaciones, postura inicial 1/10).
+Fuente de hallazgos: `docs/SECURITY-AUDIT-2026-08-13.md` (30 observaciones, postura inicial 1/10 → **final 9/10**).
+
+**Estado final: programa completo 0-14 ejecutado. 35 tests vitest + 42 pytest en verde, typecheck/build OK, npm audit 0 vulns, gitleaks limpio (salvo placeholders históricos), compose validado.**
 
 ## Reglas del programa
 
@@ -24,48 +26,48 @@ Fuente de hallazgos: `docs/SECURITY-AUDIT-2026-08-13.md` (30 observaciones, post
 | 5 | Sesiones, RBAC y publicación | ✅ COMPLETO | `(paso 5)` | `SessionStore` SQLite (solo hashes, TTL, revocación por logout y cambio de password — `admin.py reset-password` revoca sesiones); login contra `users` (scrypt, sin credenciales .env); rate limit persistente 5/15min usuario+IP y 20/15min IP; RBAC Express+Flask: operator → consultar/crear borradores/marcar `ready_for_publish`; admin → aprobar, publicar, programar, rechazar, engagement, login IG, credenciales; `auto_approve` eliminado (400) y sin rama en workers; publicación exige `ready_for_publish` + `expected_version` (409 si cambió) + `confirm:true`; login IG admin-only con identidad desde `:id` (username almacenado); UI de cola adaptada (botón "Listo" + "Publicar" con versión). 25 vitest + 18 pytest. |
 | 6 | Identidad y auditoría | ✅ COMPLETO | `(paso 6)` | `audit.py` (cadena HMAC derivada de la clave maestra, salt fijo, transacciones; `verify_chain` detecta tamper/borrado); X-Actor/X-Role/X-Request-ID propagados por Express y aceptados por Flask SOLO desde loopback (403 en otro origen); `/internal/audit` (Express registra auth.login/failed/blocked/logout, best-effort); `_audit()` en cuentas, proxies, cola (create/approve/publish/ready/schedule/reject/delete), engagement, login IG; request_id correlado en logs/respuestas. Pruebas: cadena íntegra + tamper detectado, identidad no-loopback 403, endpoint interno. |
 | 7 | Autenticar y limitar MCP | ✅ COMPLETO | `(paso 7)` | `mcp_tokens.py` (CLI create/list/revoke; solo hashes en `service_tokens`, token impreso 1 vez, expiración, scopes read/queue.write/engagement/approve/publish/admin); `BearerAuthMiddleware` ASGI (401 sin token/válido/expirado, 429 rate limit 60/min por token); `AuthedFastMCP.call_tool` con scope check por tool + auditoría `mcp.<tool>`/`mcp.<tool>.failed`; `create_content_job` sin auto_approve; `publish_job` exige `ready_for_publish`; `MCP_ENABLED` por defecto 0. Pruebas: 401/403/200, rate limit, auditoría, scopes. |
-| 8 | Endurecer MoneyPrinterTurbo | ⏳ PENDIENTE | — | — |
-| 9 | Validación, SSRF y egress | ⏳ PENDIENTE | — | — |
-| 10 | UI, backups y privacidad | ⏳ PENDIENTE | — | — |
-| 11 | Controles de IA y publicación | ⏳ PENDIENTE | — | — |
-| 12 | Límites y recuperación | ⏳ PENDIENTE | — | — |
-| 13 | Supply chain y Docker | ⏳ PENDIENTE | — | — |
-| 14 | CI, regresión y cierre | ⏳ PENDIENTE | — | — |
+| 8 | Endurecer MoneyPrinterTurbo | ✅ COMPLETO | `7d7bc8f` | Lock de terceros (`platform/third_party.lock` + `docs/THIRD-PARTY-LOCK.md`); patch reproducible `patches/mpt-verify-token.patch` + `scripts/apply-mpt-patch.py` (verify_token activo, tiempo constante, fail-closed sin MPT_API_KEY, solo /ping público); generator.py envía x-api-key; gen_mpt_config inyecta api_key; compose sin env_file para MPT. |
+| 9 | Validación, SSRF y egress | ✅ COMPLETO | `2379746` | Zod (Express) + Pydantic (Flask) con límites y rechazo de controles; MAX_CONTENT_LENGTH; ADB test-connection server-side; descargas MPT solo relativas; config MPT en tabla settings (sin .env desde HTTP); egress central (`net.py`/`net.ts`) con allowlist y bloqueo de IP privada. |
+| 10 | UI, backups y privacidad | ✅ COMPLETO | `bac5977` | .pfbackup cifrado (scrypt passphrase + reauth admin) en Express+Flask; export-data.ps1/restore-backup.ps1 sin claro; redactor central de logs; /panda y dashboard sin innerHTML; sin export JSON del cliente. |
+| 11 | Controles de IA | ✅ COMPLETO | `4cd22f4` | Instrucciones de sistema constantes; bloqueo de secretos en prompts; validación de salida; moderación antes de ready_for_publish. |
+| 12 | Límites y recuperación | ✅ COMPLETO | `a45263a` | Worker pool (semáforo), reap de jobs atascados, reconcile al arranque, SSE 32, vídeo 500MB, disco 2GB, rotación logs por tamaño, healthz/readyz. |
+| 13 | Supply chain y Docker | ✅ COMPLETO | `d74fcc1` | nanoid 3.3.18 (0 vulns npm audit); requirements exactos; Dockerfile no-root+digest; compose con cap_drop/read_only/tmpfs/límites/redes separadas/healthchecks (docker compose config válido); deploy.ps1 fija commits y aplica el patch. |
+| 14 | CI, regresión y cierre | ✅ COMPLETO | `(paso 14)` | CI con typecheck, build, vitest, pytest, npm audit (high), pip-audit, bandit, compose config, gitleaks; 35 vitest + 42 pytest; informe recalibrado (30 cerradas, postura 9/10, checklist 30/30 ✅). |
 
 ## Estado de hallazgos
 
 | ID | Severidad | Aplicabilidad | Estado | Cierre previsto | Prueba de cierre |
 |---|---|---|---|---|---|
-| PF-SEC-001 | CRÍTICA | Windows nativo | ABIERTO | Paso 2/5 | credenciales demo rechazadas; arranque sin credenciales fuertes falla; listen loopback |
-| PF-SEC-002 | CRÍTICA | Ambos | ABIERTO | Paso 7 | MCP 401 sin Bearer; 403 sin scope |
-| PF-SEC-003 | CRÍTICA | Ambos | ABIERTO | Paso 8 | MPT 401 sin `x-api-key`; solo health público; sin `env_file` |
-| PF-SEC-004 | CRÍTICA | Ambos | ABIERTO | Paso 4 | `accounts.json` sin secretos en claro; campos cifrados AES-GCM |
-| PF-SEC-005 | ALTA | Windows nativo | ABIERTO | Paso 2 | cookie `Secure; HttpOnly; SameSite=Strict`; listen 127.0.0.1 |
-| PF-SEC-006 | ALTA | Ambos | ABIERTO | Paso 5 | sin `auto_approve`; booleanos estrictos; publish exige `ready_for_publish` |
-| PF-SEC-007 | ALTA | Ambos | ABIERTO | Paso 4 | respuestas POST sin password/pass |
-| PF-SEC-008 | ALTA | Ambos | ABIERTO | Paso 5 | login IG admin-only + binding de cuenta |
-| PF-SEC-009 | ALTA | Windows nativo | ABIERTO | Paso 9 | test-connection usa ADB_HOST fijo |
-| PF-SEC-010 | ALTA | Ambos | ABIERTO | Paso 9 | descargas MPT solo rutas relativas |
-| PF-SEC-011 | ALTA | Docker | ABIERTO | Paso 13 | usuario no-root, cap_drop, read_only |
-| PF-SEC-012 | ALTA | Ambos | ABIERTO | Paso 13 | lock de terceros + hashes |
-| PF-SEC-013 | ALTA | Ambos (build/CI) | ABIERTO | Paso 13 | `npm audit` limpio (nanoid ≥3.3.17) |
-| PF-SEC-014 | ALTA | Ambos | ABIERTO | Paso 12 | límites de jobs/SSE/disco/vídeo |
-| PF-SEC-015 | MEDIA | Ambos | ABIERTO | Paso 9 | esquemas Zod/Pydantic; 400 en entradas inválidas |
-| PF-SEC-016 | MEDIA | Windows nativo | ABIERTO | Paso 10 | /panda con textContent (ya portado en paso 1) + CSP |
-| PF-SEC-017 | MEDIA | Windows nativo | ABIERTO | Paso 10 | backups `.pfbackup` cifrados |
-| PF-SEC-018 | MEDIA | Windows nativo | ABIERTO | Paso 9 | sin escritura `.env` desde HTTP; settings validada |
-| PF-SEC-019 | MEDIA | Windows nativo | ABIERTO | Paso 5 | rate limit persistente por usuario+IP |
-| PF-SEC-020 | MEDIA | Ambos | ABIERTO | Paso 3/5/12 | sesiones SQLite; jobs recuperables |
-| PF-SEC-021 | MEDIA | Ambos | ABIERTO | Paso 10 | SSE sanitizado; redacción central |
-| PF-SEC-022 | MEDIA | Ambos | ABIERTO | Paso 6 | X-Actor/X-Role/X-Request-ID + auditoría HMAC |
-| PF-SEC-023 | MEDIA | Ambos | ABIERTO | Paso 11 | prompts aislados; moderación; sin autoapprove |
-| PF-SEC-024 | MEDIA | Ambos | ABIERTO | Paso 9 | cliente HTTP allowlist + bloqueo IP privada |
-| PF-SEC-025 | BAJA | Windows nativo | ABIERTO | Paso 2 | Helmet/CSP/HSTS; sin X-Powered-By |
-| PF-SEC-026 | BAJA | Ambos | ABIERTO | Paso 12 | rotación por tamaño + cuota |
-| PF-SEC-027 | BAJA | Docker | ABIERTO | Paso 12/13 | healthchecks + límites compose |
+| PF-SEC-001 | CRÍTICA | Windows nativo | CERRADO (Paso 2/5) | credenciales demo rechazadas; arranque sin credenciales fuertes falla; listen loopback |
+| PF-SEC-002 | CRÍTICA | Ambos | CERRADO (Paso 7) | MCP 401 sin Bearer; 403 sin scope |
+| PF-SEC-003 | CRÍTICA | Ambos | CERRADO (Paso 8) | MPT 401 sin `x-api-key`; solo health público; sin `env_file` |
+| PF-SEC-004 | CRÍTICA | Ambos | CERRADO (Paso 4) | `accounts.json` sin secretos en claro; campos cifrados AES-GCM |
+| PF-SEC-005 | ALTA | Windows nativo | CERRADO (Paso 2) | cookie `Secure; HttpOnly; SameSite=Strict`; listen 127.0.0.1 |
+| PF-SEC-006 | ALTA | Ambos | CERRADO (Paso 5) | sin `auto_approve`; booleanos estrictos; publish exige `ready_for_publish` |
+| PF-SEC-007 | ALTA | Ambos | CERRADO (Paso 4) | respuestas POST sin password/pass |
+| PF-SEC-008 | ALTA | Ambos | CERRADO (Paso 5) | login IG admin-only + binding de cuenta |
+| PF-SEC-009 | ALTA | Windows nativo | CERRADO (Paso 9) | test-connection usa ADB_HOST fijo |
+| PF-SEC-010 | ALTA | Ambos | CERRADO (Paso 9) | descargas MPT solo rutas relativas |
+| PF-SEC-011 | ALTA | Docker | CERRADO (Paso 13) | usuario no-root, cap_drop, read_only |
+| PF-SEC-012 | ALTA | Ambos | CERRADO (Paso 13) | lock de terceros + hashes |
+| PF-SEC-013 | ALTA | Ambos (build/CI) | CERRADO (Paso 13) | `npm audit` limpio (nanoid ≥3.3.17) |
+| PF-SEC-014 | ALTA | Ambos | CERRADO (Paso 12) | límites de jobs/SSE/disco/vídeo |
+| PF-SEC-015 | MEDIA | Ambos | CERRADO (Paso 9) | esquemas Zod/Pydantic; 400 en entradas inválidas |
+| PF-SEC-016 | MEDIA | Windows nativo | CERRADO (Paso 10) | /panda con textContent (ya portado en paso 1) + CSP |
+| PF-SEC-017 | MEDIA | Windows nativo | CERRADO (Paso 10) | backups `.pfbackup` cifrados |
+| PF-SEC-018 | MEDIA | Windows nativo | CERRADO (Paso 9) | sin escritura `.env` desde HTTP; settings validada |
+| PF-SEC-019 | MEDIA | Windows nativo | CERRADO (Paso 5) | rate limit persistente por usuario+IP |
+| PF-SEC-020 | MEDIA | Ambos | CERRADO (Paso 3/5/12) | sesiones SQLite; jobs recuperables |
+| PF-SEC-021 | MEDIA | Ambos | CERRADO (Paso 10) | SSE sanitizado; redacción central |
+| PF-SEC-022 | MEDIA | Ambos | CERRADO (Paso 6) | X-Actor/X-Role/X-Request-ID + auditoría HMAC |
+| PF-SEC-023 | MEDIA | Ambos | CERRADO (Paso 11) | prompts aislados; moderación; sin autoapprove |
+| PF-SEC-024 | MEDIA | Ambos | CERRADO (Paso 9) | cliente HTTP allowlist + bloqueo IP privada |
+| PF-SEC-025 | BAJA | Windows nativo | CERRADO (Paso 2) | Helmet/CSP/HSTS; sin X-Powered-By |
+| PF-SEC-026 | BAJA | Ambos | CERRADO (Paso 12) | rotación por tamaño + cuota |
+| PF-SEC-027 | BAJA | Docker | CERRADO (Paso 12/13) | healthchecks + límites compose |
 | PF-SEC-028 | INFO | Ambos | CERRADO (parcial) | — | mantener middleware + rotación de token |
 | PF-SEC-029 | INFO | Ambos | CERRADO (parcial) | — | conservar pruebas de regresión |
-| PF-SEC-030 | INFO | Ambos (CI) | ABIERTO | Paso 1/14 | suites vitest/pytest + CI ampliado |
+| PF-SEC-030 | INFO | Ambos (CI) | CERRADO (Paso 1/14) | suites vitest/pytest + CI ampliado |
 
 ## Acciones manuales pendientes (operador)
 

@@ -261,3 +261,30 @@ describe("paso 12 — healthz/readyz", () => {
     expect(JSON.stringify(res.body)).not.toContain("token");
   });
 });
+
+describe("paso 14 — regresión: /panda sin innerHTML (XSS como texto)", () => {
+  it("la página /panda renderiza con textContent y no con innerHTML de datos ADB", async () => {
+    const app = createApp(testConfig(), {
+      db: seedDb(),
+      flaskFetch: async () => ({ status: 200, text: async () => JSON.stringify({ ok: true }) }),
+    });
+    const login = await request(app)
+      .post("/api/auth/login")
+      .send({ username: "admin", password: TEST_ADMIN_PW });
+    const headers = login.headers["set-cookie"];
+    const cookie = (Array.isArray(headers) ? headers[0] : String(headers)).split(";")[0];
+    const res = await request(app).get("/panda").set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    const html = res.text;
+    expect(html).toContain("textContent");
+    expect(html).not.toContain("card.innerHTML");
+    // los datos ADB se insertan con textContent, nunca como HTML
+    expect(html).toContain("n.textContent=text");
+  });
+
+  it("/panda sin sesión → 401", async () => {
+    const app = createApp(testConfig(), { db: seedDb() });
+    const res = await request(app).get("/panda");
+    expect(res.status).toBe(401);
+  });
+});
