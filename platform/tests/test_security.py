@@ -377,3 +377,56 @@ def test_login_ig_admin_usa_username_almacenado(flask_client, monkeypatch):
                             headers=_hdr("admin"))
     assert res.status_code == 200
     assert calls == [("acc_01", "real_user", "secreto")]  # identidad desde :id, no del body
+
+
+# ---------------------------------------------------------------------------
+# Paso 6 — identidad (loopback) y auditoría encadenada HMAC
+# ---------------------------------------------------------------------------
+
+def test_audit_chain_integra_y_detecta_tamper(crypto_env):
+    import phonefarm.audit as audit
+    import phonefarm.platform_data as pd
+
+    conn = pd._conn()
+    audit.log_action(conn, actor="admin", role="admin", action="test.one", object="obj_1", request_id="r1")
+    audit.log_action(conn, actor="operator", role="operator", action="test.two", object="obj_2", request_id="r2")
+    audit.log_action(conn, actor="system", role="system", action="test.three", request_id="r3")
+
+    assert audit.verify_chain(conn) == []
+
+    # tamper: modificar el meta del evento 2 invalida el hash de esa fila
+    with conn:
+        conn.execute("UPDATE audit_log SET meta='x' WHERE seq=2")
+    violations = audit.verify_chain(conn)
+    assert "seq 2: hash inválido (tamper)" in violations
+
+    # borrar un evento intermedio rompe el encadenado de la fila siguiente
+    with conn:
+        conn.execute("DELETE FROM audit_log WHERE seq=1")
+    violations = audit.verify_chain(conn)
+    assert any("prev_hash roto" in v for v in violations)
+
+
+def test_identity_headers_solo_loopback(flask_client):
+    # desde un origen NO loopback, X-Actor/X-Role → 403 aunque el token valga
+    res = flask_client.post("/api/queue", json={"keyword": "x"},
+                            headers={**_hdr(), "X-Actor": "admin"},
+                            environ_overrides={"REMOTE_ADDR": "10.0.0.5"})
+    assert res.status_code == 403
+    # desde loopback con token → OK
+    res = flask_client.post("/api/queue", json={"keyword": "x"}, headers=_hdr())
+    assert res.status_code == 201
+
+
+def test_internal_audit_endpoint(flask_client, crypto_env):
+    import phonefarm.platform_data as pd
+
+    res = flask_client.post("/internal/audit", json={
+        "actor": "admin", "role": "admin", "action": "auth.login",
+        "meta": {"ip": "127.0.0.1"}, "request_id": "req-123",
+    }, headers={"X-Internal-Auth": "test-internal-token"})
+    assert res.status_code == 200
+    row = pd._conn().execute("SELECT * FROM audit_log ORDER BY seq DESC LIMIT 1").fetchone()
+    assert row["actor"] == "admin" and row["action"] == "auth.login"
+    assert row["request_id"] == "req-123"
+    assert row["hash"] and row["prev_hash"] is None  # primera entrada de la cadena

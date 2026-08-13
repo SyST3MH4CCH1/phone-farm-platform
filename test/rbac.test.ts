@@ -139,3 +139,29 @@ describe("paso 5 — RBAC admin/operator", () => {
     expect(body.auto_approve).toBeUndefined();
   });
 });
+
+describe("paso 6 — identidad y auditoría de auth", () => {
+  it("login notifica a Flask /internal/audit y se propaga X-Request-ID", async () => {
+    const auditCalls: { url: string; actor?: string; action?: string }[] = [];
+    const app = createApp(testConfig(), {
+      db: seedDb(),
+      flaskFetch: async (url, init) => {
+        const parsed = JSON.parse(init.body || "{}");
+        if (url.includes("/internal/audit")) {
+          auditCalls.push({ url, actor: parsed.actor, action: parsed.action });
+          return { status: 200, text: async () => JSON.stringify({ ok: true }) };
+        }
+        return { status: 200, text: async () => JSON.stringify({ ok: true }) };
+      },
+    });
+
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ username: "admin", password: TEST_ADMIN_PW });
+    expect(res.status).toBe(200);
+    expect(res.headers["x-request-id"]).toBeTruthy();
+    // esperar la notificación fire-and-forget
+    await new Promise((r) => setTimeout(r, 50));
+    expect(auditCalls.some((c) => c.action === "auth.login" && c.actor === "admin")).toBe(true);
+  });
+});

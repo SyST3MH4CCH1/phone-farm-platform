@@ -58,6 +58,39 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   // en proxies de loopback para X-Forwarded-* (nunca XFF arbitrario).
   app.set("trust proxy", "loopback");
 
+  // Correlación de requests: X-Request-ID generado y propagado a Flask (paso 6).
+  app.use((req, res, next) => {
+    const rid = (typeof req.headers["x-request-id"] === "string" && req.headers["x-request-id"]) || randomBytes(16).toString("hex");
+    (req as any).requestId = rid;
+    res.setHeader("X-Request-ID", rid);
+    next();
+  });
+
+  /** Notifica a Flask un evento de auditoría de auth (fire-and-forget, paso 6). */
+  function notifyAudit(actor: string, role: string, action: string, object?: string, meta?: unknown, requestId?: string) {
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Internal-Auth": INTERNAL_TOKEN,
+      "X-Request-ID": requestId || "",
+    };
+    const body = JSON.stringify({ actor, role, action, object, meta, request_id: requestId });
+    const call = async () => {
+      if (deps.flaskFetch) {
+        await deps.flaskFetch(`${config.flaskBase}/internal/audit`, {
+          method: "POST", headers, body, signal: AbortSignal.timeout(5000),
+        });
+      } else {
+        await fetch(`${config.flaskBase}/internal/audit`, {
+          method: "POST", headers, body, signal: AbortSignal.timeout(5000),
+        });
+      }
+    };
+    call().catch(() => {
+      /* auditoría best-effort: no debe romper el login si Flask está caído */
+      console.warn("[audit] Flask no disponible para registrar", action);
+    });
+  }
+
   // Nonce CSP por request (para /panda, cuya página usa <script> inline).
   app.use((req, res, next) => {
     res.locals.cspNonce = randomBytes(16).toString("base64");
@@ -152,6 +185,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
       "Content-Type": "application/json",
       Origin: "http://127.0.0.1:3000",
       "X-Internal-Auth": INTERNAL_TOKEN,
+      "X-Request-ID": (_req as any).requestId || "",
     };
     if (user) {
       headers["X-Actor"] = user.username;
@@ -225,9 +259,11 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     const u = typeof username === "string" ? username : "";
     const p = typeof password === "string" ? password : "";
     const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const requestId = (req as any).requestId as string;
 
     const limit = loginLimiter.check(u, ip);
     if (!limit.ok) {
+      notifyAudit(u, "unknown", "auth.login_blocked", undefined, { ip }, requestId);
       return res.status(429).json({ error: `Demasiados intentos. Espera ${limit.retryAfterSeconds}s.` });
     }
 
@@ -237,6 +273,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
 
     if (!userRow || !verifyPassword(p, userRow.password_hash)) {
       loginLimiter.recordFailure(u, ip);
+      notifyAudit(u, "unknown", "auth.login_failed", undefined, { ip }, requestId);
       return res.status(401).json({ error: "Credenciales inválidas." });
     }
     loginLimiter.recordSuccess(u, ip);
@@ -250,6 +287,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
       expiresAt: Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
     };
     store.set(token, user); // un token por login; persistido en SQLite
+    notifyAudit(user.username, user.role, "auth.login", undefined, { ip }, requestId);
     res.setHeader("Set-Cookie", [
       `${SESSION_COOKIE}=${token}; ${cookieAttrs}Max-Age=${SESSION_MAX_AGE_SECONDS}`,
       `${CSRF_COOKIE}=${randomBytes(18).toString("hex")}; ${csrfCookieAttrs}Max-Age=${SESSION_MAX_AGE_SECONDS}`,
@@ -260,7 +298,9 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
 
   // Logout exige sesión y solo revoca LA sesión actual (no todas).
   app.post("/api/auth/logout", requireAuth, csrfProtect, (req, res) => {
+    const user = (req as any).user as SessionUser;
     store.delete(getToken(req));
+    notifyAudit(user.username, user.role, "auth.logout");
     res.setHeader("Set-Cookie", [
       `${SESSION_COOKIE}=; ${cookieAttrs}Max-Age=0`,
       `${CSRF_COOKIE}=; ${csrfCookieAttrs}Max-Age=0`,

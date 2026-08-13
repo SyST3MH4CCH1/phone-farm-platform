@@ -34,12 +34,13 @@ import queue as queue_module
 import re
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
 import psutil
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, g, jsonify, request, send_from_directory
 
 from phonefarm.platform_data import load_accounts, load_proxies, load_queue, save_accounts, save_proxies, save_queue, find_account
 
@@ -341,13 +342,75 @@ if not INTERNAL_TOKEN:
 
 @app.before_request
 def auth_internal() -> Any:
-    """Auth interno: exige X-Internal-Auth en cualquier endpoint de estado."""
+    """Auth interno: exige X-Internal-Auth en cualquier endpoint de estado.
+
+    Paso 6: la identidad de actor (X-Actor/X-Role) solo se acepta desde
+    loopback; cualquier otro origen con esos headers recibe 403.
+    """
     path = request.path
     if path == "/" or path == "/favicon.ico":
         return None  # página HTML pública, sin datos
     if request.headers.get("X-Internal-Auth") != INTERNAL_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
+    remote = request.remote_addr or ""
+    if not remote.startswith(("127.", "::1")) and (
+        request.headers.get("X-Actor") or request.headers.get("X-Role")
+    ):
+        logger.warning("identidad de actor rechazada desde %s", remote)
+        return jsonify({"error": "identity headers only from loopback"}), 403
     return None
+
+
+@app.before_request
+def request_id_middleware() -> None:
+    """Correlación: X-Request-ID propio o generado; se refleja en la respuesta."""
+    g.request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+
+
+@app.after_request
+def echo_request_id(response: Response) -> Response:
+    rid = getattr(g, "request_id", None)
+    if rid:
+        response.headers["X-Request-ID"] = rid
+    return response
+
+
+def _audit(action: str, object: Any = None, meta: dict[str, Any] | None = None) -> None:
+    """Registra un evento de auditoría con actor/rol del request (paso 6)."""
+    from phonefarm.audit import log_action
+    from phonefarm.platform_data import _conn
+
+    log_action(
+        _conn(),
+        actor=request.headers.get("X-Actor") or "system",
+        role=request.headers.get("X-Role") or "system",
+        action=action,
+        object=object,
+        meta=meta,
+        request_id=getattr(g, "request_id", None),
+    )
+
+
+@app.post("/internal/audit")
+def internal_audit():
+    """Endpoint interno (solo loopback+token): Express registra eventos de auth."""
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    if not action:
+        return jsonify({"error": "action requerido"}), 400
+    from phonefarm.audit import log_action
+    from phonefarm.platform_data import _conn
+
+    log_action(
+        _conn(),
+        actor=str(body.get("actor") or "system")[:64],
+        role=str(body.get("role") or "system")[:16],
+        action=str(action)[:64],
+        object=str(body.get("object") or "")[:128] or None,
+        meta=body.get("meta"),
+        request_id=str(body.get("request_id") or "")[:64] or None,
+    )
+    return jsonify({"ok": True})
 
 
 def require_role(*roles: str):
@@ -436,6 +499,7 @@ def api_accounts_create():
     accounts.append(account)
     save_accounts(accounts)
     logger.info("Cuenta creada: %s (@%s, ADB %s)", account["id"], username, device_serial)
+    _audit("account.create", account["id"], {"username": username})
     return jsonify(_account_dto(account)), 201
 
 
@@ -455,6 +519,7 @@ def api_accounts_delete(account_id: str):
         return jsonify({"error": f"Cuenta no existe: {account_id}"}), 404
     save_accounts(remaining)
     logger.info("Cuenta eliminada: %s", account_id)
+    _audit("account.delete", account_id)
     return jsonify({"success": True, "id": account_id})
 
 
@@ -512,6 +577,7 @@ def api_proxies_create():
     proxies.append(proxy)
     save_proxies(proxies)
     logger.info("Proxy creado: %s (%s:%d)", proxy["id"], host, port)
+    _audit("proxy.create", proxy["id"], {"host": host, "port": port})
     return jsonify({k: v for k, v in proxy.items() if k != "pass"}), 201
 
 
@@ -593,6 +659,7 @@ def api_queue_create():
     queue.append(job)
     save_queue(queue)
     logger.info("Job encolado: %s (keyword=%r, nicho=%s)", job["id"], keyword, job["niche_id"])
+    _audit("job.create", job["id"], {"keyword": keyword})
     return jsonify(job), 201
 
 
@@ -650,6 +717,7 @@ def api_queue_approve(job_id: str):
         return jsonify({"error": f"El job {job_id} ya se está procesando"}), 409
 
     logger.info("[%s] Guión APROBADO — generando vídeo (quedará en awaiting_preview)", job_id)
+    _audit("job.approve", job_id)
     return jsonify(job), 202
 
 
@@ -672,6 +740,7 @@ def api_queue_ready(job_id: str):
     job["status"] = "ready_for_publish"
     _sync_job(job)
     logger.info("[%s] Marcado ready_for_publish por el operador", job_id)
+    _audit("job.ready_for_publish", job_id)
     return jsonify(job)
 
 
@@ -702,6 +771,7 @@ def api_queue_publish(job_id: str):
         return jsonify({"error": f"El job {job_id} ya se está procesando"}), 409
 
     logger.info("[%s] Publicación APROBADA (admin) — publicando vídeo %s", job_id, job.get("video_path"))
+    _audit("job.publish", job_id, {"video": job.get("video_path")})
     return jsonify(job), 202
 
 
@@ -727,6 +797,7 @@ def api_queue_schedule(job_id: str):
         return jsonify({"error": "scheduled_time inválido (ISO '2026-08-07T07:30:00Z' o timestamp)"}), 400
     job["scheduled_ts"] = ts
     save_queue(queue)
+    _audit("job.schedule", job_id, {"scheduled_ts": ts})
     logger.info("[%s] Re-programado para %s", job_id, ts)
     return jsonify(job)
 
@@ -743,6 +814,7 @@ def api_queue_reject(job_id: str):
             job["status"] = "rejected"
             save_queue(queue)
             logger.info("[%s] Rechazado por el operador (%s)", job_id, job.get("video_path") and "vídeo" or "guión")
+            _audit("job.reject", job_id)
             return jsonify(job)
     return jsonify({"error": f"Job no existe: {job_id}"}), 404
 
@@ -764,6 +836,7 @@ def api_queue_delete(job_id: str):
             path.unlink(missing_ok=True)
             logger.info("[%s] MP4 eliminado: %s", job_id, path.name)
     logger.info("[%s] Eliminado de la cola", job_id)
+    _audit("job.delete", job_id)
     return jsonify({"ok": True, "id": job_id})
 
 
@@ -845,7 +918,9 @@ def api_engagement_start():
     if not account_id:
         return jsonify({"error": "account_id requerido"}), 400
     try:
-        return jsonify(engagement.start_bot(account_id))
+        result = engagement.start_bot(account_id)
+        _audit("engagement.start", account_id)
+        return jsonify(result)
     except (ValueError, RuntimeError) as exc:
         return jsonify({"error": str(exc)}), 409
 
@@ -860,7 +935,9 @@ def api_engagement_stop():
     if not account_id:
         return jsonify({"error": "account_id requerido"}), 400
     try:
-        return jsonify(engagement.stop_bot(account_id))
+        result = engagement.stop_bot(account_id)
+        _audit("engagement.stop", account_id)
+        return jsonify(result)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
 
@@ -887,8 +964,11 @@ def api_instagram_login(account_id: str):
         publisher.login_once(account_id, account["username"], password)
         # La sesión queda cifrada en BD; nunca se devuelve ruta ni secreto.
         return jsonify({"ok": True, "account_id": account_id})
+        _audit("social.login", account_id)
+        return jsonify({"ok": True, "account_id": account_id})
     except Exception as exc:  # noqa: BLE001 — instagrapi challenge / 2FA / credenciales
         logger.warning("Login IG fallido para %s: %s", account_id, exc)
+        _audit("social.login_failed", account_id, {"error": type(exc).__name__})
         return jsonify({"ok": False, "error": str(exc)[:500]}), 502
 
 
@@ -1050,6 +1130,7 @@ def adb_account_from_device():
     accounts.append(account)
     save_accounts(accounts)
     logger.info("Cuenta ADB creada: %s (@%s, %s)", account["id"], username, serial)
+    _audit("account.create_from_device", account["id"], {"serial": serial})
     return jsonify(_account_dto(account)), 201
 
 @app.get("/stream/logs")
