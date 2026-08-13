@@ -29,6 +29,7 @@ listen_port = 8080
 [app]
 edge_tts_timeout = 30
 tls_verify = true
+api_key = "{mpt_api_key}"
 video_source = "pexels"
 pexels_api_keys = [{pexels_keys}]
 pixabay_api_keys = []
@@ -97,6 +98,10 @@ def main() -> None:
         )
 
     pexels_keys = _toml_string_list(os.getenv("PEXELS_API_KEY", ""))
+    # Clave API del propio MPT (paso 8): sin ella el API no arranca (fail-closed).
+    mpt_api_key = os.getenv("MPT_API_KEY", "")
+    if not mpt_api_key:
+        print("[WARN] MPT_API_KEY vacía — MoneyPrinterTurbo rechazará todas las llamadas (fail-closed)")
     listen_host = "0.0.0.0" if os.getenv("IN_DOCKER", "0") == "1" else "127.0.0.1"
 
     OUTPUT.write_text(
@@ -106,6 +111,7 @@ def main() -> None:
             llm_keys=llm_keys,
             pexels_keys=pexels_keys,
             ffmpeg_line=_ffmpeg_line(),
+            mpt_api_key=mpt_api_key,
         ),
         encoding="utf-8",
     )

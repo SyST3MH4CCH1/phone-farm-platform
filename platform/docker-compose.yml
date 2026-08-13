@@ -17,8 +17,22 @@ services:
     # El CMD por defecto de la imagen arranca el WebUI Streamlit; nosotros
     # queremos la API FastAPI (main.py), que es la que consume generator.py.
     command: ["python", "main.py"]
-    env_file:
-      - .env
+    # Paso 8: NUNCA env_file con todo el .env — solo variables explícitas de MPT
+    # (el config.toml montado ya lleva las claves; esto cubre regeneración en
+    # contenedor y variables de runtime del propio MPT).
+    environment:
+      MPT_API_KEY: ${MPT_API_KEY:-}
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-minimax}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-https://api.minimax.io/v1}
+      MINIMAX_MODEL: ${MINIMAX_MODEL:-}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      KIMI_BASE_URL: ${KIMI_BASE_URL:-}
+      KIMI_MODEL: ${KIMI_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
     volumes:
       # Config segura generada por scripts/gen_mpt_config.py. Se monta desde
       # MPT_CONFIG (ruta sin paréntesis: Docker Desktop falla al montar

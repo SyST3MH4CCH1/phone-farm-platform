@@ -381,7 +381,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     let flaskOnline = false;
     let drafts = 0;
     try {
-      mptOnline = (await fetch(config.mptApiUrl + "/openapi.json", { signal: AbortSignal.timeout(3000) })).ok;
+      mptOnline = (await fetch(config.mptApiUrl + "/ping", { signal: AbortSignal.timeout(3000) })).ok;
     } catch { /* MPT apagado */ }
     try {
       const r = await fetch(`${config.flaskBase}/api/drafts`, {

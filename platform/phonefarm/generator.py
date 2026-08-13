@@ -32,6 +32,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 VIDEOS_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", BASE_DIR)) / "videos"
 
 MPT_API_URL = os.getenv("MPT_API_URL", "http://127.0.0.1:8080").rstrip("/")
+# Clave API propia (paso 8): MPT exige x-api-key en TODO (salvo /ping).
+MPT_API_KEY = os.getenv("MPT_API_KEY", "")
+
+
+def _mpt_headers() -> dict[str, str]:
+    return {"X-API-Key": MPT_API_KEY}
 # Prefix real de la API de MoneyPrinterTurbo (verificado contra su openapi.json)
 MPT_API_PREFIX = "/api/v1"
 # BGM: "random" (por defecto) o "" para desactivarlo. La mezcla de BGM con
@@ -54,9 +60,10 @@ class GeneratorError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 def mpt_health() -> bool:
-    """Comprueba si la API de MoneyPrinterTurbo responde (GET /docs o /openapi.json)."""
+    """Comprueba si la API de MoneyPrinterTurbo responde (GET /ping, el único
+    endpoint público tras el parche mpt-verify-token)."""
     try:
-        response = requests.get(f"{MPT_API_URL}/openapi.json", timeout=3)
+        response = requests.get(f"{MPT_API_URL}/ping", timeout=3)
         return response.ok
     except requests.exceptions.RequestException:
         return False
@@ -81,7 +88,7 @@ def _submit_task(keyword: str, script: str = "", terms: list[str] | None = None)
         "bgm_volume": 0.2,
     }
     try:
-        response = requests.post(f"{MPT_API_URL}{MPT_API_PREFIX}/videos", json=payload, timeout=15)
+        response = requests.post(f"{MPT_API_URL}{MPT_API_PREFIX}/videos", json=payload, headers=_mpt_headers(), timeout=15)
     except requests.exceptions.RequestException as exc:
         raise GeneratorError(f"MPT no responde en {MPT_API_URL}: {type(exc).__name__}") from exc
     if not response.ok:
@@ -105,7 +112,7 @@ def _poll_task(task_id: str) -> tuple[int, list[str], str | None]:
     started = time.monotonic()
     while time.monotonic() < deadline:
         try:
-            response = requests.get(f"{MPT_API_URL}{MPT_API_PREFIX}/tasks/{task_id}", timeout=10)
+            response = requests.get(f"{MPT_API_URL}{MPT_API_PREFIX}/tasks/{task_id}", headers=_mpt_headers(), timeout=10)
         except requests.exceptions.RequestException as exc:
             logger.warning("MPT poll error: %s", type(exc).__name__)
             time.sleep(TASK_POLL_INTERVAL_S)
@@ -152,7 +159,7 @@ def _poll_task(task_id: str) -> tuple[int, list[str], str | None]:
 def _probe_file_size(url: str) -> int:
     """HEAD/GET parcial para conocer el tamaño actual del archivo en MPT."""
     try:
-        probe = requests.get(url, timeout=10, stream=True)
+        probe = requests.get(url, headers=_mpt_headers(), timeout=10, stream=True)
         size = int(probe.headers.get("Content-Length", "0") or 0)
         probe.close()
         return size
@@ -224,7 +231,7 @@ def _download_video(uri: str, dest: Path) -> None:
     url = _normalize_download_uri(uri)
     for attempt in range(1, 5):
         dest.parent.mkdir(parents=True, exist_ok=True)
-        response = requests.get(url, timeout=180, stream=True)
+        response = requests.get(url, headers=_mpt_headers(), timeout=180, stream=True)
         if not response.ok:
             raise GeneratorError(f"Descarga MPT falló (HTTP {response.status_code}): {url[:200]}")
         with open(dest, "wb") as fh:
