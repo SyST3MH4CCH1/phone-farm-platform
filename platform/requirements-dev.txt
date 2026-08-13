@@ -1,0 +1,3 @@
+# Dependencias de desarrollo/pruebas de platform/ (no van a producción).
+# Las versiones se fijan en el paso 13 (supply chain).
+pytest>=8,<10
