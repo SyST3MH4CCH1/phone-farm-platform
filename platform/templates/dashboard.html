@@ -203,23 +203,59 @@ async function refreshAccounts() {
     $('acctCount').textContent = accounts.length;
     const sel = $('acctSelect');
     const prev = sel.value;
-    sel.innerHTML = accounts.map(a => `<option value="${a.id}">${a.username} (${a.id})</option>`).join('');
+    sel.textContent = '';
+    accounts.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = `${a.username} (${a.id})`;
+      sel.appendChild(opt);
+    });
     if (prev) sel.value = prev;
-    if (!accounts.length) sel.innerHTML = '<option value="">Sin cuentas</option>';
+    if (!accounts.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Sin cuentas';
+      sel.appendChild(opt);
+    }
 
-    $('accountsGrid').innerHTML = accounts.map(a => {
-      const statusCls = a.status === 'active' ? 'active' : (a.status === 'warmup' ? 'warmup' : 'error');
-      const botBtn = a.bot_active
-        ? `<button class="btn stop" onclick="toggleBot('${a.id}', false)">⏹ Stop</button>`
-        : `<button class="btn start" onclick="toggleBot('${a.id}', true)">▶ Start</button>`;
-      return `
-      <div class="acct">
-        <div class="row"><span class="uname">@${a.username}</span><span class="badge ${statusCls}">${a.status}</span></div>
-        <div class="row meta"><span>📱 <b>${a.device_serial}</b></span><span>🌡 warmup día <b>${a.warmup_day}</b></span></div>
-        <div class="row meta"><span>🛜 proxy <b>${a.proxy_id || '—'}</b></span><span>❤️ <b>${a.likes_today || 0}</b></span></div>
-        <div class="actions">${botBtn}</div>
-      </div>`;
-    }).join('');
+    const grid = $('accountsGrid');
+    grid.textContent = '';
+    accounts.forEach(a => {
+      const card = document.createElement('div');
+      card.className = 'acct';
+      const row1 = document.createElement('div');
+      row1.className = 'row';
+      const uname = document.createElement('span');
+      uname.className = 'uname';
+      uname.textContent = `@${a.username}`;
+      const badge = document.createElement('span');
+      badge.className = `badge ${a.status === 'active' ? 'active' : (a.status === 'warmup' ? 'warmup' : 'error')}`;
+      badge.textContent = a.status;
+      row1.appendChild(uname); row1.appendChild(badge);
+      const row2 = document.createElement('div');
+      row2.className = 'row meta';
+      const d1 = document.createElement('span');
+      d1.textContent = `📱 ${a.device_serial || '—'}`;
+      const d2 = document.createElement('span');
+      d2.textContent = `🌡 warmup día ${a.warmup_day || 0}`;
+      row2.appendChild(d1); row2.appendChild(d2);
+      const row3 = document.createElement('div');
+      row3.className = 'row meta';
+      const d3 = document.createElement('span');
+      d3.textContent = `🛜 proxy ${a.proxy_id || '—'}`;
+      const d4 = document.createElement('span');
+      d4.textContent = `❤️ ${a.likes_today || 0}`;
+      row3.appendChild(d3); row3.appendChild(d4);
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const btn = document.createElement('button');
+      btn.className = a.bot_active ? 'btn stop' : 'btn start';
+      btn.textContent = a.bot_active ? '⏹ Stop' : '▶ Start';
+      btn.onclick = () => toggleBot(a.id, !a.bot_active);
+      actions.appendChild(btn);
+      card.appendChild(row1); card.appendChild(row2); card.appendChild(row3); card.appendChild(actions);
+      grid.appendChild(card);
+    });
   } catch (e) { console.warn(e.message); }
 }
 
@@ -227,31 +263,69 @@ async function refreshQueue() {
   try {
     queue = await api('/api/queue');
     $('queueCount').textContent = queue.length;
-    $('queueBody').innerHTML = queue.slice().reverse().map(j => {
-      const statusCls = ['pending','scripting','awaiting_approval','generating','publishing','published','failed','awaiting_manual_upload','rejected']
-        .includes(j.status) ? j.status : 'pending';
-      const video = j.video_path
-        ? `<video src="/videos/${j.id}.mp4" preload="metadata"></video>` : '—';
-      const captionHint = j.caption
-        ? `<span class="has-caption" title="${j.caption.replace(/"/g, '&quot;').slice(0, 200)}">📝</span>` : '';
-      let actions = '';
-      if (j.status === 'awaiting_approval') {
-        actions = `<button class="btn approve" onclick="approveJob('${j.id}')">✅ Aprobar</button>
-                   <button class="btn reject" onclick="rejectJob('${j.id}')">❌ Rechazar</button>`;
-      } else if (j.status === 'pending') {
-        actions = `<button class="btn" onclick="scriptJob('${j.id}')">✍️ Guion</button>`;
+    const tbody = $('queueBody');
+    tbody.textContent = '';
+    queue.slice().reverse().forEach(j => {
+      const tr = document.createElement('tr');
+      const tdId = document.createElement('td');
+      tdId.className = 'mono';
+      tdId.textContent = j.id;
+      const tdKw = document.createElement('td');
+      tdKw.textContent = j.keyword || '';
+      if (j.caption) {
+        const hint = document.createElement('span');
+        hint.className = 'has-caption';
+        hint.title = String(j.caption).slice(0, 200);
+        hint.textContent = '📝';
+        tdKw.appendChild(hint);
       }
-      return `
-      <tr>
-        <td class="mono">${j.id}</td>
-        <td>${j.keyword} ${captionHint}</td>
-        <td>${j.target_account}</td>
-        <td><span class="badge ${statusCls}">${j.status}</span></td>
-        <td><div class="progress"><div style="width:${j.progress || 0}%"></div></div></td>
-        <td class="video-thumb">${video}</td>
-        <td>${actions}</td>
-      </tr>`;
-    }).join('');
+      const tdAcc = document.createElement('td');
+      tdAcc.textContent = j.target_account || '';
+      const tdSt = document.createElement('td');
+      const badge = document.createElement('span');
+      const valid = ['pending','scripting','awaiting_approval','generating','publishing','published','failed','awaiting_manual_upload','rejected','ready_for_publish'].includes(j.status) ? j.status : 'pending';
+      badge.className = `badge ${valid}`;
+      badge.textContent = j.status;
+      tdSt.appendChild(badge);
+      const tdProg = document.createElement('td');
+      const prog = document.createElement('div');
+      prog.className = 'progress';
+      const fill = document.createElement('div');
+      fill.style.width = `${j.progress || 0}%`;
+      prog.appendChild(fill);
+      tdProg.appendChild(prog);
+      const tdVid = document.createElement('td');
+      tdVid.className = 'video-thumb';
+      if (j.video_path) {
+        const video = document.createElement('video');
+        video.src = `/videos/${j.id}.mp4`;
+        video.preload = 'metadata';
+        tdVid.appendChild(video);
+      } else {
+        tdVid.textContent = '—';
+      }
+      const tdAct = document.createElement('td');
+      if (j.status === 'awaiting_approval') {
+        const ap = document.createElement('button');
+        ap.className = 'btn approve';
+        ap.textContent = '✅ Aprobar';
+        ap.onclick = () => approveJob(j.id);
+        const rj = document.createElement('button');
+        rj.className = 'btn reject';
+        rj.textContent = '❌ Rechazar';
+        rj.onclick = () => rejectJob(j.id);
+        tdAct.appendChild(ap); tdAct.appendChild(rj);
+      } else if (j.status === 'pending') {
+        const sj = document.createElement('button');
+        sj.className = 'btn';
+        sj.textContent = '✍️ Guion';
+        sj.onclick = () => scriptJob(j.id);
+        tdAct.appendChild(sj);
+      }
+      tr.appendChild(tdId); tr.appendChild(tdKw); tr.appendChild(tdAcc);
+      tr.appendChild(tdSt); tr.appendChild(tdProg); tr.appendChild(tdVid); tr.appendChild(tdAct);
+      tbody.appendChild(tr);
+    });
   } catch (e) { console.warn(e.message); }
 }
 
@@ -260,7 +334,13 @@ async function refreshNiches() {
     const profiles = await api('/api/content/profiles');
     const sel = $('nicheSelect');
     const prev = sel.value;
-    sel.innerHTML = profiles.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    sel.textContent = '';
+    profiles.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    });
     if (prev) sel.value = prev;
   } catch (e) { /* perfiles no disponibles */ }
 }

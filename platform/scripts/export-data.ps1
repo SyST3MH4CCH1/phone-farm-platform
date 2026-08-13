@@ -1,73 +1,43 @@
 <#
 .SYNOPSIS
-  export-data.ps1 — Exporta TODOS los datos de la farm a un ZIP con timestamp
-  para migrar a otra máquina (o hacer backup).
+  export-data.ps1 — Exporta los datos de la farm a un .pfbackup CIFRADO
+  (envelope AES-256-GCM, clave derivada de una passphrase con scrypt).
 
-  Incluye: accounts.json, proxies.json, queue.json, content_profiles.json,
-  sessions/ (cookies IG), logs/workflows/, logs/fallback_queue.json y videos/.
+  Incluye: cuentas (con passwords cifrados), proxies, cola, sesiones IG,
+  settings y usuarios del panel. NUNCA exporta en claro (paso 10).
 
-  Uso:  powershell -ExecutionPolicy Bypass -File platform\scripts\export-data.ps1
-        powershell ... -Out C:\backups   (destino distinto; default: ..\backups)
-        powershell ... -IncludeSecrets   (VOLCADO COMPLETO: incluye platform\.env
-                                          con API keys/token + adbkey del host)
+  Uso:
+    powershell -ExecutionPolicy Bypass -File platform\scripts\export-data.ps1
+    powershell ... -PassphraseEnv PF_BACKUP_PASS     # passphrase desde variable
+    powershell ... -Out C:\backups\mi-backup.pfbackup
 
-  Importar en la máquina nueva: descomprimir el ZIP sobre platform/ y
-  `adb reconnect` los dispositivos (los seriales se re-enumeran solos).
+  Restaurar:  python -m phonefarm.backup restore --passphrase-env PF_BACKUP_PASS --in <fichero>
+  (o platform\scripts\restore-backup.ps1)
+
+  La passphrase NO se pide por consola (evita historial de terminal):
+  define primero una variable:  $env:PF_BACKUP_PASS = "tu-frase-larga"
 #>
 
 param(
     [string]$Out = "",
-    [switch]$IncludeSecrets
+    [string]$PassphraseEnv = "PF_BACKUP_PASS"
 )
 
 $ErrorActionPreference = "Stop"
 $Root   = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$Dest   = if ($Out) { $Out } else { Join-Path (Split-Path $Root) "backups" }
-$Stamp  = Get-Date -Format "yyyyMMdd-HHmm"
-$ZipDir = Join-Path $Dest "phonefarm-export-$Stamp"
-$Zip    = "$ZipDir.zip"
+$Python = Join-Path $Root ".venv\Scripts\python.exe"
+if (-not (Test-Path $Python)) { $Python = "python" }
 
-if (-not (Test-Path $Dest)) { New-Item -ItemType Directory -Path $Dest -Force | Out-Null }
-if (Test-Path $ZipDir) { Remove-Item $ZipDir -Recurse -Force }
-New-Item -ItemType Directory -Path $ZipDir -Force | Out-Null
+if (-not $env:$PassphraseEnv) {
+    Write-Error "Variable de entorno $PassphraseEnv vacía. Defínela primero:  `$env:$PassphraseEnv = 'tu-frase-larga'"
+    exit 1
+}
 
-Write-Host "=== Exportando Phone Farm a $Zip ..." -ForegroundColor Cyan
-$items = @(
-    (Join-Path $Root "accounts.json"),
-    (Join-Path $Root "proxies.json"),
-    (Join-Path $Root "queue.json"),
-    (Join-Path $Root "content_profiles.json"),
-    (Join-Path $Root "mpt-config.toml")
-)
-# Carpetas (solo si existen)
-foreach ($d in @("sessions", "logs", "videos")) {
-    $p = Join-Path $Root $d
-    if (Test-Path $p) { $items += $p }
-}
-# VOLCADO COMPLETO: secrets del host (API keys, token, huella ADB)
-if ($IncludeSecrets) {
-    $items += (Join-Path $Root ".env")                          # platform\.env
-    $adbKey = Join-Path $env:USERPROFILE ".android\adbkey"
-    if (Test-Path $adbKey) {
-        $items += $adbKey
-        $items += "$adbKey.pub"
-    }
-    Write-Host "  [IncludeSecrets] .env + adbkey incluidos (¡no compartir este ZIP!)" -ForegroundColor DarkYellow
-}
-foreach ($i in $items) {
-    if (Test-Path $i) {
-        Copy-Item $i $ZipDir -Recurse -Force
-        Write-Host "  + $i" -ForegroundColor DarkGray
-    }
-}
-# Excluir logs de depuración (solo datos útiles: workflows/ y fallback_queue.json)
-if (Test-Path (Join-Path $ZipDir "logs")) {
-    Get-ChildItem (Join-Path $ZipDir "logs") -File | Where-Object { $_.Name -like "*.log*" -or $_.Name -eq "flask.log" } | Remove-Item -Force
-}
-Compress-Archive -Path $ZipDir -DestinationPath $Zip -Force
-Remove-Item $ZipDir -Recurse -Force
+$args = @("-m", "phonefarm.backup", "export", "--passphrase-env", $PassphraseEnv)
+if ($Out) { $args += @("--out", $Out) }
 
-$size = [math]::Round((Get-Item $Zip).Length / 1MB, 2)
-Write-Host ""
-Write-Host "=== Exportado: $Zip ($size MB)" -ForegroundColor Green
-Write-Host "Importar en la nueva máquina: descomprime sobre platform/ y arranca run-native.ps1"
+Push-Location $Root
+try {
+    & $Python @args
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} finally { Pop-Location }

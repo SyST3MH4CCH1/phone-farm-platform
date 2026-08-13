@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Account, ProxyItem, QueueJob } from '../types';
+import { apiFetch } from '../api';
 
 interface VersionControlModalProps {
   accounts: Account[];
@@ -54,31 +55,45 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
     }
   ];
 
-  // No existe rollback automatico del codigo: exporta snapshot JSON real.
+  // Paso 10: NO se exporta JSON en claro desde el cliente. El backup sale
+  // SIEMPRE cifrado (.pfbackup) con passphrase + reautenticación admin.
   const handleExportVersion = (verId: 'v2.4' | 'v2.3' | 'v2.2') => {
     setSelectedVersion(verId);
-    handleExportBackupJson();
+    handleExportEncrypted();
   };
 
-  const handleExportBackupJson = () => {
-    const backupData = {
-      timestamp: new Date().toISOString(),
-      version: selectedVersion,
-      system: 'TH3F4Rm3R Phone Farm v2.4 REAL',
-      accounts,
-      proxies,
-      queue
-    };
-
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `phone-farm-backup-${selectedVersion}-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const handleExportEncrypted = async () => {
+    const passphrase = window.prompt('Passphrase del backup (>=12 chars, se pedirá al restaurar):');
+    if (!passphrase || passphrase.length < 12) {
+      window.alert('Passphrase requerida (>=12 caracteres). Exportación cancelada.');
+      return;
+    }
+    const password = window.prompt('Reautenticación: password del panel (admin):');
+    if (!password) return;
+    try {
+      const res = await apiFetch('/api/backups/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passphrase, password })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        window.alert(`Exportación fallida: ${data?.error || res.status}`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `phonefarm-${new Date().toISOString().slice(0, 10)}.pfbackup`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      window.alert('Backup cifrado (.pfbackup) descargado. Guarda la passphrase: es necesaria para restaurar.');
+    } catch (err) {
+      window.alert(`Error de red: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   return (
@@ -119,9 +134,10 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
 
             <div className="flex items-center gap-2">
               <button
-                onClick={handleExportBackupJson}
+                onClick={handleExportEncrypted}
                 className="px-3 py-1.5 bg-[#33363A] hover:bg-[#3A3D42] border border-[#A1A6AE]/30 text-[#A1A6AE] rounded-lg font-bold flex items-center gap-1.5"
-              > Snapshot JSON
+                title="Exporta un backup CIFRADO (.pfbackup) con passphrase — nunca JSON en claro"
+              > Backup cifrado (.pfbackup)
               </button>
               <button
                 onClick={onDownloadZip}

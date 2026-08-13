@@ -602,3 +602,85 @@ def test_normalize_download_uri_rechaza_absolutas(crypto_env):
         _normalize_download_uri("https://evil.example/x.mp4")
     with pytest.raises(EgressError):
         _normalize_download_uri("/../../etc/passwd")
+
+
+# ---------------------------------------------------------------------------
+# Paso 10 — redacción de logs y backups cifrados (.pfbackup)
+# ---------------------------------------------------------------------------
+
+def test_redact_text_enmascara_secretos():
+    from phonefarm.redact import redact_text
+
+    out = redact_text('login password="supersecreto" x-api-key: abc123 Bearer tok_123 session sessions/acc_01.json')
+    assert "supersecreto" not in out
+    assert "abc123" not in out
+    assert "tok_123" not in out
+    assert "acc_01.json" not in out
+    assert "<redacted>" in out
+
+
+def test_backup_export_restore_roundtrip(crypto_env, monkeypatch: pytest.MonkeyPatch):
+    """export .pfbackup con passphrase -> sin secretos en claro -> restore."""
+    import phonefarm.platform_data as pd
+
+    pd.save_accounts([{"id": "acc_01", "username": "u1", "password": "pass-secreto-1", "status": "active"}])
+    pd.save_proxies([{"id": "proxy_01", "host": "1.2.3.4", "port": 8080, "type": "socks5", "user": "px", "pass": "pass-px-1"}])
+
+    from phonefarm import backup
+
+    passphrase = "frase-larga-de-prueba-123"
+    payload = backup._collect_payload()
+    assert payload["accounts"][0]["password"] == "pass-secreto-1"  # descifrado en memoria
+
+    envelope = backup.encrypt_with_passphrase(passphrase, json.dumps(payload, ensure_ascii=False).encode())
+    raw = json.dumps(envelope).encode()
+    assert b"pass-secreto-1" not in raw and b"pass-px-1" not in raw  # nada en claro
+
+    # restore: vaciar la BD y restaurar desde el envelope
+    conn = pd._conn()
+    with conn:
+        conn.execute("DELETE FROM accounts")
+        conn.execute("DELETE FROM proxies")
+    dec = backup.decrypt_with_passphrase(passphrase, envelope)
+    restored = json.loads(dec.decode("utf-8"))
+    pd.save_accounts(restored["accounts"])
+    pd.save_proxies(restored["proxies"])
+    assert pd.load_accounts()[0]["password"] == "pass-secreto-1"
+
+    # passphrase incorrecta → CryptoError (nunca plaintext)
+    from phonefarm.crypto import CryptoError
+
+    with pytest.raises(CryptoError):
+        backup.decrypt_with_passphrase("otra-frase", envelope)
+
+
+def test_backup_cli_export_e2e(crypto_env):
+    """python -m phonefarm.backup export (subprocess) genera .pfbackup válido."""
+    import phonefarm.platform_data as pd
+
+    pd.save_accounts([{"id": "acc_01", "username": "u1", "password": "pass-secreto-1", "status": "active"}])
+    out = crypto_env / "backup-test.pfbackup"
+    env = dict(os.environ)
+    env["PF_TEST_PASS"] = "frase-larga-de-prueba-123"
+    res = subprocess.run(
+        [sys.executable, "-m", "phonefarm.backup", "export",
+         "--passphrase-env", "PF_TEST_PASS", "--out", str(out)],
+        capture_output=True, text=True, env=env, cwd=str(Path(__file__).resolve().parent.parent),
+    )
+    assert res.returncode == 0, res.stderr
+    assert out.exists()
+    raw = out.read_bytes()
+    assert b"pass-secreto-1" not in raw
+    # restaurar en una BD limpia
+    conn = pd._conn()
+    with conn:
+        conn.execute("DELETE FROM accounts")
+    env2 = dict(os.environ)
+    env2["PF_TEST_PASS"] = "frase-larga-de-prueba-123"
+    res2 = subprocess.run(
+        [sys.executable, "-m", "phonefarm.backup", "restore",
+         "--passphrase-env", "PF_TEST_PASS", "--in", str(out)],
+        capture_output=True, text=True, env=env2, cwd=str(Path(__file__).resolve().parent.parent),
+    )
+    assert res2.returncode == 0, res2.stderr
+    assert pd.load_accounts()[0]["password"] == "pass-secreto-1"

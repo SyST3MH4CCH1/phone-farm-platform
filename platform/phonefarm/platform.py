@@ -131,19 +131,27 @@ log_buffer = LogBuffer()
 
 
 class BufferHandler(logging.Handler):
-    """Handler de logging que alimenta el ring buffer SSE."""
+    """Handler de logging que alimenta el ring buffer SSE (sanitizado, paso 10)."""
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
             message = self.format(record)
         except Exception:  # noqa: BLE001
             return
-        log_buffer.append(message)
+        from phonefarm.redact import redact_text
+
+        log_buffer.append(redact_text(message))
 
 
 _buffer_handler = BufferHandler()
 _buffer_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"))
 logging.getLogger().addHandler(_buffer_handler)
+
+# Redacción central en TODOS los handlers (ficheros + consola + buffer):
+from phonefarm.redact import RedactFilter
+
+_redact_filter = RedactFilter()
+logging.getLogger().addFilter(_redact_filter)
 
 
 # --- Cola de trabajos: pipeline de contenido v2 -------------------------------
@@ -363,6 +371,23 @@ def auth_internal() -> Any:
     return None
 
 
+def require_role(*roles: str):
+    """RBAC en Flask (paso 5): el rol llega vía X-Role (lo inyecta el proxy
+    Express; Flask solo lo acepta con token interno válido — paso 6 audita)."""
+    def deco(fn):
+        from functools import wraps
+
+        @wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any):
+            if request.headers.get("X-Role") not in roles:
+                return jsonify({"error": f"Requiere rol: {'/'.join(roles)}"}), 403
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    return deco
+
+
 @app.before_request
 def request_id_middleware() -> None:
     """Correlación: X-Request-ID propio o generado; se refleja en la respuesta."""
@@ -393,6 +418,20 @@ def _audit(action: str, object: Any = None, meta: dict[str, Any] | None = None) 
     )
 
 
+@app.post("/api/backups/payload")
+@require_role("admin")
+def backups_payload():
+    """Payload completo para el backup cifrado del panel (solo admin).
+
+    Los secretos viajan descifrados SOLO en memoria entre Express y Flask
+    (loopback + token interno); el cifrado final lo hace Express con la
+    passphrase del operador (paso 10).
+    """
+    from phonefarm.backup import _collect_payload
+
+    return jsonify(_collect_payload())
+
+
 @app.post("/internal/audit")
 def internal_audit():
     """Endpoint interno (solo loopback+token): Express registra eventos de auth."""
@@ -415,21 +454,6 @@ def internal_audit():
     return jsonify({"ok": True})
 
 
-def require_role(*roles: str):
-    """RBAC en Flask (paso 5): el rol llega vía X-Role (lo inyecta el proxy
-    Express; Flask solo lo acepta con token interno válido — paso 6 audita)."""
-    def deco(fn):
-        from functools import wraps
-
-        @wraps(fn)
-        def wrapper(*args: Any, **kwargs: Any):
-            if request.headers.get("X-Role") not in roles:
-                return jsonify({"error": f"Requiere rol: {'/'.join(roles)}"}), 403
-            return fn(*args, **kwargs)
-
-        return wrapper
-
-    return deco
 
 
 @app.after_request

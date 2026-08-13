@@ -210,3 +210,32 @@ describe("paso 9 — validación, SSRF y configuración segura", () => {
     expect(row.value).toBe("es-ES-PacoNeural");
   });
 });
+
+describe("paso 10 — backup cifrado con reautenticación", () => {
+  it("export sin password válido → 403 (reautenticación)", async () => {
+    const app = createApp(testConfig(), {
+      db: seedDb(),
+      flaskFetch: async () => ({ status: 200, text: async () => JSON.stringify({ ok: true }) }),
+    });
+    const a = await login(app, "admin", TEST_ADMIN_PW);
+    const res = await auth(a)(request(app).post("/api/backups/export"))
+      .send({ passphrase: "frase-larga-123456", password: "password-incorrecta" });
+    expect(res.status).toBe(403);
+  });
+
+  it("export con reauth correcta → envelope .pfbackup cifrado (sin datos en claro)", async () => {
+    const payload = { accounts: [{ id: "acc_1", username: "u1", password: "pass-secreto-1" }] };
+    const app = createApp(testConfig(), {
+      db: seedDb(),
+      flaskFetch: async () => ({ status: 200, text: async () => JSON.stringify(payload) }),
+    });
+    const a = await login(app, "admin", TEST_ADMIN_PW);
+    const res = await auth(a)(request(app).post("/api/backups/export"))
+      .send({ passphrase: "frase-larga-123456", password: TEST_ADMIN_PW });
+    expect(res.status).toBe(200);
+    const body = res.body;
+    expect(body.kdf).toBe("scrypt");
+    expect(body.ciphertext).toBeTruthy();
+    expect(JSON.stringify(body)).not.toContain("pass-secreto-1");
+  });
+});

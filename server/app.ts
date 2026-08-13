@@ -811,6 +811,54 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     }
   });
 
+  // 8. Backup cifrado (.pfbackup) — solo admin + reautenticación (paso 10).
+  // El backup en claro solo existe en memoria entre Express y Flask (loopback);
+  // al navegador llega SIEMPRE cifrado con la passphrase del operador.
+  app.post("/api/backups/export", requireRole("admin"), async (req, res) => {
+    const { encryptPassphraseEnvelope } = await import("./backup");
+    const user = (req as any).user as SessionUser;
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    const passphrase = typeof req.body?.passphrase === "string" ? req.body.passphrase : "";
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+
+    if (!passphrase || passphrase.length < 12) {
+      return res.status(400).json({ error: "passphrase requerida (>=12 chars)" });
+    }
+    // Reautenticación: el password del panel se verifica de nuevo (scrypt).
+    const row = deps.db.prepare("SELECT password_hash FROM users WHERE id = ?").get(user.id) as { password_hash: string } | undefined;
+    if (!row || !verifyPassword(password, row.password_hash)) {
+      loginLimiter.recordFailure(user.username, ip);
+      notifyAudit(user.username, user.role, "backup.reauth_failed");
+      return res.status(403).json({ error: "Reautenticación fallida." });
+    }
+
+    try {
+      const r = await (deps.flaskFetch ?? defaultFlaskFetch)(`${config.flaskBase}/api/backups/payload`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Auth": INTERNAL_TOKEN,
+          "X-Actor": user.username,
+          "X-Role": "admin",
+          "X-Request-ID": (req as any).requestId || "",
+        },
+        body: "{}",
+        signal: AbortSignal.timeout(60000),
+      });
+      const text = await r.text();
+      if (r.status !== 200) return res.status(502).json({ error: "Flask no pudo generar el payload" });
+      const payload = JSON.parse(text);
+      const envelope = encryptPassphraseEnvelope(passphrase, Buffer.from(JSON.stringify(payload), "utf8"));
+      const filename = `phonefarm-${new Date().toISOString().slice(0, 10)}.pfbackup`;
+      notifyAudit(user.username, user.role, "backup.export");
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
+      res.send(JSON.stringify(envelope));
+    } catch (err) {
+      res.status(503).json({ error: "No se pudo exportar el backup", detail: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // API desconocida -> 404 JSON (antes del fallback SPA)
   app.use("/api", (req, res) => {
     res.status(404).json({ error: "Ruta API no encontrada" });
