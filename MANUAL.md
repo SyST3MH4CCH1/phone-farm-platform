@@ -179,11 +179,11 @@ Para cada cuenta:
 ### platform/.env
 ```bash
 FLASK_PORT=5000
-PEXELS_API_KEY=<redacted>
-MINIMAX_API_KEY=<redacted>
+PEXELS_API_KEY=<tu-clave-pexels>
+MINIMAX_API_KEY=<tu-clave-minimax>
 MINIMAX_BASE_URL=https://api.minimax.chat/v1
 MINIMAX_MODEL=miniMax-chat
-INTERNAL_TOKEN=<redacted>
+INTERNAL_TOKEN=<token-generado-por-setup>
 ```
 
 ### Git / scripts
