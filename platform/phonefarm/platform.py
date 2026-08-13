@@ -329,6 +329,8 @@ def start_scheduler() -> None:
 
 # --- Aplicación Flask --------------------------------------------------------
 app = Flask(__name__, template_folder=str(TEMPLATES_DIR), static_folder=None)
+# Paso 9: límite de tamaño de peticiones (413 en exceso).
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("PHONEFARM_MAX_CONTENT_LENGTH", str(1_000_000)))
 
 # Token interno compartido con el panel Express (server.ts). Flask NO es público:
 # aunque bindee a 127.0.1 (o 0.0.0.0 en Docker con loopback solo), exige este header
@@ -465,11 +467,17 @@ def api_accounts():
 @app.post("/api/accounts")
 @require_role("admin")
 def api_accounts_create():
-    body = request.get_json(silent=True) or {}
+    from phonefarm.validate import AccountCreate, validate_body
+
+    parsed = validate_body(AccountCreate)
+    if isinstance(parsed, tuple):
+        return parsed
+    body = parsed
     username = (body.get("username") or "").strip()
     password = (body.get("password") or "").strip()
     device_serial = (body.get("device_serial") or "").strip()
     proxy_id = (body.get("proxy_id") or "").strip()
+    warmup_day = int(body.get("warmup_day", 1))
 
     if not username or not password or not device_serial:
         return jsonify({"error": "username, password y device_serial son obligatorios"}), 400
@@ -489,7 +497,7 @@ def api_accounts_create():
         "device_serial": device_serial,
         "proxy_id": proxy_id or (load_proxies()[0]["id"] if load_proxies() else ""),
         "session_file": f"sessions/{f'acc_{len(accounts) + 1:02d}'}.json",
-        "warmup_day": int(body.get("warmup_day") or 1),
+        "warmup_day": warmup_day,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "likes_today": 0,
         "follows_today": 0,
@@ -554,7 +562,12 @@ def api_proxies():
 @app.post("/api/proxies")
 @require_role("admin")
 def api_proxies_create():
-    body = request.get_json(silent=True) or {}
+    from phonefarm.validate import ProxyCreate, validate_body
+
+    parsed = validate_body(ProxyCreate)
+    if isinstance(parsed, tuple):
+        return parsed
+    body = parsed
     host = (body.get("host") or "").strip()
     port = int(body.get("port") or 0)
     if not host or not port:
@@ -626,11 +639,14 @@ def _next_numeric_id(queue: list[dict[str, Any]]) -> str:
 
 @app.post("/api/queue")
 def api_queue_create():
-    body = request.get_json(silent=True) or {}
+    from phonefarm.validate import QueueCreate, validate_body
+
+    parsed = validate_body(QueueCreate)
+    if isinstance(parsed, tuple):
+        return parsed
+    body = parsed
     keyword = (body.get("keyword") or "").strip()
     target_account = (body.get("target_account") or "").strip()
-    if not keyword:
-        return jsonify({"error": "keyword es obligatoria"}), 400
     # Paso 5: auto_approve ELIMINADO — todo job pasa por revisión humana.
     if body.get("auto_approve") not in (None, False):
         return jsonify({"error": "auto_approve ya no está soportado (aprobación humana obligatoria)"}), 400

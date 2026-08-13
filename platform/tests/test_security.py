@@ -545,3 +545,60 @@ def test_mcp_rate_limit_por_token(crypto_env, monkeypatch: pytest.MonkeyPatch):
     assert mcp_server._rate_limit(principal["id"]) is True
     assert mcp_server._rate_limit(principal["id"]) is True
     assert mcp_server._rate_limit(principal["id"]) is False  # excedido
+
+
+# ---------------------------------------------------------------------------
+# Paso 9 — validación (Pydantic), SSRF y egress
+# ---------------------------------------------------------------------------
+
+def test_queue_create_rechaza_controles_y_booleanos_debil(flask_client):
+    # caracteres de control en keyword → 400
+    res = flask_client.post("/api/queue", json={"keyword": "hola\r\nEVIL=1"}, headers=_hdr())
+    assert res.status_code == 400
+    # auto_approve como string ("false") → 400 (pydantic no coacciona)
+    res = flask_client.post("/api/queue", json={"keyword": "x", "auto_approve": "false"}, headers=_hdr())
+    assert res.status_code == 400
+
+
+def test_proxy_create_valida_puerto(flask_client):
+    res = flask_client.post("/api/proxies", json={"host": "1.2.3.4", "port": 99999}, headers=_hdr("admin"))
+    assert res.status_code == 400
+
+
+def test_max_content_length(flask_client):
+    big = {"keyword": "x" * 2_000_000}
+    res = flask_client.post("/api/queue", json=big, headers=_hdr())
+    assert res.status_code == 413
+
+
+def test_net_guard_interno_rechaza_externo(crypto_env):
+    from phonefarm.net import EgressError, guard_external_url, guard_internal_url
+
+    # interno: solo hosts de la allowlist
+    guard_internal_url("http://127.0.0.1:8080/ping")
+    with pytest.raises(EgressError):
+        guard_internal_url("http://evil.example/api")
+    with pytest.raises(EgressError):
+        guard_internal_url("file:///etc/passwd")
+
+    # externo: IPs privadas/loopback/metadata bloqueadas (SSRF)
+    with pytest.raises(EgressError):
+        guard_external_url("http://127.0.0.1:5000/admin")
+    with pytest.raises(EgressError):
+        guard_external_url("http://169.254.169.254/latest/meta-data")
+    with pytest.raises(EgressError):
+        guard_external_url("http://10.0.0.1/x")
+    guard_external_url("https://api.pexels.com/videos/popular")
+
+
+def test_normalize_download_uri_rechaza_absolutas(crypto_env):
+    from phonefarm.generator import _normalize_download_uri
+    from phonefarm.net import EgressError
+
+    assert "/api/v1/download/x.mp4" in _normalize_download_uri("/tasks/x.mp4")
+    with pytest.raises(EgressError):
+        _normalize_download_uri("http://169.254.169.254/latest/meta-data")
+    with pytest.raises(EgressError):
+        _normalize_download_uri("https://evil.example/x.mp4")
+    with pytest.raises(EgressError):
+        _normalize_download_uri("/../../etc/passwd")

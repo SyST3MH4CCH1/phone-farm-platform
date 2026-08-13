@@ -63,9 +63,11 @@ def mpt_health() -> bool:
     """Comprueba si la API de MoneyPrinterTurbo responde (GET /ping, el único
     endpoint público tras el parche mpt-verify-token)."""
     try:
-        response = requests.get(f"{MPT_API_URL}/ping", timeout=3)
+        from phonefarm.net import safe_get
+
+        response = safe_get(f"{MPT_API_URL}/ping", timeout=3)
         return response.ok
-    except requests.exceptions.RequestException:
+    except (requests.exceptions.RequestException, ValueError):
         return False
 
 
@@ -88,7 +90,9 @@ def _submit_task(keyword: str, script: str = "", terms: list[str] | None = None)
         "bgm_volume": 0.2,
     }
     try:
-        response = requests.post(f"{MPT_API_URL}{MPT_API_PREFIX}/videos", json=payload, headers=_mpt_headers(), timeout=15)
+        from phonefarm.net import safe_post
+
+        response = safe_post(f"{MPT_API_URL}{MPT_API_PREFIX}/videos", json=payload, headers=_mpt_headers(), timeout=15)
     except requests.exceptions.RequestException as exc:
         raise GeneratorError(f"MPT no responde en {MPT_API_URL}: {type(exc).__name__}") from exc
     if not response.ok:
@@ -112,7 +116,9 @@ def _poll_task(task_id: str) -> tuple[int, list[str], str | None]:
     started = time.monotonic()
     while time.monotonic() < deadline:
         try:
-            response = requests.get(f"{MPT_API_URL}{MPT_API_PREFIX}/tasks/{task_id}", headers=_mpt_headers(), timeout=10)
+            from phonefarm.net import safe_get
+
+            response = safe_get(f"{MPT_API_URL}{MPT_API_PREFIX}/tasks/{task_id}", headers=_mpt_headers(), timeout=10)
         except requests.exceptions.RequestException as exc:
             logger.warning("MPT poll error: %s", type(exc).__name__)
             time.sleep(TASK_POLL_INTERVAL_S)
@@ -159,7 +165,9 @@ def _poll_task(task_id: str) -> tuple[int, list[str], str | None]:
 def _probe_file_size(url: str) -> int:
     """HEAD/GET parcial para conocer el tamaño actual del archivo en MPT."""
     try:
-        probe = requests.get(url, headers=_mpt_headers(), timeout=10, stream=True)
+        from phonefarm.net import safe_get
+
+        probe = safe_get(url, headers=_mpt_headers(), timeout=10, stream=True)
         size = int(probe.headers.get("Content-Length", "0") or 0)
         probe.close()
         return size
@@ -168,18 +176,27 @@ def _probe_file_size(url: str) -> int:
 
 
 def _normalize_download_uri(uri: str) -> str:
-    """Normaliza la URI de descarga que devuelve MPT a la ruta real de descarga.
+    """Normaliza la URI de descarga que devuelve MPT (paso 9: SSRF).
 
-    MPT devuelve p.ej. "/tasks/<id>/combined-1.mp4" pero el endpoint real es
-    GET /api/v1/download/<ruta-relativa-al-storage> (sin prefijo "tasks/").
+    SOLO rutas relativas bajo el storage esperado: se rechaza cualquier
+    esquema (http/https), host, usuario/credenciales o ruta absoluta externa.
     """
-    if uri.startswith(("http://", "https://")):
-        return uri
-    path = uri.lstrip("/")
+    from phonefarm.net import EgressError
+
+    if not isinstance(uri, str) or not uri:
+        raise EgressError("URI de descarga vacía")
+    if "://" in uri or uri.startswith(("//", "\\")):
+        raise EgressError("descargas MPT solo rutas relativas (sin esquema/host)")
+    if uri.startswith("/"):
+        uri = uri.lstrip("/")
+    path = uri
     if path.startswith("tasks/"):
         path = path[len("tasks/"):]
     if not path.startswith("download/"):
         path = f"download/{path}"
+    # sin '..' ni rutas absolutas fuera del storage
+    if ".." in path.split("/"):
+        raise EgressError("ruta de descarga con '..' no permitida")
     return f"{MPT_API_URL}{MPT_API_PREFIX}/{path}"
 
 
@@ -228,10 +245,12 @@ def _download_video(uri: str, dest: Path) -> None:
     Si la descarga queda truncada (MP4 inválido), reintenta hasta 3 veces con
     espera — el archivo de MPT puede seguir escribiéndose.
     """
+    from phonefarm.net import safe_get
+
     url = _normalize_download_uri(uri)
     for attempt in range(1, 5):
         dest.parent.mkdir(parents=True, exist_ok=True)
-        response = requests.get(url, headers=_mpt_headers(), timeout=180, stream=True)
+        response = safe_get(url, headers=_mpt_headers(), timeout=180, stream=True)
         if not response.ok:
             raise GeneratorError(f"Descarga MPT falló (HTTP {response.status_code}): {url[:200]}")
         with open(dest, "wb") as fh:

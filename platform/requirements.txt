@@ -10,6 +10,7 @@ python-dotenv>=1.0
 psutil>=5.9
 # MCP server (Streamable HTTP) para agentes — FastMCP 1.x (2.x cambió la API)
 mcp==1.29.0
+pydantic>=2.10,<3   # paso 9: esquemas de validación (pin exacto en paso 13)
 uvicorn>=0.30
 # taktik-bot (engagement): se instala desde el repo git (pin del commit probado)
 taktik-bot @ git+https://github.com/masterFuf/taktik-bot.git@c2b748967622c26cc478aa48ebbd2493ab2d1086

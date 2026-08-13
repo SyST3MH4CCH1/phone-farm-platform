@@ -165,3 +165,48 @@ describe("paso 6 — identidad y auditoría de auth", () => {
     expect(auditCalls.some((c) => c.action === "auth.login" && c.actor === "admin")).toBe(true);
   });
 });
+
+describe("paso 9 — validación, SSRF y configuración segura", () => {
+  it("login con caracteres de control → 400", async () => {
+    const app = createApp(testConfig(), { db: seedDb() });
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ username: "admin\r\nX=1", password: TEST_ADMIN_PW });
+    expect(res.status).toBe(400);
+  });
+
+  it("adb/test-connection ignora host/puerto del cliente (anti-SSRF)", async () => {
+    const app = createApp(testConfig(), {
+      db: seedDb(),
+      flaskFetch: async () => ({ status: 200, text: async () => JSON.stringify({ ok: true }) }),
+      hostExec: async () => "List of devices attached\nSERIAL123\tdevice product:x model:y\n",
+    });
+    const a = await login(app, "admin", TEST_ADMIN_PW);
+    const res = await auth(a)(request(app).post("/api/adb/test-connection"))
+      .send({ mini_pc_ip: "169.254.169.254", mini_pc_port: 8080, adb_host: "evil.example" });
+    expect(res.status).toBe(200);
+    // la config devuelta SIEMPRE es la del servidor
+    expect(res.body.config).toMatchObject({ adb_host: "127.0.0.1", mini_pc_ip: "127.0.0.1" });
+  });
+
+  it("moneyprinter/config rechaza secretos y valores con '=' o saltos de línea", async () => {
+    const db = seedDb();
+    const app = createApp(testConfig(), { db });
+    const a = await login(app, "admin", TEST_ADMIN_PW);
+
+    const secret = await auth(a)(request(app).post("/api/moneyprinter/config"))
+      .send({ pexels_api_key: "sk-secreto" });
+    expect(secret.status).toBe(400);
+
+    const injection = await auth(a)(request(app).post("/api/moneyprinter/config"))
+      .send({ voice_name: "voz\nADMIN_PASSWORD=hacked" });
+    expect(injection.status).toBe(400);
+
+    // valor válido → se guarda en settings (nunca en .env)
+    const ok = await auth(a)(request(app).post("/api/moneyprinter/config"))
+      .send({ voice_name: "es-ES-PacoNeural" });
+    expect(ok.status).toBe(200);
+    const row = db.prepare("SELECT value FROM settings WHERE key='voice_name'").get() as { value: string };
+    expect(row.value).toBe("es-ES-PacoNeural");
+  });
+});

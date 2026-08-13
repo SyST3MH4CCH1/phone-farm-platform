@@ -77,6 +77,11 @@ export function seedDb(): Database.Database {
       actor TEXT, role TEXT, action TEXT NOT NULL, object TEXT,
       meta TEXT, request_id TEXT, prev_hash TEXT, hash TEXT
     );
+    CREATE TABLE settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
   const ins = db.prepare("INSERT INTO users (id, username, role, password_hash) VALUES (?,?,?,?)");
   ins.run("usr_admin", "admin", "admin", hashPassword(TEST_ADMIN_PW));

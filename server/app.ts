@@ -16,6 +16,8 @@ import type { AppConfig } from "./config";
 import { SessionStore, safeEqual, newSessionToken, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, SessionUser } from "./sessions";
 import { verifyPassword } from "./passwords";
 import { LoginRateLimiter } from "./rate-limit";
+import { safeFetchInternal, guardInternalUrl, EgressError, INTERNAL_HOSTS } from "./net";
+import { validate, loginSchema, queueCreateSchema, accountCreateSchema, proxyCreateSchema, mptSettingsSchema, adbTouchSchema, adbMirrorSchema } from "./schemas";
 
 // --- Dependencias inyectables (tests) ---
 export interface AppDeps {
@@ -43,6 +45,11 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   }
   const app = express();
   const store = deps.sessionStore ?? new SessionStore(deps.db);
+  // Allowlist interna efectiva: loopback + hosts configurados de Flask/MPT.
+  const internalHosts = new Set([...INTERNAL_HOSTS]);
+  for (const u of [config.flaskBase, config.mptApiUrl]) {
+    try { internalHosts.add(new URL(u).hostname.toLowerCase()); } catch { /* se valida al usarse */ }
+  }
   const loginLimiter = new LoginRateLimiter(deps.db);
   const hostExec = deps.hostExec ?? ((file: string, args: string[], timeout = 8000) =>
     new Promise<string>((resolve) => {
@@ -192,6 +199,8 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
       headers["X-Role"] = user.role;
     }
     try {
+      // SSRF (paso 9): solo destinos internos de la allowlist (loopback+config).
+      guardInternalUrl(`${config.flaskBase}${flaskPath}`, internalHosts);
       const r = await (deps.flaskFetch ?? defaultFlaskFetch)(
         `${config.flaskBase}${flaskPath}`,
         {
@@ -254,7 +263,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
 
   // Login contra la tabla users (scrypt) con rate limit persistente por
   // usuario+IP (5/15min) y por IP (20/15min). Sin credenciales de .env.
-  app.post("/api/auth/login", (req, res) => {
+  app.post("/api/auth/login", validate(loginSchema), (req, res) => {
     const { username, password } = req.body || {};
     const u = typeof username === "string" ? username : "";
     const p = typeof password === "string" ? password : "";
@@ -409,7 +418,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
 
   // 2. Accounts (solo admin para mutaciones)
   app.get("/api/accounts", (req, res) => flask(req, res, "GET", "/api/accounts"));
-  app.post("/api/accounts", requireRole("admin"), (req, res) => flask(req, res, "POST", "/api/accounts", req.body));
+  app.post("/api/accounts", requireRole("admin"), validate(accountCreateSchema), (req, res) => flask(req, res, "POST", "/api/accounts", req.body));
   app.delete("/api/accounts/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/accounts/${req.params.id}`));
 
   // Engagement bots (real -> inicia/detiene taktik-bot en Flask) — SOLO admin
@@ -418,7 +427,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
 
   // 3. Proxies (admin para mutaciones)
   app.get("/api/proxies", (req, res) => flask(req, res, "GET", "/api/proxies"));
-  app.post("/api/proxies", requireRole("admin"), (req, res) => flask(req, res, "POST", "/api/proxies", req.body));
+  app.post("/api/proxies", requireRole("admin"), validate(proxyCreateSchema), (req, res) => flask(req, res, "POST", "/api/proxies", req.body));
   app.delete("/api/proxies/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/proxies/${req.params.id}`));
   app.post("/api/proxies/verify", (req, res) => flask(req, res, "POST", "/api/proxies/verify", req.body));
 
@@ -426,7 +435,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   // RBAC (paso 5): operator consulta/crea borradores y marca "listo";
   // admin aprueba, publica, programa, rechaza y elimina.
   app.get("/api/queue", (req, res) => flask(req, res, "GET", "/api/queue"));
-  app.post("/api/queue", (req, res) => flask(req, res, "POST", "/api/queue", req.body));
+  app.post("/api/queue", validate(queueCreateSchema), (req, res) => flask(req, res, "POST", "/api/queue", req.body));
   app.post("/api/queue/next", (req, res) => flask(req, res, "POST", "/api/queue/next", req.body));
   app.get("/api/drafts", (req, res) => flask(req, res, "GET", "/api/drafts"));
   app.post("/api/queue/:id/ready", (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/ready`, req.body));
@@ -507,36 +516,30 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     });
   });
 
-  // Guardar config = persistir en .env raíz (única fuente de verdad).
-  // Solo claves MPT_*/LLM_PROVIDER — nunca credenciales de sesión ni tokens.
-  // (Paso 9: pasa a tabla `settings` validada, sin escribir .env desde HTTP.)
-  app.post("/api/moneyprinter/config", requireRole("admin"), async (req, res) => {
-    const ALLOWED: Record<string, string> = {
-      mpt_api_url: "MPT_API_URL",
-      llm_provider: "LLM_PROVIDER",
-      voice_name: "MPT_VOICE_NAME",
-      video_aspect: "MPT_VIDEO_ASPECT",
-      pexels_api_key: "PEXELS_API_KEY",
-      minimax_api_key: "MINIMAX_API_KEY",
-    };
-    const envPath = path.join(process.cwd(), ".env");
-    let raw = "";
-    try { raw = await import("fs/promises").then((m) => m.readFile(envPath, "utf8")); } catch { /* crear */ }
-    const lines = raw.split(/\r?\n/);
-    const setKey = (k: string, v: string) => {
-      const re = new RegExp(`^${k}=`);
-      const line = `${k}=${v}`;
-      const idx = lines.findIndex((l) => re.test(l));
-      if (idx >= 0) lines[idx] = line; else lines.push(line);
-    };
-    let changed = 0;
-    for (const [bodyKey, envKey] of Object.entries(ALLOWED)) {
-      const v = req.body?.[bodyKey];
-      if (typeof v === "string" && v.length > 0) { setKey(envKey, v); changed++; }
+  // Guardar config (paso 9): tabla `settings` validada; NUNCA se escribe .env
+  // desde HTTP (PF-SEC-018). Los secretos (pexels/minimax) no se aceptan.
+  app.post("/api/moneyprinter/config", requireRole("admin"), validate(mptSettingsSchema), async (req, res) => {
+    try {
+      const allowed = ["mpt_api_url", "llm_provider", "voice_name", "video_aspect"];
+      const upsert = deps.db.prepare(
+        "INSERT INTO settings (key, value, updated_at) VALUES (?,?,datetime('now')) " +
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')"
+      );
+      let changed = 0;
+      const body = req.body || {};
+      for (const key of allowed) {
+        const v = body[key];
+        if (typeof v === "string" && v.length > 0) {
+          if (key === "mpt_api_url") guardInternalUrl(v); // solo hosts internos
+          upsert.run(key, v);
+          changed++;
+        }
+      }
+      if (changed === 0) return res.status(400).json({ error: "Sin claves válidas para guardar." });
+      res.json({ success: true, saved: changed, note: "Aplica al reiniciar/regenerar config (nunca se edita .env)." });
+    } catch (err) {
+      res.status(500).json({ error: "no se pudo guardar la configuración", detail: err instanceof Error ? err.message : String(err) });
     }
-    if (changed === 0) return res.status(400).json({ error: "Sin claves válidas para guardar." });
-    await import("fs/promises").then((m) => m.writeFile(envPath, lines.join("\n"), "utf8"));
-    res.json({ success: true, saved: changed, note: "Reinicia el stack para aplicar (.env se lee en arranque)." });
   });
 
   // Generar reel = crear job real en Flask (solo admin). Sin auto_approve:
@@ -605,14 +608,21 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   // Crear cuenta desde dispositivo ADB autorizado (solo admin)
   app.post("/api/accounts/from-device", requireRole("admin"), (req, res) => flask(req, res, "POST", "/api/accounts/from-device", req.body));
 
-  // (Paso 9: sin host/puerto del cliente; usa config.adbHost/config.adbPort.)
+  // (Paso 9: sin host/puerto del cliente — SSRF. Usa ADB_HOST/ADB_PORT del
+  // servidor, validados al arrancar, y el token interno al destino.)
   app.post("/api/adb/test-connection", async (req, res) => {
-    const adbHost = req.body?.adb_host || config.adbHost;
-    const miniPcIp = req.body?.mini_pc_ip || "127.0.0.1";
-    const miniPcPort = Number(req.body?.mini_pc_port) || 5000;
+    const adbHost = config.adbHost;
+    const miniPcIp = "127.0.0.1";
+    const miniPcPort = config.flaskBase ? new URL(config.flaskBase).port || 5000 : 5000;
 
     let flaskOnline = false;
-    try { flaskOnline = (await fetch(`http://${miniPcIp}:${miniPcPort}/api/stats`, { signal: AbortSignal.timeout(3000) })).ok; } catch { /* off */ }
+    try {
+      const r = await fetch(`${config.flaskBase}/api/stats`, {
+        headers: { "X-Internal-Auth": INTERNAL_TOKEN },
+        signal: AbortSignal.timeout(3000),
+      });
+      flaskOnline = r.ok;
+    } catch { /* off */ }
 
     const out = await hostExec("adb", ["devices", "-l"], 8000);
     const devices = out
@@ -633,7 +643,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   });
 
   // Visor de pantalla en tiempo real: lanza scrcpy del dispositivo (ventana nativa).
-  app.post("/api/adb/mirror", requireRole("admin"), (req, res) => {
+  app.post("/api/adb/mirror", requireRole("admin"), validate(adbMirrorSchema), (req, res) => {
     const serial = String(req.body?.serial || "").trim();
     if (!serial || !/^[A-Za-z0-9._:-]+$/.test(serial)) {
       return res.status(400).json({ error: "serial inválido" });
@@ -685,7 +695,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
 
   // Control táctil (Panda interactivo): tap / swipe / key sobre el dispositivo.
   const TOUCH_ERR = (m: string) => ({ error: m });
-  app.post("/api/adb/touch", (req, res) => {
+  app.post("/api/adb/touch", validate(adbTouchSchema), (req, res) => {
     const serial = String(req.body?.serial || "").trim();
     if (!serial || !/^[A-Za-z0-9._:-]+$/.test(serial)) {
       return res.status(400).json(TOUCH_ERR("serial inválido"));
