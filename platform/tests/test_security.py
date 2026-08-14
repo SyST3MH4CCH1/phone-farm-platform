@@ -368,6 +368,24 @@ def test_operator_no_puede_publicar_ni_aprobar(flask_client):
     assert res.status_code == 403
 
 
+def test_operator_no_puede_gestionar_perfiles_de_contenido(flask_client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Los perfiles de nicho (config global de generación) son solo admin."""
+    import phonefarm.content as content
+
+    monkeypatch.setattr(content, "PROFILES_FILE", tmp_path / "content_profiles.json")
+    op = _hdr(role="operator")
+    res = flask_client.post("/api/content/profiles", json={"id": "n1", "name": "N1"}, headers=op)
+    assert res.status_code == 403
+    res = flask_client.delete("/api/content/profiles/n1", headers=op)
+    assert res.status_code == 403
+    # lectura permitida (operator selecciona nicho al crear contenido)
+    res = flask_client.get("/api/content/profiles", headers=op)
+    assert res.status_code == 200
+    # admin puede crear
+    res = flask_client.post("/api/content/profiles", json={"id": "n1", "name": "N1"}, headers=_hdr())
+    assert res.status_code == 201
+
+
 def test_login_ig_admin_usa_username_almacenado(flask_client, monkeypatch):
     import phonefarm.platform_data as pd
     from phonefarm import publisher
@@ -620,6 +638,24 @@ def test_redact_text_enmascara_secretos():
     assert "tok_123" not in out
     assert "acc_01.json" not in out
     assert "<redacted>" in out
+
+
+def test_redact_filter_redacta_args_interpolados():
+    """Los args de logging se interpolarían en claro tras el filtro: se redacta el mensaje completo."""
+    import logging
+
+    from phonefarm.redact import RedactFilter
+
+    filt = RedactFilter()
+    rec = logging.LogRecord(
+        "phonefarm.test", logging.INFO, __file__, 1,
+        "Proxy %s conectado", ("credenciales pass=supersecreto123 host=1.2.3.4",), None,
+    )
+    assert filt.filter(rec) is True
+    formatted = rec.getMessage()
+    assert "supersecreto123" not in formatted
+    assert "pass=<redacted>" in formatted
+    assert rec.args is None  # ya interpolado: el Formatter no re-formatea
 
 
 def test_backup_export_restore_roundtrip(crypto_env, monkeypatch: pytest.MonkeyPatch):

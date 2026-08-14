@@ -965,6 +965,7 @@ def api_content_profiles():
 
 
 @app.post("/api/content/profiles")
+@require_role("admin")
 def api_content_profiles_create():
     from phonefarm import content
 
@@ -997,6 +998,7 @@ def api_content_profiles_create():
 
 
 @app.delete("/api/content/profiles/<profile_id>")
+@require_role("admin")
 def api_content_profiles_delete(profile_id: str):
     from phonefarm import content
 

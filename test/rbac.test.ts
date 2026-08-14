@@ -123,6 +123,44 @@ describe("paso 5 — RBAC admin/operator", () => {
     expect(res.status).toBe(200);
   });
 
+  it("operator NO puede control ADB táctil, config MPT ni gestionar perfiles (403)", async () => {
+    for (const [path, body] of [
+      ["/api/adb/touch", { serial: "SERIAL1", action: "tap", x: 1, y: 1 }],
+      ["/api/moneyprinter/test-pexels", { pexels_api_key: "sk-test" }],
+      ["/api/content/profiles", { id: "n1", name: "Nicho 1" }],
+    ] as [string, object][]) {
+      const res = await mut(path, body, operator);
+      expect(res.status).toBe(403);
+    }
+    const del = await auth(operator)(request(app).delete("/api/content/profiles/n1"));
+    expect(del.status).toBe(403);
+    const voices = await auth(operator)(request(app).get("/api/moneyprinter/voices"));
+    expect(voices.status).toBe(403);
+  });
+
+  it("operator SÍ puede leer perfiles y config MPT (solo lectura)", async () => {
+    const profiles = await auth(operator)(request(app).get("/api/content/profiles"));
+    expect(profiles.status).toBe(200);
+    const cfg = await auth(operator)(request(app).get("/api/moneyprinter/config"));
+    expect(cfg.status).toBe(200);
+  });
+
+  it("admin llega a los endpoints protegidos (nunca 403)", async () => {
+    // app dedicada con hostExec mock: /api/adb/touch ejecuta adb real (no inyectable),
+    // así que no se llama aquí (el 403 de operator ya cubre el gate del middleware).
+    const app2 = createApp(testConfig(), {
+      db: seedDb(),
+      flaskFetch: async () => ({ status: 200, text: async () => JSON.stringify({ ok: true }) }),
+      hostExec: async () => "es-ES-AlvaroNeural\nes-ES-PacoNeural",
+    });
+    const a = await login(app2, "admin", TEST_ADMIN_PW);
+    const voices = await auth(a)(request(app2).get("/api/moneyprinter/voices"));
+    expect(voices.status).toBe(200);
+    const profile = await auth(a)(request(app2).post("/api/content/profiles"))
+      .send({ id: "n1", name: "Nicho 1" });
+    expect(profile.status).toBe(200);
+  });
+
   it("moneyprinter/generate NO fuerza auto_approve", async () => {
     let seenBody: unknown = null;
     const app2 = createApp(testConfig(), {

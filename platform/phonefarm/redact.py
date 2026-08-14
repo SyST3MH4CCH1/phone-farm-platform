@@ -41,11 +41,14 @@ class RedactFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         try:
-            if isinstance(record.msg, str):
-                record.msg = redact_text(record.msg)
             if record.args:
-                # args pueden ser tuplas con valores sensibles (p.ej. exc en str)
-                pass
+                # Los args se interpolan DESPUÉS por el Formatter, así que el
+                # filtro debe redactar el mensaje YA interpolado y vaciar args
+                # (p.ej. logger.info("pass=%s", secret) → el secreto iba en claro).
+                record.msg = redact_text(record.getMessage())
+                record.args = None
+            elif isinstance(record.msg, str):
+                record.msg = redact_text(record.msg)
         except Exception:  # noqa: BLE001 — la redacción nunca rompe el log
             pass
         return True

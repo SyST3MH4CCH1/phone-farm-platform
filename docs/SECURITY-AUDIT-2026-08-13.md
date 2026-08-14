@@ -588,3 +588,88 @@ Prioridad de fix: P2 (sprint)
 - El módulo `mcp` no está instalado en el Python activo; no se hizo una llamada HTTP real a `/mcp`.
 - No se enviaron payloads a Instagram, LLM, Pexels, proxies ni teléfonos ADB reales.
 - La ausencia de CVEs de `pip-audit` solo cubre paquetes que la herramienta pudo resolver desde PyPI; `taktik-bot` y el checkout Git quedan fuera de esa garantía.
+
+---
+
+# Ronda 3 — Auditoría de seguimiento (2026-08-14)
+
+**Alcance:** relectura completa de `server/app.ts` + `platform/phonefarm/*.py` + frontend React, verificación de git/secretos, `npm audit` y comparación con la línea base PF-SEC-001..030 (cerrada).  
+**Método:** revisión estática dirigida a RBAC por endpoint, redacción de logs, manejo de `.env` en HTTP, robustez de cookies y consistencia de la cadena de autenticación.
+
+| Severidad | Hallazgos |
+|---|---:|
+| ALTA | 1 |
+| MEDIA | 3 |
+| BAJA | 2 |
+| **Total** | **6** (todos remediados en esta ronda) |
+
+## [ALTA-PF-SEC-031] RedactFilter no redacta `record.args` — secretos en claro en logs
+
+Severidad: ALTA  
+Categoría: Logging/forense, gestión de secretos  
+Ubicación: `platform/phonefarm/redact.py:42-51`  
+Descripción: el filtro redactaba solo `record.msg` (el formato), pero `logging.Formatter` interpola `record.args` DESPUÉS de pasar por los filtros. Un `logger.info("Proxy %s conectado", "pass=supersecreto")` escribía el secreto en claro en el archivo y en el ring buffer (SSE/MCP), invalidando la garantía de redacción del paso 10.  
+Evidencia: `RedactFilter.filter()` dejaba `if record.args: pass`.  
+Remediación: el filtro ahora interpola con `record.getMessage()`, redacta el mensaje COMPLETO y vacía `record.args` para que el Formatter no re-formatee.  
+Test: `test_redact_filter_redacta_args_interpolados` (pytest).
+
+## [MEDIA-PF-SEC-032] RBAC inconsistente en control ADB táctil
+
+Severidad: MEDIA  
+Categoría: Autorización (RBAC)  
+Ubicación: `server/app.ts` `/api/adb/touch`  
+Descripción: `/api/adb/mirror` (scrcpy) era admin-only, pero `/api/adb/touch` (tap/swipe/key/power sobre todos los dispositivos físicos) solo exigía sesión. Un operator podía controlar físicamente los teléfonos de la granja.  
+Remediación: `requireRole("admin")` en `/api/adb/touch` (mismo criterio que `/mirror`). El screenshot (`/api/adb/screenshot/:serial`) se mantiene accesible a operator por ser lectura/monitoreo, coherente con `/api/adb/devices` y `/api/stats`.  
+Test: `test/rbac.test.ts` (operator → 403).
+
+## [MEDIA-PF-SEC-033] RBAC en perfiles de contenido (config global de generación)
+
+Severidad: MEDIA  
+Categoría: Autorización (RBAC)  
+Ubicación: `platform/phonefarm/platform.py` `POST/DELETE /api/content/profiles`; `server/app.ts` proxys equivalentes  
+Descripción: cualquier operator podía crear/eliminar perfiles de nicho que gobiernan la generación global: `tone` (se interpola en el prompt de sistema del LLM), `caption_template`, `voice_name`, `video_terms`. Sin gate en Express NI en Flask (a diferencia de approve/publish/schedule).  
+Remediación: `require_role("admin")` en Flask y `requireRole("admin")` en Express para POST/DELETE. El GET se mantiene abierto (el operator selecciona nicho al crear contenido).  
+Tests: `test_operator_no_puede_gestionar_perfiles_de_contenido` (pytest) + `test/rbac.test.ts`.
+
+## [MEDIA-PF-SEC-034] Ejecución de procesos host y oráculo de claves sin RBAC (moneyprinter)
+
+Severidad: MEDIA  
+Categoría: Autorización (RBAC), exposición de información  
+Ubicación: `server/app.ts` `GET /api/moneyprinter/voices` y `POST /api/moneyprinter/test-pexels`  
+Descripción: un operator podía (a) invocar `edge-tts --list-voices` en el host y (b) usar `config.pexelsApiKey` del servidor como oráculo de validez de la key. Ambas son operaciones de configuración, coherentes con el POST `/api/moneyprinter/config` (admin-only).  
+Remediación: `requireRole("admin")` en ambos. `GET /api/moneyprinter/config` se mantiene operator (estado de solo lectura, sin secretos).  
+Test: `test/rbac.test.ts` (operator → 403 en voices/test-pexels).
+
+## [BAJA-PF-SEC-035] `GET /api/moneyprinter/config` releía `.env` desde HTTP
+
+Severidad: BAJA  
+Categoría: Gestión de secretos  
+Ubicación: `server/app.ts` `GET /api/moneyprinter/config`  
+Descripción: el endpoint parseaba el fichero `.env` con `fs.readFile` en cada request. Hoy solo extrae campos no sensibles, pero el patrón es frágil: un campo futuro añadido al parseo filtraría secretos por HTTP.  
+Remediación: se elimina la lectura del fichero; los valores se toman de `config` (cargada desde `.env` al arrancar por `loadConfig`). Comportamiento de la API idéntico.  
+Test: suite vitest existente (paso 9) sin cambios de contrato.
+
+## [BAJA-PF-SEC-036] `cmd_revoke` con UPDATE duplicado y cookie parse con 500
+
+Severidad: BAJA  
+Categoría: Robustez, consistencia  
+Ubicación: `platform/phonefarm/mcp_tokens.py:87-95`; `server/app.ts` `parseCookies`  
+Descripción: `cmd_revoke` ejecutaba el `UPDATE service_tokens SET revoked=1` DOS veces (una en autocommit fuera del `with conn` y otra dentro), con `rowcount` leído tras la segunda ejecución. Además, una cookie malformada (`%` inválido) hacía lanzar `URIError` a `decodeURIComponent` → HTTP 500.  
+Remediación: un solo UPDATE transaccional capturando su `rowcount`; `try/catch` en `parseCookies` (la cookie malformada se ignora, no revienta en 500).
+
+## Verificaciones sin hallazgo (ronda 3)
+
+- `GET /api/proxies` filtra el campo `pass` (Flask `platform.py:639`); `_account_dto` filtra `password` y `session_file` (`_row_to_account` descifra a `password`, nunca expone `enc_password`).
+- `.env` y `platform/.env` no están trackeados en git (solo `.env.example`); `npm audit --omit=dev` → 0 vulnerabilidades; CI `audit-deps` cubre `npm audit --audit-level=high` + `pip-audit`.
+- Frontend sin `innerHTML`/`dangerouslySetInnerHTML`/`eval` (XSS no aplicable); `/panda` usa `textContent` (regresión paso 14 cubierta por test).
+- `/api/content/preview` valida `keyword` (MAX_KEYWORD_LEN=200, `content.py`) — descartado el hallazgo preliminar de ausencia de límite.
+- `execFile` sin shell en ADB/scrcpy/edge-tts (sin command injection); `/api/stack` usa `exec()` pero con comandos fijos y PID del sistema (no explotable remotamente; solo lectura, cache 10 s).
+
+## Observaciones aceptadas por diseño (sin cambio)
+
+- `/api/adb/screenshot/:serial` accesible a operator: monitoreo de pantallas, mismo criterio que devices/stats (el CONTROL es admin: touch/mirror).
+- `GET /api/proxies` dispara `verify_proxy` (conexión saliente a ipify) con cache 60 s: coste acotado por cache, operador autenticado interno.
+- `scrypt N=2^14` por debajo del N=2^17 de OWASP: cambiar N rompería los hashes existentes; requiere rehash-on-login planificado (no se toca en esta ronda).
+- `token_is_valid` abre una conexión SQLite por llamada: ineficiencia sin impacto de seguridad (rate limit MCP 60/min).
+
+**Postura tras la ronda 3:** 9/10 mantenida; sin hallazgos nuevos abiertos. Evidencia: `npm run typecheck` PASS, 38 vitest + 44 pytest PASS.

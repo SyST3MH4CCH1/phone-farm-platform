@@ -86,9 +86,8 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 def cmd_revoke(args: argparse.Namespace) -> int:
     conn = pdb.open_migrated(_resolve_db())
-    cur = conn.execute("UPDATE service_tokens SET revoked=1 WHERE name=? AND revoked=0", (args.name,))
     with conn:
-        conn.execute("UPDATE service_tokens SET revoked=1 WHERE name=? AND revoked=0", (args.name,))
+        cur = conn.execute("UPDATE service_tokens SET revoked=1 WHERE name=? AND revoked=0", (args.name,))
     if cur.rowcount == 0:
         sys.exit(f"[ERROR] token '{args.name}' no encontrado o ya revocado")
     print(f"OK: token '{args.name}' revocado")

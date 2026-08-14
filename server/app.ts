@@ -135,7 +135,13 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     for (const part of header.split(";")) {
       const eq = part.indexOf("=");
       if (eq === -1) continue;
-      out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1).trim());
+      const value = part.slice(eq + 1).trim();
+      try {
+        out[part.slice(0, eq).trim()] = decodeURIComponent(value);
+      } catch {
+        // cookie malformada (% inválido): se ignora en vez de reventar en 500
+        out[part.slice(0, eq).trim()] = value;
+      }
     }
     return out;
   }
@@ -471,8 +477,8 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   app.post("/api/queue/from-preview", (req, res) => flask(req, res, "POST", "/api/queue/from-preview", req.body));
   app.post("/api/content/preview", (req, res) => flask(req, res, "POST", "/api/content/preview", req.body));
   app.get("/api/content/profiles", (req, res) => flask(req, res, "GET", "/api/content/profiles"));
-  app.post("/api/content/profiles", (req, res) => flask(req, res, "POST", "/api/content/profiles", req.body));
-  app.delete("/api/content/profiles/:id", (req, res) => flask(req, res, "DELETE", `/api/content/profiles/${req.params.id}`));
+  app.post("/api/content/profiles", requireRole("admin"), (req, res) => flask(req, res, "POST", "/api/content/profiles", req.body));
+  app.delete("/api/content/profiles/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/content/profiles/${req.params.id}`));
 
   // Código fuente real del backend (CodeViewer) — solo admin y desactivable.
   // EXPOSE_SOURCE=true lo habilita; por defecto responde 404 aunque Flask lo sirva.
@@ -494,23 +500,17 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
       if (r.ok) { const d = await r.json(); flaskDrafts = Array.isArray(d) ? d.length : 0; }
     } catch { /* off */ }
 
-    // Config surfacada desde .env (fuente única) — no valores hardcodeados.
-    const dotenvRaw = await import("fs/promises").then(m => m.readFile(path.join(process.cwd(), ".env"), "utf8")).catch(() => "");
-    const env: Record<string, string> = {};
-    for (const line of dotenvRaw.split(/\r?\n/)) {
-      const m = line.match(/^([^=]+)=(.*)$/);
-      if (m) env[m[1].trim()] = m[2].trim().replace(/^["']|["']$/g, "");
-    }
-
+    // Config ya cargada desde .env al arrancar (loadConfig); NO se relee el
+    // fichero .env desde HTTP (un campo futuro mal parseado filtraría secretos).
     res.json({
       status: mptOnline ? "online" : "offline",
       mpt_online: mptOnline,
       drafts: flaskDrafts,
-      mpt_api_url: env.MPT_API_URL || config.mptApiUrl,
-      llm_provider: env.LLM_PROVIDER || config.llmProvider,
-      voice_name: env.MPT_VOICE_NAME || config.mptVoiceName,
-      video_aspect: env.MPT_VIDEO_ASPECT || config.mptVideoAspect,
-      bgm_volume: Number(env.MPT_BGM_TYPE === "random" ? 0.2 : 0),
+      mpt_api_url: config.mptApiUrl,
+      llm_provider: config.llmProvider,
+      voice_name: config.mptVoiceName,
+      video_aspect: config.mptVideoAspect,
+      bgm_volume: Number(config.mptBgmType === "random" ? 0.2 : 0),
       subtitle_enabled: true,
       source: "real",
     });
@@ -549,14 +549,14 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     return flask(req, res, "POST", "/api/queue", body);
   });
 
-  app.get("/api/moneyprinter/voices", async (_req, res) => {
+  app.get("/api/moneyprinter/voices", requireRole("admin"), async (_req, res) => {
     try {
       const voices = await hostExec("edge-tts", ["--list-voices"], 8000);
       res.json({ voices: voices ? voices.split("\n").filter(Boolean) : [], source: "edge-tts" });
     } catch { res.json({ voices: [], source: "edge-tts", error: "edge-tts no disponible" }); }
   });
 
-  app.post("/api/moneyprinter/test-pexels", async (req, res) => {
+  app.post("/api/moneyprinter/test-pexels", requireRole("admin"), async (req, res) => {
     const key = req.body?.pexels_api_key || config.pexelsApiKey;
     if (!key) return res.json({ valid: false, message: "Sin PEXELS_API_KEY" });
     try {
@@ -694,8 +694,9 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   });
 
   // Control táctil (Panda interactivo): tap / swipe / key sobre el dispositivo.
+  // Solo admin: control físico del dispositivo (mismo criterio que /mirror).
   const TOUCH_ERR = (m: string) => ({ error: m });
-  app.post("/api/adb/touch", validate(adbTouchSchema), (req, res) => {
+  app.post("/api/adb/touch", requireRole("admin"), validate(adbTouchSchema), (req, res) => {
     const serial = String(req.body?.serial || "").trim();
     if (!serial || !/^[A-Za-z0-9._:-]+$/.test(serial)) {
       return res.status(400).json(TOUCH_ERR("serial inválido"));

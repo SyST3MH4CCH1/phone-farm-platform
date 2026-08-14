@@ -75,3 +75,20 @@ Fuente de hallazgos: `docs/SECURITY-AUDIT-2026-08-13.md` (30 observaciones, post
 2. Rotar claves externas: Pexels, MiniMax, Kimi, OpenAI, DataImpulse + relogin Instagram (checklist en `docs/SECURITY-ROTATION-2026-08-13.md`).
 3. Eliminar `backups/legacy/phonefarm-export-20260811-1137.zip` tras verificar restauración con backup cifrado (paso 10).
 4. Decidir sobre purga de historial git (hallazgos placeholder en commits `9da8a66`/`d5abdfe`) — requiere autorización.
+
+---
+
+## Ronda 3 — auditoría de seguimiento (2026-08-14)
+
+Auditoría fresca post-cierre del programa 0-14: relectura completa de `server/app.ts`, `platform/phonefarm/*.py` y frontend; verificación git/secretos y `npm audit`. 6 hallazgos nuevos (1 ALTA, 3 MEDIA, 2 BAJA), TODOS remediados en esta ronda. Detalle completo en `docs/SECURITY-AUDIT-2026-08-13.md` (sección "Ronda 3").
+
+| ID | Severidad | Categoría | Estado | Remedio |
+|---|---|---|---|---|
+| PF-SEC-031 | ALTA | Logging | CERRADO | `RedactFilter` ahora redacta `record.args` interpolados (antes: secretos en claro vía `logger.info("pass=%s", ...)`) |
+| PF-SEC-032 | MEDIA | RBAC | CERRADO | `/api/adb/touch` admin-only (control físico, criterio `/mirror`) |
+| PF-SEC-033 | MEDIA | RBAC | CERRADO | `POST/DELETE /api/content/profiles` admin-only en Express + Flask (config global de generación) |
+| PF-SEC-034 | MEDIA | RBAC | CERRADO | `/api/moneyprinter/voices` y `/test-pexels` admin-only |
+| PF-SEC-035 | BAJA | Secretos | CERRADO | `GET /api/moneyprinter/config` ya no relee `.env` desde HTTP (usa `config` de arranque) |
+| PF-SEC-036 | BAJA | Robustez | CERRADO | `cmd_revoke` UPDATE único transaccional; `parseCookies` tolera cookies malformadas (sin 500) |
+
+**Evidencia:** `npm run typecheck` PASS · 38 vitest PASS · 44 pytest PASS (3 tests vitest + 2 pytest nuevos). Sin hallazgos nuevos abiertos; postura 9/10 mantenida.
