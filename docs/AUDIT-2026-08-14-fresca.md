@@ -66,7 +66,7 @@
 ### 🟠 ALTO
 
 **PY-01 — Credencial real de Instagram en claro en disco (`platform/accounts.json`), contradice AUDIT-003**
-- **Archivo:línea:** `platform/accounts.json` (físico, no trackeado): la cuenta `acc_02` (`redmi_s2`) tiene `"password": "RedmiPass2026!"` en claro (verificado; valor redactado aquí por seguridad). También sobreviven `queue.json` con rutas absolutas de usuario y `proxies.json`.
+- **Archivo:línea:** `platform/accounts.json` (físico, no trackeado): la cuenta `acc_02` (`redmi_s2`) tenía una contraseña real en claro (valor redactado aquí por seguridad; rotada y migrada a SQLite cifrado el 2026-08-17). También sobrevivían `queue.json` con rutas absolutas de usuario y `proxies.json`.
 - **Impacto:** exfiltración de la credencial IG si el directorio se respalda/comparte/commitea por error; invalida la garantía "nunca en claro en disco".
 - **Recomendación:** ejecutar la migración SQLite (`python -m phonefarm.migrate --commit`) y borrar los JSON legacy, o borrarlos manualmente tras confirmar que la BD es fuente de verdad; **rotar la contraseña de `acc_02`** y reloguear IG. Ver también MF-02 (la BD no existe aún).
 
@@ -81,7 +81,7 @@
 - **Evidencia (ejecutado):** `gitleaks detect` → 6 findings en 35 commits:
   - `e12b6a2b` · `test/secure-boot.test.ts` ×2 (fixtures `PHONE_FARM_INTERNAL_TOKEN: "tok-..."`)
   - `9da8a668` · `MANUAL.md` ×2 — `PEXELS_API_KEY=` e `INTERNAL_TOKEN=` **con valores reales** (no placeholders)
-  - `d5abdfed` · `src/components/MoneyPrinterModal.tsx` y `CurlTesterModal.tsx` — `pexels_api_key: "563492ad..."` (valor real de demo)
+  - `d5abdfed` · `src/components/MoneyPrinterModal.tsx` y `CurlTesterModal.tsx` — `pexels_api_key: "<valor-demo-redactado>"` (valor de demo)
   - El árbol actual (HEAD) está limpio (0 findings) ✅.
 - **Impacto:** la afirmación del tracker ("gitleaks limpio salvo placeholders históricos") es engañosa (4 de 6 no son placeholders); el job nunca pasa.
 - **Recomendación:** purgar/reescribir el historial (`9da8a66`, `d5abdfe`) o allowlist explícita solo para fixtures de test; mientras tanto, decidir si el job es informativo (`continue-on-error`).

@@ -1,0 +1,27 @@
+# Gitleaks — configuración del repo Phone Farm Platform (2026-08-17)
+#
+# Allowlist ESTRICTA de falsos positivos del rule `generic-api-key`, que marca
+# NOMBRES de variable (PEXELS_API_KEY=, PHONE_FARM_INTERNAL_TOKEN:) aunque el
+# valor sea un placeholder o fixture de test. NO se allowlistan valores reales:
+# el historial fue purgado con git-filter-repo (2026-08-17) y estos archivos
+# solo contienen placeholders/fixtures con valores falsos.
+#
+# Referencia: https://github.com/gitleaks/gitleaks/blob/master/README.md#gitleaks-toml
+
+title = "Phone Farm Platform gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures de test y presets de UI con placeholders (sin valores reales)"
+paths = [
+  # Fixtures de autenticación: valores demo "tok-placeholder"/"tok-1234567890"
+  # usados para validar que loadConfig rechaza configs débiles. Nunca secretos.
+  '''test/secure-boot.test.ts''',
+  '''test/helpers.ts''',
+  # Presets del CurlTester: bodies de ejemplo con placeholders ("<password>",
+  # "your_pexels_key") o vacíos. Las credenciales reales fueron eliminadas.
+  '''src/components/CurlTesterModal.tsx''',
+  '''src/components/MoneyPrinterModal.tsx''',
+]
