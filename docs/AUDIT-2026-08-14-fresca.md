@@ -2,9 +2,9 @@
 
 **Tipo:** Auditoría independiente de 4ª ronda (fresca, post-cierre de Rondas 1-3).
 **Fecha:** 2026-08-14 · **Rama:** `security-remediation-2026-08-13` (working tree) · **Método:** revisión estática completa de `server/`, `src/`, `platform/phonefarm/`, scripts, Docker, CI y docs + verificación empírica (vitest, pytest, typecheck, npm audit, gitleaks, docker compose config, pruebas de bypass IP).
-**Resultado:** la postura declarada **9/10 se mantiene en el código fuente**, pero la auditoría fresca encontró **2 CRÍTICOS, 6 ALTOS, 15 MEDIOS, ~20 BAJOS/INFO** — incluidos **2 hallazgos que invalidan el CI y el despliegue** (`deploy.ps1` y artefacto `dist/` obsoletos) y **1 credencial real en claro en disco**.
+**Resultado:** la postura declarada **9/10 se mantiene en el código fuente**, pero la auditoría fresca encontró **2 CRÍTICOS, 6 ALTOS, 15 MEDIOS, ~20 BAJOS/INFO** — incluidos **2 hallazgos que invalidaban el CI y el despliegue** (`deploy.ps1` y artefacto `dist/` obsoleto) y **1 credencial real en claro en disco**. **Cierre del mismo día:** 27 hallazgos remediados con test (ver §7), `main` fusionado y pusheado con todo el endurecimiento, `dist/` reconstruido sin credenciales, `.env` validado, CI reconfigurado.
 
-> ⚠️ **Lo más urgente:** (1) el artefacto de producción `dist/` NO contiene los fixes de Ronda 3 (RBAC de `/api/adb/touch`, perfiles, voices) — hay que **re-buildear**; (2) `platform/accounts.json` contiene una contraseña IG real en claro — **rotarla**; (3) `deploy.ps1` no podía desplegar MPT pineado/parcheado en una máquina nueva — **REMEDIADO** (ver §7); (4) dos jobs de CI fallan siempre (`compose-validate`, `secret-scan`).
+> ⚠️ **Queda pendiente (operador):** (1) **rotar la contraseña IG de `acc_02`** (estuvo en claro en disco) y decidir la migración SQLite con el `PHONEFARM_DB_PATH` correcto — ver §7; (2) eliminar `backups/legacy/*.zip`; (3) purga de historial git (`9da8a66`, `d5abdfe`); (4) rotar claves externas Pexels/MiniMax/Kimi/OpenAI/DataImpulse.
 
 ---
 
@@ -16,8 +16,13 @@
 | `vitest run` (47 tests, 5 archivos) | ✅ PASS |
 | `pytest platform/tests` (47 tests) | ✅ PASS |
 | `npm audit --omit=dev` | ✅ 0 vulnerabilidades |
-| `gitleaks detect` (historial completo) | ❌ **6 leaks** (exit 1) — ver INF-04 |
-| `docker compose config` sin `.env` (checkout fresco CI) | ❌ **falla** — ver INF-03 |
+| `gitleaks detect` (árbol actual tras fixes) | ✅ 0 leaks (el gate de CI ahora escanea el árbol) |
+| `gitleaks detect` (historial completo) | ❌ 6 leaks históricos — job informativo hasta purga (INF-04) |
+| `docker compose config` con `.env` (CI: se siembra desde .env.example) | ✅ PASS (fix INF-03) |
+| Bundle `dist/` (rebuild) vs fuente | ✅ Incluye Ronda 3+4: touch con `requireRole`+`costLimit`, `backup.reauth_blocked`, `redirect:"manual"`; **sin** `admin123`/`Pass123!` |
+| `loadConfig()` con `.env` tras rotación | ✅ PASS (passwords 54 chars, token, MPT_API_KEY, NODE_ENV) |
+| `main` vs `security-remediation-2026-08-13` | ✅ Fusionado (fast-forward) y pusheado a origin |
+| `platform/data/phonefarm.db` | ❌ no existe — migración SQLite pendiente de decisión (PY-01/MF-02) |
 | `docker compose config` local (con `.env`) | ✅ PASS |
 | Bundle `dist/server.cjs` vs fuente actual | ❌ **STALE** — ver MF-01 |
 | `.env` actual vs `validateConfig` | ❌ **no arranca** — ver MF-03 |
@@ -332,5 +337,34 @@ Hallazgos corregidos en el working tree con test de respaldo. **Verificación po
 | **EXP-01** (reauth de backup sin bloqueo) | `POST /api/backups/export` aplica `loginLimiter.check()` (5/15min user+IP) **antes** de verificar el password; 429 con retry-after cuando excede; `recordSuccess` al acertar; evento `backup.reauth_blocked` auditado | Suite vitest existente (rbac) sigue en verde |
 | **PY-09** (scope MCP fail-open) | `AuthedFastMCP.call_tool`: tool no declarada en `TOOL_SCOPES` → `PermissionError` (fail-closed) | `test_mcp_tool_no_declarada_fail_closed` |
 | **PY-04** (tools MCP sin validación) | `create_content_job` valida keyword/script (1..200 / 0..4000 chars, sin controles); `create_content_profile` valida id/name/tone/voice/caption/hashtags/video_terms (límites + sin controles) — el `tone` (que va al system prompt del LLM) queda acotado (anti prompt-injection) | `test_mcp_create_content_job_valida_entrada` · `test_mcp_create_content_profile_valida_tone` |
+| **EXP-04** (proxies/verify sin RBAC) | `requireRole("admin")` + `validate(proxyVerifySchema)` + `costLimit` en `POST /api/proxies/verify` | typecheck + suite vitest |
+| **EXP-05** (sin throttling en coste) | `CostLimiter` (ventana deslizante en memoria por usuario+IP) aplicado a `content/preview` (30/min), `proxies/verify` (10/min), `adb/touch` (20/min); cleanup en el timer de 10 min | typecheck + suite vitest |
+| **EXP-06** (enumeración por timing) | scrypt dummy (`DUMMY_LOGIN_HASH`, calculado 1 vez) ejecutado cuando el usuario no existe → timing normalizado | suite vitest (login) en verde |
+| **EXP-07** (X-Request-ID sin saneamiento) | El valor del cliente se acepta solo si `^[A-Za-z0-9._:-]{1,64}$`; si no, se genera server-side | typecheck |
+| **EXP-08** (params de ruta sin encodear) | `encodeURIComponent` en todos los `:id`/`:file` interpolados hacia Flask (accounts, proxies, queue, IG login, perfiles) | typecheck |
+| **PY-02** (race cadena HMAC) | `log_action` serializado con `_chain_lock` (lectura de `prev_hash` + INSERT atómicos) | suite pytest (audit chain) en verde |
+| **PY-03** (lost updates en cola/cuentas) | `save_queue/save_accounts/save_proxies` con `BEGIN IMMEDIATE` + commit/rollback explícitos; `_sync_job` envuelto en `_queue_lock` (RLock) | suite pytest en verde |
+| **PY-05** (`/api/source` sin gate) | `@require_role("admin")` + check `EXPOSE_SOURCE` en Flask (defensa en profundidad, Express ya gateaba) | typecheck |
+| **PY-06** (token interno con `!=`) | `hmac.compare_digest` en `auth_internal` (fail-closed si token vacío) | suite pytest (auth) en verde |
+| **PY-08** (login IG sin auditar) | `_audit("social.login")` movido ANTES del return; el error ya no filtra `str(exc)` de instagrapi | typecheck |
+| **PY-10** (`/api/content/preview` 500) | `try/except ValueError → 400` en `api_content_preview` | suite pytest en verde |
+| **FE-01** (credenciales en bundle) | Presets 2 y 12 del CurlTester sin credenciales reales (`<password>` placeholder, password vacío en login); **verificado: el bundle rebuild no contiene `admin123` ni `Pass123!`** | grep del bundle (0 coincidencias) |
+| **FE-02** (mutaciones destructivas) | `window.confirm` para no-GET + destino real (`window.location.origin`) en la UI; el preset de login con password vacío no se ejecuta | typecheck |
+| **FE-03/FE-11** (401/403 silenciosos) | `refreshBackendData` detecta 401/403 → logout automático; `handleLogout` limpia stats/accounts/proxies/queue/logs/deviceCount | typecheck |
+| **FE-04** (SSE sin estado real) | `EventSource` solo con sesión, re-creado en login (deps `[currentUser]`), `onopen`/`onerror` derivan `sseConnected` al badge de TerminalLogs, cierre en logout | typecheck |
+| **FE-06** (fallos enmascarados) | test-pexels ya no pinta `valid:true` en fallo de red; generate/save muestran errores; AdbBridgeModal sin dispositivos inventados; WARN de cola vacía fuera del `if(res.ok)` | typecheck |
+| **INF-03** (compose-validate rojo) | CI: `cp platform/.env.example platform/.env` antes de `compose config` | validación manual del workflow |
+| **INF-04** (secret-scan rojo) | CI: gate bloqueante con gitleaks sobre árbol actual + diff del PR (binario pineado v8.18.4); historial completo → job informativo con artifact | gitleaks árbol actual: 0 leaks |
+| **INF-06** (pip-audit/bandit `\|\| true`) | Eliminado `\|\| true`; bandit `-ll` (severidad media+) bloquea | lectura del workflow |
+| **INF-12** (CI sin permisos mínimos) | `permissions: contents: read` global + `persist-credentials: false` en checkouts | lectura del workflow |
+| **INF-05** (main sin endurecimiento) | Fast-forward `main` → `security-remediation-2026-08-13` (069ef45 → 1838e58) y **push a origin** de ambas ramas | `git log` main |
+| **MF-01** (dist obsoleto) | `npm run build` ejecutado; `dist/server.cjs` ahora tiene `requireRole("admin")`+`costLimit` en touch, `backup.reauth_blocked`, `redirect:"manual"`; bundle sin credenciales | verificación del bundle |
+| **MF-03** (`.env` no arranca) | `rotate-internal-secrets.ps1` pasado a ASCII puro (PS 5.1 rompía con em-dashes); passwords fuertes (54 chars) + `MPT_API_KEY` + tokens sincronizados; `loadConfig` PASS | `tsx` loadConfig OK |
+| **INF-18** (content_profiles trackeado) | `git rm --cached platform/content_profiles.json` (sigue en disco, fuera del índice) | `git ls-files` |
 
-**Pendiente de aplicar (no tocado en esta ronda):** MF-01 (`dist/` obsoleto — requiere re-build), PY-01/MF-02 (migración SQLite + rotación de la credencial real), MF-03 (`.env` que no arranca — requiere ejecutar la rotación), INF-03/04/05/06 (CI), EXP-04/05/06/07/08, PY-02/03/05/06/07/08/10, FE-01..FE-12.
+**Pendiente de aplicar (requiere decisión/acción del operador, no de código):**
+- **PY-01/MF-02** — Migración SQLite: el código de `platform_data.py` resuelve la BD en `platform/data/` (`PHONEFARM_DB_PATH` no está definido), pero la credencial real en claro está en `platform/accounts.json` (raíz). Ejecutar `python -m phonefarm.migrate --commit` **desde `platform/`** migraría las semillas de `platform/data/`, NO los datos reales de la raíz. **Decisión pendiente:** definir `PHONE_FARM_DATA_DIR`/`PHONEFARM_DB_PATH` correctos, ejecutar la migración y **rotar la credencial de `acc_02`** (estuvo en claro en disco).
+- **MF-04** — Eliminar `backups/legacy/phonefarm-export-20260811-1137.zip` (contiene `.env` y `adbkey` en claro) tras verificar restauración cifrada.
+- **INF-04 (historial)** — Purga de historial git (`9da8a66`, `d5abdfe` tienen valores reales en MANUAL.md/CurlTester) — requiere `git filter-repo` + force-push (autorización explícita; el CI ya no bloquea por esto).
+- **Rotación de claves externas** — Pexels/MiniMax/Kimi/OpenAI/DataImpulse + relogin IG (checklist `docs/SECURITY-ROTATION-2026-08-13.md`).
+- **PY-07** (egress LLM por `net.py`), **EXP-09/10/11/22**, **FE-05 (font-src)**, **FE-07/08/09/10/12**, **PY-11/12/13/14/15/20/23**, **INF-07/08/09/10/11/13/15/16/17/19** — mejoras menores/diseño (ver §1 y §2).
