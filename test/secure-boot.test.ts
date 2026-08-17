@@ -18,8 +18,8 @@ describe("arranque seguro — validación de config", () => {
   });
 
   it("rechaza credenciales demo o cortas", () => {
-    expect(() => loadConfig({ NODE_ENV: "test", ADMIN_PASSWORD: "admin123", OPERATOR_PASSWORD: "operator123", PHONE_FARM_INTERNAL_TOKEN: ""tok-placeholder"" })).toThrow(/ADMIN_PASSWORD/);
-    expect(() => loadConfig({ NODE_ENV: "test", ADMIN_PASSWORD: "corta", OPERATOR_PASSWORD: "corta", PHONE_FARM_INTERNAL_TOKEN: ""tok-placeholder"" })).toThrow(/ADMIN_PASSWORD/);
+    expect(() => loadConfig({ NODE_ENV: "test", ADMIN_PASSWORD: "admin123", OPERATOR_PASSWORD: "operator123", PHONE_FARM_INTERNAL_TOKEN: "tok-placeholder" })).toThrow(/ADMIN_PASSWORD/);
+    expect(() => loadConfig({ NODE_ENV: "test", ADMIN_PASSWORD: "corta", OPERATOR_PASSWORD: "corta", PHONE_FARM_INTERNAL_TOKEN: "tok-placeholder" })).toThrow(/ADMIN_PASSWORD/);
     expect(() => loadConfig({ NODE_ENV: "test", ADMIN_PASSWORD: "x".repeat(16), OPERATOR_PASSWORD: "x".repeat(16), PHONE_FARM_INTERNAL_TOKEN: "" })).toThrow(/INTERNAL_TOKEN/);
   });
 

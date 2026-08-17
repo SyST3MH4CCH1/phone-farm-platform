@@ -96,7 +96,7 @@ export function testConfig(extra: Record<string, string> = {}): AppConfig {
     ADMIN_PASSWORD: TEST_ADMIN_PW,
     OPERATOR_USERNAME: "operator",
     OPERATOR_PASSWORD: TEST_OPERATOR_PW,
-    PHONE_FARM_INTERNAL_TOKEN: ""test-token-placeholder"",
+    PHONE_FARM_INTERNAL_TOKEN: "test-token-placeholder",
     ...extra,
   });
 }
