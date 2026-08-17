@@ -154,7 +154,10 @@ def load_accounts() -> list[dict[str, Any]]:
 
 def save_accounts(accounts: list[dict[str, Any]]) -> None:
     conn = _conn()
-    with conn:
+    # PY-03: BEGIN IMMEDIATE adquiere el lock de escritura ANTES del DELETE,
+    # de modo que dos hilos no intercalen DELETE+INSERT y pierdan actualizaciones.
+    conn.execute("BEGIN IMMEDIATE")
+    try:
         conn.execute("DELETE FROM accounts")
         for acc in accounts:
             r = _account_to_row(acc)
@@ -163,6 +166,11 @@ def save_accounts(accounts: list[dict[str, Any]]) -> None:
                 "VALUES (:id, :username, :proxy_id, :status, :enc_password, :meta, :created_at)",
                 r,
             )
+    except Exception:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()
 
 
 def find_account(account_id: str) -> dict[str, Any] | None:
@@ -179,7 +187,8 @@ def load_proxies() -> list[dict[str, Any]]:
 
 def save_proxies(proxies: list[dict[str, Any]]) -> None:
     conn = _conn()
-    with conn:
+    conn.execute("BEGIN IMMEDIATE")
+    try:
         conn.execute("DELETE FROM proxies")
         for proxy in proxies:
             r = _proxy_to_row(proxy)
@@ -188,6 +197,11 @@ def save_proxies(proxies: list[dict[str, Any]]) -> None:
                 "VALUES (:id, :host, :port, :protocol, :username, :enc_password, :status, :meta)",
                 r,
             )
+    except Exception:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()
 
 
 def find_proxy(proxy_id: str) -> dict[str, Any] | None:
@@ -204,7 +218,8 @@ def load_queue() -> list[dict[str, Any]]:
 
 def save_queue(queue: list[dict[str, Any]]) -> None:
     conn = _conn()
-    with conn:
+    conn.execute("BEGIN IMMEDIATE")
+    try:
         conn.execute("DELETE FROM jobs")
         for job in queue:
             r = _job_to_row(job)
@@ -213,3 +228,8 @@ def save_queue(queue: list[dict[str, Any]]) -> None:
                 "VALUES (:id, :state, :payload, :version, :idempotency_key)",
                 r,
             )
+    except Exception:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()

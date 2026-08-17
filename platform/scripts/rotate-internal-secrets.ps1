@@ -8,8 +8,8 @@ Genera y escribe en .env / platform/.env los siguientes secretos internos:
   - PHONE_FARM_INTERNAL_TOKEN (raiz) <-> INTERNAL_TOKEN (platform/.env), sincronizados
   - MPT_API_KEY (nuevo; lo exige el endurecimiento de MoneyPrinterTurbo)
 
-Preserva el resto de líneas de ambos .env, aplica ACL restrictiva (usuario + SYSTEM)
-y NO escribe valores en ningún log ni documento. Los secretos externos (Pexels,
+Preserva el resto de lineas de ambos .env, aplica ACL restrictiva (usuario + SYSTEM)
+y NO escribe valores en ningun log ni documento. Los secretos externos (Pexels,
 MiniMax, Kimi, OpenAI, DataImpulse, Instagram) se rotan manualmente en cada portal
 (ver docs/SECURITY-ROTATION-2026-08-13.md).
 
@@ -21,12 +21,12 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot          # .../platform
-$Repo = Split-Path -Parent $Root                  # raíz del repo
-$EnvRoot = Join-Path $Repo '.env'                 # .env raíz (Express)
+$Repo = Split-Path -Parent $Root                  # raiz del repo
+$EnvRoot = Join-Path $Repo '.env'                 # .env raiz (Express)
 $EnvPlatform = Join-Path $Root '.env'             # platform/.env (Flask)
 
 foreach ($p in @($EnvRoot, $EnvPlatform)) {
-    if (-not (Test-Path $p)) { throw "No existe $p — ejecuta primero setup-new-machine.ps1" }
+    if (-not (Test-Path $p)) { throw "No existe $p - ejecuta primero setup-new-machine.ps1" }
 }
 
 function New-SecureValue {
@@ -59,7 +59,7 @@ function Lock-FileAcl {
     param([string]$Path)
     $who = "$env:USERDOMAIN\$env:USERNAME"
     & icacls $Path /inheritance:r /grant:r "${who}:(F)" "SYSTEM:(F)" | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "icacls falló sobre $Path" }
+    if ($LASTEXITCODE -ne 0) { throw "icacls fallo sobre $Path" }
 }
 
 $adminPw  = New-SecureValue -Bytes 40
@@ -78,12 +78,12 @@ Lock-FileAcl $EnvRoot
 Lock-FileAcl $EnvPlatform
 
 Write-Host ''
-Write-Host '=== Rotación de secretos internos completada ===' -ForegroundColor Green
+Write-Host '=== Rotacion de secretos internos completada ===' -ForegroundColor Green
 Write-Host 'Archivos actualizados (ACL restringida: usuario + SYSTEM):'
 Write-Host "  - $EnvRoot"
 Write-Host "  - $EnvPlatform"
 Write-Host ''
-Write-Host 'NUEVAS CREDENCIALES DEL PANEL (anótalas ahora; no se vuelven a mostrar):' -ForegroundColor Yellow
+Write-Host 'NUEVAS CREDENCIALES DEL PANEL (anotalas ahora; no se vuelven a mostrar):' -ForegroundColor Yellow
 Write-Host "  ADMIN_USERNAME:   $((Get-Content $EnvRoot | Select-String '^ADMIN_USERNAME=').ToString().Split('=')[1])"
 Write-Host "  ADMIN_PASSWORD:   $adminPw"
 Write-Host "  OPERATOR_PASSWORD: $opPw"

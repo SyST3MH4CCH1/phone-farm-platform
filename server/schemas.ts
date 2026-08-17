@@ -67,6 +67,11 @@ export const adbMirrorSchema = z.object({
   serial: z.string().min(1).max(64).regex(/^[A-Za-z0-9._:-]+$/),
 }).strict();
 
+/** Verificación explícita de un proxy: solo el id (el destino lo lee Flask). */
+export const proxyVerifySchema = z.object({
+  proxy_id: z.string().min(1).max(64).refine(noControls),
+}).strict();
+
 /** Middleware: valida req.body; 400 con detalle si falla. */
 export function validate(schema: z.ZodTypeAny) {
   return (req: Request, res: Response, next: NextFunction) => {

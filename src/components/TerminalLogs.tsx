@@ -6,13 +6,16 @@ interface TerminalLogsProps {
   onClearLogs: () => void;
   isMinimized?: boolean;
   onToggleMinimize?: () => void;
+  /** FE-04: estado REAL del stream SSE (derivado de onopen/onerror). */
+  sseConnected?: boolean;
 }
 
 export const TerminalLogs: React.FC<TerminalLogsProps> = ({
   logs,
   onClearLogs,
   isMinimized = false,
-  onToggleMinimize
+  onToggleMinimize,
+  sseConnected = false
 }) => {
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
@@ -49,7 +52,8 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
 
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-[11px] text-[#8A8F98] font-bold">
-            <span className="w-2 h-2 rounded-full bg-[#8A8F98] animate-pulse"></span> SSE Conectado
+            <span className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-[#6FBF73] animate-pulse' : 'bg-[#E05B5B]'}`}></span>
+            {sseConnected ? 'SSE Conectado' : 'SSE Desconectado'}
           </span>
           <button
             onClick={onClearLogs}

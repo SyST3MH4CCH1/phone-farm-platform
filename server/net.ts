@@ -20,8 +20,13 @@ function parse(url: string): URL {
   }
 }
 
-function isBlockedIp(ip: string): boolean {
+/** ¿La IP está bloqueada por la política de egress? (exportado para tests). */
+export function isBlockedIp(ip: string): boolean {
   if (net.isIP(ip) === 0) return true;
+  // IPv4-mapped IPv6 (::ffff:a.b.c.d) y compat (::a.b.c.d): decodificar la
+  // IPv4 embebida y evaluarla con las reglas IPv4 (EXP-02 — antes pasaban).
+  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i) || ip.match(/^::(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) return isBlockedIp(mapped[1]);
   const parts = ip.split(".").map(Number);
   if (parts.length === 4) {
     if (parts[0] === 10) return true;

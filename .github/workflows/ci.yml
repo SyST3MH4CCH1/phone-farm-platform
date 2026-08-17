@@ -14,6 +14,10 @@ env:
   NODE_VERSION: 22
   PYTHON_VERSION: "3.12"
 
+# INF-12: mínimo privilegio para el GITHUB_TOKEN del workflow.
+permissions:
+  contents: read
+
 jobs:
   typecheck:
     name: Typecheck + Lint
@@ -21,6 +25,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
@@ -38,6 +44,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
@@ -54,6 +62,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -66,6 +76,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -79,6 +91,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -88,10 +102,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: pip-audit
+      - name: pip-audit (INF-06: sin || true — debe bloquear)
         run: |
           python -m pip install pip-audit
-          pip-audit -r platform/requirements.txt -f json --progress-spinner off || true
+          pip-audit -r platform/requirements.txt -f json --progress-spinner off
 
   sast:
     name: Análisis estático (bandit)
@@ -99,11 +113,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: python -m pip install bandit
-      - run: bandit -r platform/phonefarm -q -f json || true
+      # INF-06: sin || true — los hallazgos de severidad media+ bloquean.
+      - run: bandit -r platform/phonefarm -q -ll -f json
 
   compose-validate:
     name: Validación Docker Compose
@@ -111,15 +128,48 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # INF-03: el servicio platform usa `env_file: .env`; en un checkout
+      # fresco de CI no existe -> compose config fallaba SIEMPRE. Se siembra
+      # desde .env.example antes de validar.
+      - run: cp platform/.env.example platform/.env
       - run: docker compose -f platform/docker-compose.yml config -q
 
   secret-scan:
-    name: Secret scan (gitleaks)
+    name: Secret scan (gitleaks — árbol actual y diff)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # INF-04: el historial contiene 6 findings previos (4 con valores reales
+      # en MANUAL.md/CurlTesterModal de commits 9da8a66/d5abdfe) que requieren
+      # purga de historial (acción manual pendiente). Para no dejar el workflow
+      # en rojo permanente por el PASADO, el gate bloqueante escanea el árbol
+      # actual + diff del PR (log-opts), y el historial completo queda como job
+      # informativo con reporte descargable.
+      - name: Instalar gitleaks (versión pineada)
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz -o /tmp/gitleaks.tgz
+          tar -xzf /tmp/gitleaks.tgz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Gitleaks — árbol actual (bloqueante)
+        run: gitleaks detect --source . --no-banner --redact
+      - name: Gitleaks — diff del PR (bloqueante)
+        if: github.event_name == 'pull_request'
+        run: gitleaks detect --source . --no-banner --redact --log-opts="origin/${{ github.base_ref }}..HEAD"
+      - name: Gitleaks — historial completo (informativo, requiere purga)
+        if: always()
+        continue-on-error: true
+        run: gitleaks detect --source . --no-banner --redact --report-format json --report-path gitleaks-history-report.json || true
+      - name: Subir reporte del historial (informativo)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-history-report
+          path: gitleaks-history-report.json
+          if-no-files-found: ignore

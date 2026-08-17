@@ -14,10 +14,10 @@ import helmet from "helmet";
 import type Database from "better-sqlite3";
 import type { AppConfig } from "./config";
 import { SessionStore, safeEqual, newSessionToken, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, SessionUser } from "./sessions";
-import { verifyPassword } from "./passwords";
-import { LoginRateLimiter } from "./rate-limit";
+import { verifyPassword, hashPassword } from "./passwords";
+import { LoginRateLimiter, CostLimiter } from "./rate-limit";
 import { safeFetchInternal, guardInternalUrl, EgressError, INTERNAL_HOSTS } from "./net";
-import { validate, loginSchema, queueCreateSchema, accountCreateSchema, proxyCreateSchema, mptSettingsSchema, adbTouchSchema, adbMirrorSchema } from "./schemas";
+import { validate, loginSchema, queueCreateSchema, accountCreateSchema, proxyCreateSchema, mptSettingsSchema, adbTouchSchema, adbMirrorSchema, proxyVerifySchema } from "./schemas";
 
 // --- Dependencias inyectables (tests) ---
 export interface AppDeps {
@@ -39,6 +39,10 @@ export const MAX_LOG_LINES = 64 * 1024;
 
 export const CSRF_COOKIE = "pf_csrf";
 
+// EXP-06: hash scrypt de referencia para normalizar el timing del login cuando
+// el usuario no existe (se calcula UNA vez, no por request).
+const DUMMY_LOGIN_HASH = hashPassword("dummy-timing-normalizer-0000");
+
 export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   if (!deps.db) {
     throw new Error("[FATAL] createApp requiere deps.db (BD SQLite compartida)");
@@ -51,6 +55,10 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     try { internalHosts.add(new URL(u).hostname.toLowerCase()); } catch { /* se valida al usarse */ }
   }
   const loginLimiter = new LoginRateLimiter(deps.db);
+  // EXP-05: límites de coste por usuario+IP (ventana deslizante en memoria).
+  const llmLimiter = new CostLimiter({ max: 30, windowMs: 60_000 });   // content/preview
+  const verifyLimiter = new CostLimiter({ max: 10, windowMs: 60_000 }); // proxies/verify
+  const touchLimiter = new CostLimiter({ max: 20, windowMs: 60_000 });  // adb/touch
   const hostExec = deps.hostExec ?? ((file: string, args: string[], timeout = 8000) =>
     new Promise<string>((resolve) => {
       execFile(file, args, { timeout }, (err, stdout) => resolve(err ? "" : stdout));
@@ -66,8 +74,12 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   app.set("trust proxy", "loopback");
 
   // Correlación de requests: X-Request-ID generado y propagado a Flask (paso 6).
+  // EXP-07: el valor del cliente se SANEA (solo [A-Za-z0-9._:-], máx 64) — un
+  // CRLF aquí provocaba 500 y log-injection en la auditoría de Flask.
+  const SAFE_RID = /^[A-Za-z0-9._:-]{1,64}$/;
   app.use((req, res, next) => {
-    const rid = (typeof req.headers["x-request-id"] === "string" && req.headers["x-request-id"]) || randomBytes(16).toString("hex");
+    const incoming = typeof req.headers["x-request-id"] === "string" ? req.headers["x-request-id"] : "";
+    const rid = SAFE_RID.test(incoming) ? incoming : randomBytes(16).toString("hex");
     (req as any).requestId = rid;
     res.setHeader("X-Request-ID", rid);
     next();
@@ -172,10 +184,26 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     };
   }
 
+  /** Throttling de coste por usuario+IP (EXP-05): 429 si se excede. */
+  function costLimit(limiter: CostLimiter) {
+    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const user = (req as any).user as SessionUser | undefined;
+      const ip = req.ip || req.socket.remoteAddress || "unknown";
+      const key = `${user?.username ?? "anon"}:${ip}`;
+      if (!limiter.allow(key)) {
+        return res.status(429).json({ error: "Demasiadas peticiones a este endpoint. Espera un minuto." });
+      }
+      next();
+    };
+  }
+
   // Limpieza periódica de sesiones y rate limits expirados (cada 10 min).
   const cleanupTimer = setInterval(() => {
     store.cleanup();
     loginLimiter.cleanup();
+    llmLimiter.cleanup();
+    verifyLimiter.cleanup();
+    touchLimiter.cleanup();
   }, 10 * 60 * 1000);
   cleanupTimer.unref();
 
@@ -286,7 +314,10 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
       .prepare("SELECT id, username, role, password_hash FROM users WHERE username = ?")
       .get(u) as { id: string; username: string; role: "admin" | "operator"; password_hash: string } | undefined;
 
+    // EXP-06: si el usuario no existe se ejecuta igualmente un scrypt dummy
+    // (hash de referencia) para no revelar por timing qué usuarios existen.
     if (!userRow || !verifyPassword(p, userRow.password_hash)) {
+      if (!userRow) verifyPassword(p, DUMMY_LOGIN_HASH);
       loginLimiter.recordFailure(u, ip);
       notifyAudit(u, "unknown", "auth.login_failed", undefined, { ip }, requestId);
       return res.status(401).json({ error: "Credenciales inválidas." });
@@ -425,7 +456,9 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   // 2. Accounts (solo admin para mutaciones)
   app.get("/api/accounts", (req, res) => flask(req, res, "GET", "/api/accounts"));
   app.post("/api/accounts", requireRole("admin"), validate(accountCreateSchema), (req, res) => flask(req, res, "POST", "/api/accounts", req.body));
-  app.delete("/api/accounts/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/accounts/${req.params.id}`));
+  // EXP-08: params de ruta encodados (endpoint confusion en Flask si un id
+  // trae %2F/%23 decodificado por Express).
+  app.delete("/api/accounts/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/accounts/${encodeURIComponent(req.params.id)}`));
 
   // Engagement bots (real -> inicia/detiene taktik-bot en Flask) — SOLO admin
   app.post("/engagement/start", requireRole("admin"), (req, res) => flask(req, res, "POST", "/engagement/start", req.body));
@@ -434,8 +467,10 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   // 3. Proxies (admin para mutaciones)
   app.get("/api/proxies", (req, res) => flask(req, res, "GET", "/api/proxies"));
   app.post("/api/proxies", requireRole("admin"), validate(proxyCreateSchema), (req, res) => flask(req, res, "POST", "/api/proxies", req.body));
-  app.delete("/api/proxies/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/proxies/${req.params.id}`));
-  app.post("/api/proxies/verify", (req, res) => flask(req, res, "POST", "/api/proxies/verify", req.body));
+  app.delete("/api/proxies/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/proxies/${encodeURIComponent(req.params.id)}`));
+  // EXP-04: verify exige admin + esquema (el destino lo lee Flask; el body no
+  // debe traer host/puerto arbitrarios que un operator pudiera escanear).
+  app.post("/api/proxies/verify", requireRole("admin"), costLimit(verifyLimiter), validate(proxyVerifySchema), (req, res) => flask(req, res, "POST", "/api/proxies/verify", req.body));
 
   // 4. Queue (cola real de Flask)
   // RBAC (paso 5): operator consulta/crea borradores y marca "listo";
@@ -444,12 +479,12 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   app.post("/api/queue", validate(queueCreateSchema), (req, res) => flask(req, res, "POST", "/api/queue", req.body));
   app.post("/api/queue/next", (req, res) => flask(req, res, "POST", "/api/queue/next", req.body));
   app.get("/api/drafts", (req, res) => flask(req, res, "GET", "/api/drafts"));
-  app.post("/api/queue/:id/ready", (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/ready`, req.body));
-  app.post("/api/queue/:id/approve", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/approve`, req.body));
-  app.post("/api/queue/:id/publish", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/publish`, req.body));
-  app.post("/api/queue/:id/reject", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/reject`, req.body));
-  app.post("/api/queue/:id/schedule", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${req.params.id}/schedule`, req.body));
-  app.delete("/api/queue/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/queue/${req.params.id}`));
+  app.post("/api/queue/:id/ready", (req, res) => flask(req, res, "POST", `/api/queue/${encodeURIComponent(req.params.id)}/ready`, req.body));
+  app.post("/api/queue/:id/approve", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${encodeURIComponent(req.params.id)}/approve`, req.body));
+  app.post("/api/queue/:id/publish", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${encodeURIComponent(req.params.id)}/publish`, req.body));
+  app.post("/api/queue/:id/reject", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${encodeURIComponent(req.params.id)}/reject`, req.body));
+  app.post("/api/queue/:id/schedule", requireRole("admin"), (req, res) => flask(req, res, "POST", `/api/queue/${encodeURIComponent(req.params.id)}/schedule`, req.body));
+  app.delete("/api/queue/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/queue/${encodeURIComponent(req.params.id)}`));
 
   // MP4 generados: el proxy genérico a Flask NO sirve binarios (parsea a JSON),
   // así que Express entrega el archivo directo desde platform/videos.
@@ -468,17 +503,17 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   // Login de Instagram (único; SOLO admin — paso 5). La identidad de la cuenta
   // viene de :id; Flask ignora el username del cliente (paso 8).
   app.post("/api/accounts/:id/instagram/login", requireRole("admin"), (req, res) =>
-    flask(req, res, "POST", `/api/accounts/${req.params.id}/instagram/login`, req.body));
+    flask(req, res, "POST", `/api/accounts/${encodeURIComponent(req.params.id)}/instagram/login`, req.body));
 
   // Credenciales del proxy: Flask no implementa /api/proxies/credentials.
   // Redirigimos a /api/proxies/verify, que sí persiste y verifica.
   app.post("/api/proxies/credentials", requireRole("admin"), (req, res) =>
     flask(req, res, "POST", "/api/proxies/verify", req.body));
   app.post("/api/queue/from-preview", (req, res) => flask(req, res, "POST", "/api/queue/from-preview", req.body));
-  app.post("/api/content/preview", (req, res) => flask(req, res, "POST", "/api/content/preview", req.body));
+  app.post("/api/content/preview", costLimit(llmLimiter), (req, res) => flask(req, res, "POST", "/api/content/preview", req.body));
   app.get("/api/content/profiles", (req, res) => flask(req, res, "GET", "/api/content/profiles"));
   app.post("/api/content/profiles", requireRole("admin"), (req, res) => flask(req, res, "POST", "/api/content/profiles", req.body));
-  app.delete("/api/content/profiles/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/content/profiles/${req.params.id}`));
+  app.delete("/api/content/profiles/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/content/profiles/${encodeURIComponent(req.params.id)}`));
 
   // Código fuente real del backend (CodeViewer) — solo admin y desactivable.
   // EXPOSE_SOURCE=true lo habilita; por defecto responde 404 aunque Flask lo sirva.
@@ -696,7 +731,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   // Control táctil (Panda interactivo): tap / swipe / key sobre el dispositivo.
   // Solo admin: control físico del dispositivo (mismo criterio que /mirror).
   const TOUCH_ERR = (m: string) => ({ error: m });
-  app.post("/api/adb/touch", requireRole("admin"), validate(adbTouchSchema), (req, res) => {
+  app.post("/api/adb/touch", requireRole("admin"), costLimit(touchLimiter), validate(adbTouchSchema), (req, res) => {
     const serial = String(req.body?.serial || "").trim();
     if (!serial || !/^[A-Za-z0-9._:-]+$/.test(serial)) {
       return res.status(400).json(TOUCH_ERR("serial inválido"));
@@ -853,10 +888,17 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     const user = (req as any).user as SessionUser;
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     const passphrase = typeof req.body?.passphrase === "string" ? req.body.passphrase : "";
-    const ip = req.ip || req.socket.remoteAddress || "unknown";
 
     if (!passphrase || passphrase.length < 12) {
       return res.status(400).json({ error: "passphrase requerida (>=12 chars)" });
+    }
+    // Reautenticación: mismo rate limit que el login (5/15min user+IP) — antes
+    // solo se registraba el fallo sin bloquear (EXP-01).
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const reauthLimit = loginLimiter.check(user.username, ip);
+    if (!reauthLimit.ok) {
+      notifyAudit(user.username, user.role, "backup.reauth_blocked", undefined, { ip }, (req as any).requestId);
+      return res.status(429).json({ error: `Demasiados intentos. Espera ${reauthLimit.retryAfterSeconds}s.` });
     }
     // Reautenticación: el password del panel se verifica de nuevo (scrypt).
     const row = deps.db.prepare("SELECT password_hash FROM users WHERE id = ?").get(user.id) as { password_hash: string } | undefined;
@@ -865,6 +907,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
       notifyAudit(user.username, user.role, "backup.reauth_failed");
       return res.status(403).json({ error: "Reautenticación fallida." });
     }
+    loginLimiter.recordSuccess(user.username, ip);
 
     try {
       const r = await (deps.flaskFetch ?? defaultFlaskFetch)(`${config.flaskBase}/api/backups/payload`, {
@@ -1032,11 +1075,14 @@ loadDevices();
   return app;
 }
 
-/** Cliente HTTP por defecto hacia Flask (loopback + token interno). */
+/** Cliente HTTP por defecto hacia Flask (loopback + token interno).
+ *  redirect:"manual" (EXP-03): si Flask devuelve un 3xx con Location externo,
+ *  el token X-Internal-Auth NO se reenvía a otro host; el caller ve el 3xx.
+ */
 async function defaultFlaskFetch(
   url: string,
   init: { method: string; headers: Record<string, string>; body?: string; signal: AbortSignal },
 ): Promise<{ status: number; text: () => Promise<string> }> {
-  const r = await fetch(url, init as RequestInit);
+  const r = await fetch(url, { ...init, redirect: "manual" } as RequestInit);
   return { status: r.status, text: () => r.text() };
 }

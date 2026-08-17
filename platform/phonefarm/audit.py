@@ -16,6 +16,7 @@ import hmac
 import json
 import logging
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -26,6 +27,12 @@ logger = logging.getLogger(__name__)
 
 _CHAIN_SALT = b"phonefarm-audit-v1"
 _hmac_key_cache: bytes | None = None
+
+# PY-02: la cadena HMAC requiere prev_hash encadenado. Flask es multi-hilo
+# (requests + workers de jobs + hilo MCP), así que `log_action` debe
+# serializarse: dos hilos concurrentes leían el mismo prev_hash y rompían la
+# cadena ("prev_hash roto" = falso tamper).
+_chain_lock = threading.Lock()
 
 
 def _hmac_key() -> bytes:
@@ -54,18 +61,19 @@ def log_action(
     meta: Optional[dict[str, Any]] = None,
     request_id: Optional[str] = None,
 ) -> None:
-    """Inserta un evento encadenado (transacción atómica)."""
-    prev_hash = _last_hash(conn)
-    ts = _now()
-    meta_json = json.dumps(meta or {}, ensure_ascii=False, default=str)
-    payload = "|".join([str(x) for x in (prev_hash, ts, actor, role, action, object, meta_json, request_id)])
-    digest = hmac.new(_hmac_key(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    with conn:
-        conn.execute(
-            "INSERT INTO audit_log (ts, actor, role, action, object, meta, request_id, prev_hash, hash) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
-            (ts, actor, role, action, object, meta_json, request_id, prev_hash, digest),
-        )
+    """Inserta un evento encadenado (transacción atómica, serializada)."""
+    with _chain_lock:  # PY-02: lee prev_hash e inserta sin intercalarse
+        prev_hash = _last_hash(conn)
+        ts = _now()
+        meta_json = json.dumps(meta or {}, ensure_ascii=False, default=str)
+        payload = "|".join([str(x) for x in (prev_hash, ts, actor, role, action, object, meta_json, request_id)])
+        digest = hmac.new(_hmac_key(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        with conn:
+            conn.execute(
+                "INSERT INTO audit_log (ts, actor, role, action, object, meta, request_id, prev_hash, hash) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (ts, actor, role, action, object, meta_json, request_id, prev_hash, digest),
+            )
 
 
 def verify_chain(conn: sqlite3.Connection) -> list[str]:

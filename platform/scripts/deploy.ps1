@@ -25,35 +25,46 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-# 2. Clones de terceros
+# 2. Clones de terceros — fijados a los commits de platform/third_party.lock
+# (Paso 8/13). Clon COMPLETO (no shallow): el checkout del commit del lock
+# requiere el historial; un clon --depth 1 falla silenciosamente y deja el
+# checkout en HEAD de upstream sin verificar (INF-01).
 $thirdParty = Join-Path $RepoPlatform "third_party"
 New-Item -ItemType Directory -Force -Path $thirdParty | Out-Null
-foreach ($repo in @(
-    @{ Name = "taktik-bot"; Url = "https://github.com/masterFuf/taktik-bot.git" },
-    @{ Name = "MoneyPrinterTurbo"; Url = "https://github.com/harry0703/MoneyPrinterTurbo.git" }
-)) {
+$repos = @(
+    @{ Name = "taktik-bot";         Url = "https://github.com/masterFuf/taktik-bot.git";        Commit = "c2b7489" },
+    @{ Name = "MoneyPrinterTurbo";  Url = "https://github.com/harry0703/MoneyPrinterTurbo.git"; Commit = "254cd02" }
+)
+foreach ($repo in $repos) {
     $dest = Join-Path $thirdParty $repo.Name
     if (-not (Test-Path (Join-Path $dest ".git"))) {
         Write-Host "  Clonando $($repo.Name)..." -ForegroundColor Yellow
-        git clone --depth 1 $repo.Url $dest
+        git clone $repo.Url $dest
+        if ($LASTEXITCODE -ne 0) { throw "No se pudo clonar $($repo.Name) desde $($repo.Url)" }
     } else {
         Write-Host "  $($repo.Name) ya clonado."
     }
-    # Paso 8/13: fijar el commit del lock de terceros (docs/THIRD-PARTY-LOCK.md)
-    if ($repo.Name -eq "MoneyPrinterTurbo") {
-        git -C $dest checkout 254cd02 2>$null
-        Write-Host "  MPT fijado a 254cd02 (third_party.lock)." -ForegroundColor DarkGreen
-    } elseif ($repo.Name -eq "taktik-bot") {
-        git -C $dest checkout c2b7489 2>$null
-        Write-Host "  taktik-bot fijado a c2b7489 (third_party.lock)." -ForegroundColor DarkGreen
-    }
+    # Fijar el commit del lock; FALLA si el checkout no coincide (fail-closed).
+    git -C $dest checkout --detach $repo.Commit
+    if ($LASTEXITCODE -ne 0) { throw "No se pudo fijar $($repo.Name) a $($repo.Commit) (third_party.lock)" }
+    $head = (git -C $dest rev-parse --short=7 HEAD) -join ""
+    if ($head -ne $repo.Commit) { throw "$($repo.Name) quedó en $head, esperado $($repo.Commit) (third_party.lock)" }
+    Write-Host "  $($repo.Name) fijado a $($repo.Commit) (third_party.lock)." -ForegroundColor DarkGreen
 }
 
-# Paso 8: aplicar el parche de endurecimiento de MPT (idempotente)
+# Paso 8: aplicar el parche de endurecimiento de MPT (idempotente).
+# El fallo del parche ABORTA el deploy: publicar MPT sin verify_token
+# invalida PF-SEC-003/PF-SEC-008 (INF-02).
 Push-Location $RepoPlatform
 try {
-    python scriptspply-mpt-patch.py --check 2>$null
-    if ($LASTEXITCODE -ne 0) { python scriptspply-mpt-patch.py }
+    python scripts\apply-mpt-patch.py --check 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Aplicando parche de endurecimiento a MoneyPrinterTurbo..." -ForegroundColor Yellow
+        python scripts\apply-mpt-patch.py
+        if ($LASTEXITCODE -ne 0) { throw "El parche de endurecimiento de MPT no se pudo aplicar — deploy abortado" }
+    } else {
+        Write-Host "  Parche de endurecimiento de MPT ya aplicado." -ForegroundColor DarkGreen
+    }
 } finally {
     Pop-Location
 }
@@ -90,8 +101,15 @@ foreach ($f in @("requirements.txt",".env.example","accounts.json","proxies.json
 }
 Copy-Item (Join-Path $RepoPlatform "templates\dashboard.html") (Join-Path $Root "templates") -Force
 Copy-Item (Join-Path $RepoPlatform "scripts\docker-entrypoint.sh") (Join-Path $Root "scripts") -Force
-Copy-Item (Join-Path $RepoPlatform ".env") (Join-Path $Root ".env") -Force
-if (-not (Test-Path (Join-Path $Root ".env"))) { Copy-Item (Join-Path $RepoPlatform ".env.example") (Join-Path $Root ".env") }
+# Copiar .env del repo si existe; si no, sembrar desde .env.example (INF-14:
+# antes el Copy-Item fallaba con EAP=Stop y el fallback era código muerto).
+$repoEnv = Join-Path $RepoPlatform ".env"
+if (Test-Path $repoEnv) {
+    Copy-Item $repoEnv (Join-Path $Root ".env") -Force
+} elseif (-not (Test-Path (Join-Path $Root ".env"))) {
+    Copy-Item (Join-Path $RepoPlatform ".env.example") (Join-Path $Root ".env")
+    Write-Host "  .env creado desde .env.example (edítalo con tus claves)." -ForegroundColor Yellow
+}
 
 # Junction para third_party (mismo disco: sin copiar cientos de MB)
 $tpTarget = Join-Path $Root "third_party"

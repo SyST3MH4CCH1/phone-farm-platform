@@ -31,7 +31,7 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
       method: "POST",
       url: "/api/accounts",
       curl: `curl -X POST http://127.0.0.1:5000/api/accounts -H "Content-Type: application/json" -d '{"username":"<cuenta>","password":"<password>","device_serial":"<serial>","proxy_id":"proxy_01","warmup_day":1}'`,
-      body: { username: "nicho_fitness_02", password: "Pass123!", device_serial: "RFCW80ZZZZZ", proxy_id: "proxy_01", warmup_day: 1 }
+      body: { username: "<cuenta>", password: "<password>", device_serial: "<serial>", proxy_id: "proxy_01", warmup_day: 1 }
     },
     {
       name: "3. Eliminar cuenta por ID",
@@ -97,11 +97,13 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
       body: null
     },
     {
-      name: "12. Autenticación Operador (Login)",
+      name: "12. Autenticación (Login) — ejemplo NO ejecutable",
       method: "POST",
       url: "/api/auth/login",
       curl: `curl -X POST http://127.0.0.1:5000/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"<password>"}'`,
-      body: { username: "admin", password: "admin123" }
+      // FE-01: sin credenciales reales. Password vacío -> el servidor rechaza
+      // con 400 (validación) y NUNCA autentica con credenciales hardcodeadas.
+      body: { username: "admin", password: "" }
     },
     {
       name: "13. Consultar sesión actual (Auth Me)",
@@ -136,6 +138,21 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
   const currentEndpoint = endpoints[activeTab];
 
   const handleTest = async () => {
+    // FE-02: las mutaciones (no-GET) requieren confirmación explícita — antes
+    // un clic borraba cuentas / arrancaba el pipeline con la sesión completa.
+    if (currentEndpoint.method !== "GET" && currentEndpoint.method !== "HEAD") {
+      const ok = window.confirm(
+        `¿Ejecutar ${currentEndpoint.method} ${currentEndpoint.url} con tu sesión actual?\n` +
+        `Esta acción NO es reversible.`
+      );
+      if (!ok) return;
+    }
+    // FE-02: el login con password vacío no debe ejecutarse (fallaría 400,
+    // pero evitamos llamadas inútiles al endpoint de auth).
+    if (currentEndpoint.url === "/api/auth/login" && !currentEndpoint.body?.password) {
+      setResponseOutput(JSON.stringify({ error: "Este preset es de ejemplo: introduce un password real para probar el login." }, null, 2));
+      return;
+    }
     setLoading(true);
     setResponseOutput(null);
     try {
@@ -201,7 +218,8 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
               <h4 className="text-sm font-bold text-[#E5E5E5] mb-1">{currentEndpoint.name}</h4>
               <div className="flex items-center gap-2 text-xs font-mono text-[#9CA1A8]">
                 <span className="text-[#8A8F98] font-bold">{currentEndpoint.method}</span>
-                <span>http://127.0.0.1:5000{currentEndpoint.url}</span>
+                <span>{window.location.origin}{currentEndpoint.url}</span>
+                <span className="text-[#6B7076]">(same-origin — usa tu sesión)</span>
               </div>
             </div>
 

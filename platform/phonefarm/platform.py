@@ -187,19 +187,25 @@ JOB_STATUSES = {
 
 
 def _sync_job(updated: dict[str, Any]) -> list[dict[str, Any]]:
-    """Persiste el estado del job (versión bump en cada transición de estado)."""
-    queue = load_queue()
-    for idx, item in enumerate(queue):
-        if item.get("id") == updated["id"]:
-            if item.get("status") != updated.get("status"):
-                updated["version"] = int(updated.get("version", 1)) + 1
-            queue[idx] = updated
-            break
-    else:
-        updated.setdefault("version", 1)
-        queue.append(updated)
-    save_queue(queue)
-    return queue
+    """Persiste el estado del job (versión bump en cada transición de estado).
+
+    PY-03: el ciclo leer-modificar-escribir completo se serializa con
+    `_queue_lock` (RLock) para que dos workers concurrentes no pierdan
+    actualizaciones entre load_queue() y save_queue().
+    """
+    with _queue_lock:
+        queue = load_queue()
+        for idx, item in enumerate(queue):
+            if item.get("id") == updated["id"]:
+                if item.get("status") != updated.get("status"):
+                    updated["version"] = int(updated.get("version", 1)) + 1
+                queue[idx] = updated
+                break
+        else:
+            updated.setdefault("version", 1)
+            queue.append(updated)
+        save_queue(queue)
+        return queue
 
 
 def _spawn(job_id: str, target) -> None:
@@ -426,7 +432,11 @@ def auth_internal() -> Any:
     path = request.path
     if path in ("/", "/favicon.ico", "/healthz", "/readyz"):
         return None  # páginas públicas mínimas (sin datos ni configuración)
-    if request.headers.get("X-Internal-Auth") != INTERNAL_TOKEN:
+    # PY-06: comparación timing-safe (AUDIT-006 lo declaraba; antes era `!=`).
+    import hmac
+
+    provided = request.headers.get("X-Internal-Auth") or ""
+    if not INTERNAL_TOKEN or not hmac.compare_digest(provided, INTERNAL_TOKEN):
         return jsonify({"error": "unauthorized"}), 401
     remote = request.remote_addr or ""
     if not remote.startswith(("127.", "::1")) and (
@@ -1018,9 +1028,14 @@ def api_content_preview():
 
     body = request.get_json(silent=True) or {}
     keyword = (body.get("keyword") or "").strip()
+    # PY-10: build_script lanza ValueError con keyword/script inválidos; el
+    # endpoint lo degradaba a 500 genérico. Ahora 400 con motivo.
     if not keyword:
         return jsonify({"error": "keyword es obligatoria"}), 400
-    return jsonify(content.preview(keyword, body.get("niche_id"), body.get("script")))
+    try:
+        return jsonify(content.preview(keyword, body.get("niche_id"), body.get("script")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 # --- Engagement --------------------------------------------------------------
@@ -1080,13 +1095,14 @@ def api_instagram_login(account_id: str):
     try:
         publisher.login_once(account_id, account["username"], password)
         # La sesión queda cifrada en BD; nunca se devuelve ruta ni secreto.
-        return jsonify({"ok": True, "account_id": account_id})
+        # PY-08: el _audit de éxito estaba DESPUÉS del return (código muerto).
         _audit("social.login", account_id)
         return jsonify({"ok": True, "account_id": account_id})
     except Exception as exc:  # noqa: BLE001 — instagrapi challenge / 2FA / credenciales
-        logger.warning("Login IG fallido para %s: %s", account_id, exc)
+        logger.warning("Login IG fallido para %s: %s", account_id, type(exc).__name__)
         _audit("social.login_failed", account_id, {"error": type(exc).__name__})
-        return jsonify({"ok": False, "error": str(exc)[:500]}), 502
+        # PY-08: no filtrar detalles internos de instagrapi al cliente.
+        return jsonify({"ok": False, "error": f"Login fallido ({type(exc).__name__})"}), 502
 
 
 # --- Stats -------------------------------------------------------------------
@@ -1150,12 +1166,19 @@ def api_auth_me():
 
 
 @app.get("/api/source/<path:filename>")
+@require_role("admin")
 def api_source(filename: str):
     """Sirve el código REAL del backend (para el CodeViewer del panel).
 
+    Solo admin (PY-05): AUDIT-010 declara el endpoint admin-only + desactivable
+    via EXPOSE_SOURCE; antes cualquier poseedor del token interno lo leía.
     Solo archivos del paquete phonefarm (nunca rutas arbitrarias).
     """
+    import os
     import pathlib
+
+    if os.getenv("EXPOSE_SOURCE", "false").lower() != "true":
+        return jsonify({"error": "EXPOSE_SOURCE desactivado"}), 404
 
     safe = pathlib.Path(filename).name
     base = pathlib.Path(__file__).resolve().parent
@@ -1174,8 +1197,13 @@ def api_source(filename: str):
 
 
 @app.get("/api/source")
+@require_role("admin")
 def api_source_index():
     """Lista los archivos reales disponibles en el CodeViewer."""
+    import os
+
+    if os.getenv("EXPOSE_SOURCE", "false").lower() != "true":
+        return jsonify({"error": "EXPOSE_SOURCE desactivado"}), 404
     return jsonify({"files": [
         "platform.py", "proxy_manager.py", "generator.py",
         "publisher.py", "engagement.py", "content.py",

@@ -40,7 +40,9 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
   const [testingPexels, setTestingPexels] = useState(false);
   const [pexelsResult, setPexelsResult] = useState<{ valid: boolean; message: string } | null>(null);
 
-  const [genResult, setGenResult] = useState<{ success: boolean; job: any } | null>(null);
+  const [genResult, setGenResult] = useState<{ success: boolean; job: any; error?: string } | null>(null);
+  // FE-06: representación de error (sin job) — evita `genResult.job.id` en null.
+  const setGenError = (message: string) => setGenResult({ success: false, job: null, error: message });
 
   // Fetch current MoneyPrinterTurbo config
   useEffect(() => {
@@ -63,9 +65,13 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
       });
       if (res.ok) {
         onRefreshData();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        window.alert(`No se pudo guardar la configuración: ${data?.error || res.status}`);
       }
     } catch (err) {
-      // ignore
+      // FE-06: el fallo ya no se traga en silencio.
+      window.alert(`No se pudo guardar la configuración: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSaving(false);
     }
@@ -90,13 +96,16 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
         setPexelsResult({ valid: false, message: 'API Key de Pexels inválida o sin respuesta.' });
       }
     } catch (err) {
-      setPexelsResult({ valid: fontTestFallback(), message: 'Conexión Pexels mock en modo offline activo.' });
+      // FE-06: antes se pintaba valid:true con "mock offline" — un fallo de red
+      // ya NO se muestra como verificación exitosa.
+      setPexelsResult({
+        valid: false,
+        message: `No se pudo verificar Pexels (red): ${err instanceof Error ? err.message : String(err)}`
+      });
     } finally {
       setTestingPexels(false);
     }
   };
-
-  const fontTestFallback = () => true;
 
   const handleGenerateVideo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,9 +129,14 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
         const data = await res.json();
         setGenResult(data);
         onRefreshData();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        // FE-06: el 400/500 se muestra, no se traga.
+        setGenError(data?.error || `HTTP ${res.status}`);
       }
     } catch (err) {
-      // fallback
+      // FE-06: el fallo de red se muestra.
+      setGenError(`Fallo de red: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
@@ -282,15 +296,21 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                 </button>
               </div>
 
-              {genResult && (
+              {genResult && genResult.error && (
+                <div className="p-4 rounded-xl border border-[#E05B5B]/40 bg-[#E05B5B]/10 text-[#E05B5B] font-mono text-xs">
+                  <div className="flex items-center gap-2 font-bold">⚠ Fallo al generar el vídeo</div>
+                  <div className="text-[11px] text-[#E5E5E5] mt-1">{genResult.error}</div>
+                </div>
+              )}
+              {genResult && !genResult.error && (
                 <div className="p-4 rounded-xl border border-[#8A8F98]/40 bg-[#8A8F98]/10 text-[#8A8F98] font-mono text-xs space-y-2">
                   <div className="flex items-center gap-2 font-bold">
                     <span>¡Vídeo procesado e inyectado a la cola de teléfonos físicos ADB!</span>
                   </div>
                   <div className="text-[11px] text-[#E5E5E5]">
-                    <div>• Job ID: <strong>{genResult.job.id}</strong></div>
-                    <div>• RUTA VÍDEO: <strong>{genResult.job.video_path}</strong></div>
-                    <div>• ESTADO: <strong>Auto-Publicando mediante instagrapi en @{accounts.find(a => a.id === genResult.job.target_account)?.username}</strong></div>
+                    <div>• Job ID: <strong>{genResult.job?.id}</strong></div>
+                    <div>• RUTA VÍDEO: <strong>{genResult.job?.video_path}</strong></div>
+                    <div>• ESTADO: <strong>Auto-Publicando mediante instagrapi en @{accounts.find(a => a.id === genResult.job?.target_account)?.username}</strong></div>
                   </div>
                 </div>
               )}

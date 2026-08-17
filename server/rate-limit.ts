@@ -73,3 +73,49 @@ export class LoginRateLimiter {
     return `login:ip:${ip}`;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Rate limit genérico por usuario+IP para endpoints de COSTE (EXP-05):
+// content/preview (LLM), proxies/verify (red), adb/touch (ADB 90s). En memoria,
+// ventana deslizante por clave; límites generosos para no romper la operación.
+// ---------------------------------------------------------------------------
+
+export interface CostLimitOpts {
+  /** Máx. llamadas por ventana. */
+  max: number;
+  /** Ventana en ms. */
+  windowMs: number;
+}
+
+interface _Bucket {
+  count: number;
+  resetAt: number;
+}
+
+export class CostLimiter {
+  private buckets = new Map<string, _Bucket>();
+
+  constructor(private opts: CostLimitOpts) {}
+
+  /** True si la llamada está permitida; contabiliza la actual. */
+  allow(key: string): boolean {
+    const now = Date.now();
+    const b = this.buckets.get(key);
+    if (!b || b.resetAt <= now) {
+      this.buckets.set(key, { count: 1, resetAt: now + this.opts.windowMs });
+      return true;
+    }
+    if (b.count >= this.opts.max) return false;
+    b.count += 1;
+    return true;
+  }
+
+  /** Barrido perezoso de buckets vencidos (acotado). */
+  cleanup(): void {
+    const now = Date.now();
+    for (const [k, b] of this.buckets) {
+      if (b.resetAt <= now) this.buckets.delete(k);
+      if (this.buckets.size > 5000) break; // salvaguarda
+    }
+  }
+}

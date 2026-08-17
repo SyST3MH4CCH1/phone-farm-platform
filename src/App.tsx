@@ -142,20 +142,37 @@ export default function App() {
     } catch (e) {
       // ignore
     }
+    // FE-11: limpiar TODOS los estados de datos/logs para no filtrar la
+    // operación de la sesión anterior en la pantalla de login.
     setCurrentUser(null);
+    setStats(EMPTY_STATS);
+    setAccounts([]);
+    setProxies([]);
+    setQueue([]);
+    setLogs([]);
+    setDeviceCount(0);
   };
 
-  // Fetch initial data from Express backend if available
+  // FE-03: si cualquier fetch de refresco devuelve 401/403, la sesión expiró:
+  // limpiar sesión y volver al login (antes los errores se descartaban en
+  // silencio y el panel seguía mostrando datos obsoletos como frescos).
   const refreshBackendData = async () => {
     if (!currentUser) return;
+    const guard = (r: Response) => {
+      if (r.status === 401 || r.status === 403) {
+        setCurrentUser(null);
+        return null;
+      }
+      return r.ok ? r.json() : null;
+    };
     // allSettled: un endpoint lento (p.ej. verify de proxy online) NO debe
     // bloquear el render de los demás (antes Promise.all los congelaba).
     const [statsRes, accountsRes, proxiesRes, queueRes, devicesRes] = await Promise.allSettled([
-      apiFetch('/api/stats').then(r => r.ok ? r.json() : null),
-      apiFetch('/api/accounts').then(r => r.ok ? r.json() : null),
-      apiFetch('/api/proxies').then(r => r.ok ? r.json() : null),
-      apiFetch('/api/queue').then(r => r.ok ? r.json() : null),
-      apiFetch('/api/adb/devices').then(r => r.ok ? r.json() : null)
+      apiFetch('/api/stats').then(guard),
+      apiFetch('/api/accounts').then(guard),
+      apiFetch('/api/proxies').then(guard),
+      apiFetch('/api/queue').then(guard),
+      apiFetch('/api/adb/devices').then(guard)
     ]);
     const val = <T,>(p: PromiseSettledResult<T | null>): T | null =>
       p.status === 'fulfilled' ? p.value : null;
@@ -194,10 +211,18 @@ export default function App() {
     return () => clearInterval(interval);
   }, [currentUser]);
 
-  // Subscribe to real-time SSE logs from server
+  // Subscribe to real-time SSE logs from server.
+  // FE-04: (a) el stream SOLO se abre con sesión (antes corría pre-login);
+  // (b) se re-crea al iniciar sesión (deps [currentUser]); (c) onerror/onopen
+  // derivan el estado real de conectividad; (d) se cierra en logout.
+  const [sseConnected, setSseConnected] = useState(false);
   useEffect(() => {
+    if (!currentUser) return;
+    let closed = false;
     try {
       const sse = new EventSource('/api/stream/logs');
+      sse.onopen = () => { if (!closed) setSseConnected(true); };
+      sse.onerror = () => { if (!closed) setSseConnected(false); };
       sse.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
@@ -214,11 +239,12 @@ export default function App() {
           // parse string
         }
       };
-      return () => sse.close();
+      return () => { closed = true; setSseConnected(false); sse.close(); };
     } catch (e) {
       // sse fallback
+      return undefined;
     }
-  }, []);
+  }, [currentUser]);
 
   // Account Operations
   const handleToggleBot = async (accountId: string) => {
@@ -334,7 +360,10 @@ export default function App() {
       if (res.ok) {
         addLog('INFO', 'Generator', `Pipeline iniciado para ${data?.id || 'job'} (processing)`);
         await refreshBackendData();
-      addLog('WARN', 'Generator', data?.message || data?.error || 'No hay trabajos pendientes.');
+      } else {
+        // FE-06: el WARN de cola vacía/error estaba DENTRO del if(res.ok)
+        // (indentación engañosa) — nunca se logueaba el fallo.
+        addLog('WARN', 'Generator', data?.message || data?.error || `HTTP ${res.status}`);
       }
     } catch (err) {
       addLog('ERROR', 'Generator', `queue/next falló: ${err instanceof Error ? err.message : String(err)}`);
@@ -715,6 +744,7 @@ export default function App() {
             onClearLogs={() => setLogs([])}
             isMinimized={terminalMinimized}
             onToggleMinimize={() => setTerminalMinimized(!terminalMinimized)}
+            sseConnected={sseConnected}
           />
         </div>
       </main>

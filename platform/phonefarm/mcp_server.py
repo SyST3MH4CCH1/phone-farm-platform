@@ -89,6 +89,10 @@ class AuthedFastMCP(FastMCP):
         principal = _current_principal.get()
         if principal is None:
             raise PermissionError("no autenticado")
+        # Fail-closed (PY-09): una tool no declarada en TOOL_SCOPES NO se
+        # ejecuta (antes `if required` dejaba pasar tools no mapeadas).
+        if name not in TOOL_SCOPES:
+            raise PermissionError(f"tool '{name}' no declarada en TOOL_SCOPES — no autorizada")
         required = TOOL_SCOPES.get(name)
         if required and required not in principal["scopes"]:
             raise PermissionError(
@@ -140,6 +144,25 @@ def create_content_job(
     ready_for_publish (publish_job) + aprobación registrada.
     """
     from phonefarm import platform as pf
+    from phonefarm.validate import _no_controls
+
+    # Validación de entrada (PY-04): mismas reglas que el endpoint HTTP
+    # (sin caracteres de control, longitudes máx, sin secretos en keyword/script).
+    keyword = keyword or ""
+    if not keyword or len(keyword) > 200:
+        raise ValueError("keyword inválida (1..200 chars)")
+    try:
+        _no_controls(keyword)  # lanza ValueError si hay caracteres de control
+    except ValueError:
+        raise ValueError("keyword con caracteres de control no permitidos") from None
+    script = script or ""
+    if len(script) > 4000:
+        raise ValueError("script inválido (0..4000 chars)")
+    if script:
+        try:
+            _no_controls(script)
+        except ValueError:
+            raise ValueError("script con caracteres de control no permitidos") from None
 
     queue = platform_data.load_queue()
     job = {
@@ -247,6 +270,31 @@ def create_content_profile(
     video_terms: list[str] | None = None,
 ) -> dict[str, Any]:
     """Crea un perfil de nicho para la generación de contenido."""
+    from phonefarm.validate import _no_controls
+
+    # Validación de entrada (PY-04): `tone` se interpola en el system prompt
+    # del LLM (content.py) — un valor malicioso sería prompt injection.
+    for label, value in (("id", id), ("name", name), ("tone", tone), ("voice_name", voice_name)):
+        if not isinstance(value, str) or not value or len(value) > 200:
+            raise ValueError(f"{label} inválido (1..200 chars)")
+        try:
+            _no_controls(value)
+        except ValueError:
+            raise ValueError(f"{label} con caracteres de control no permitidos") from None
+    if not isinstance(caption_template, str) or len(caption_template) > 1000:
+        raise ValueError("caption_template inválido (0..1000 chars)")
+    try:
+        _no_controls(caption_template)
+    except ValueError:
+        raise ValueError("caption_template con caracteres de control no permitidos") from None
+    if not isinstance(hashtags, list) or len(hashtags) > 60:
+        raise ValueError("hashtags inválido (lista de máx. 60)")
+    for h in hashtags:
+        if not isinstance(h, str) or len(h) > 100:
+            raise ValueError("hashtag inválido (máx. 100 chars)")
+    if video_terms is not None and (not isinstance(video_terms, list) or len(video_terms) > 60):
+        raise ValueError("video_terms inválido (lista de máx. 60)")
+
     profile_id = id.strip().lower().replace(" ", "_")
     profiles = content.load_profiles()
     if any(p.get("id") == profile_id for p in profiles):

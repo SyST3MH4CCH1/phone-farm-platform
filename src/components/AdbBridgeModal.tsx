@@ -54,12 +54,15 @@ export const AdbBridgeModal: React.FC<AdbBridgeModalProps> = ({ onClose, onRefre
         });
       }
     } catch (err: any) {
+      // FE-06: antes se inyectaban dispositivos INVENTADOS con mensaje
+      // "Conectado en modo Bridge local" — datos falsos presentados como
+      // diagnóstico. Ahora el error es honesto y sin dispositivos.
       setTestResult({
         success: false,
         flask_server_online: false,
-        adb_server_status: 'local_sandbox',
-        detected_devices: ['RFCW80XXXXX (Samsung Galaxy A52 - USB)', '192.168.1.105:5555 (Wi-Fi ADB)'],
-        message: 'Conectado en modo Bridge local (Entorno Sandboxed).'
+        adb_server_status: 'offline',
+        detected_devices: [],
+        message: `No se pudo conectar con el backend Express: ${err?.message || String(err)}`
       });
     } finally {
       setTesting(false);
