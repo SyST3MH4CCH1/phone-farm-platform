@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,13 @@ from typing import Any
 import requests
 
 from phonefarm.platform_data import find_proxy, save_proxies
+
+# Cache for ipify verification: cache_key -> (result, timestamp)
+# In-flight coordination: cache_key -> threading.Event (set when result is ready)
+# ponytail: 5-min TTL, stdlib dict+lock only
+_verify_cache: dict[str, tuple[dict[str, Any], float]] = {}
+_verify_cache_lock = threading.Lock()
+_verify_inflight: dict[str, threading.Event] = {}
 
 logger = logging.getLogger(__name__)
 
@@ -257,16 +265,67 @@ def clear_phone_proxy(device_serial: str) -> None:
 # Verificación real
 # ---------------------------------------------------------------------------
 
+def _verify_cache_key(proxy_id: str) -> str | None:
+    """Build a cache key from proxy credentials, or None if proxy not found."""
+    proxy = find_proxy(proxy_id)
+    if proxy is None:
+        return None
+    host = proxy.get("host", "")
+    port = int(proxy.get("port", 0) or 0)
+    user = proxy.get("user") or ""
+    return f"{proxy_id}|{host}:{port}:{user}"
+
+
 def verify_proxy(proxy_id: str, timeout: int = 8) -> dict[str, Any]:
     """Consulta api.ipify.org A TRAVÉS del proxy y retorna {ip, latency_ms, status}.
 
     Devuelve status "online" si la conexión tuvo éxito; "offline" en caso
     contrario, con el error enmascarado (nunca credenciales).
+
+    Cacheo: 300 s TTL por proxy (clave = proxy_id|host:port:user). Si las
+    credenciales cambian se genera una clave nueva y el cacheo se绕过.
+    Llamadas simultáneas del mismo proxy comparten una única llamada real
+    (coordination via threading.Event).
     """
+    cache_key = _verify_cache_key(proxy_id)
+    TTL = 300.0
+
+    # Fast path: check cache under lock
+    if cache_key is not None:
+        with _verify_cache_lock:
+            entry = _verify_cache.get(cache_key)
+        if entry is not None:
+            result, ts = entry
+            if time.monotonic() - ts < TTL:
+                return result
+
+    # Coordination path: another thread is already fetching this key — wait for it
+    if cache_key is not None:
+        with _verify_cache_lock:
+            event = _verify_inflight.get(cache_key)
+        if event is not None:
+            event.wait(timeout=timeout + 5)
+            with _verify_cache_lock:
+                entry = _verify_cache.get(cache_key)
+            if entry is not None:
+                return entry[0]
+            # Fall through to fetch if event timed out (stale in-flight marker)
+
+    # Slow path: I'm the fetcher
     try:
         proxy_dict = get_proxy_dict(proxy_id)
     except ValueError as exc:
         return {"proxy_id": proxy_id, "ip": None, "latency_ms": None, "status": "offline", "error": str(exc)}
+
+    # Register in-flight marker
+    if cache_key is not None:
+        event = threading.Event()
+        with _verify_cache_lock:
+            existing = _verify_inflight.get(cache_key)
+            if existing is not None:
+                event = existing  # another thread raced ahead; reuse its event
+            else:
+                _verify_inflight[cache_key] = event
 
     start = time.monotonic()
     try:
@@ -279,12 +338,22 @@ def verify_proxy(proxy_id: str, timeout: int = 8) -> dict[str, Any]:
         if response.ok:
             ip = response.json().get("ip", "")
             logger.info("Proxy %s online — IP pública: %s (%d ms)", proxy_id, ip, latency_ms)
-            return {"proxy_id": proxy_id, "ip": ip, "latency_ms": latency_ms, "status": "online"}
-        logger.warning("Proxy %s respondió HTTP %s", proxy_id, response.status_code)
-        return {"proxy_id": proxy_id, "ip": None, "latency_ms": latency_ms, "status": "offline",
-                "error": f"HTTP {response.status_code}"}
+            result = {"proxy_id": proxy_id, "ip": ip, "latency_ms": latency_ms, "status": "online"}
+        else:
+            logger.warning("Proxy %s respondió HTTP %s", proxy_id, response.status_code)
+            result = {"proxy_id": proxy_id, "ip": None, "latency_ms": latency_ms, "status": "offline",
+                      "error": f"HTTP {response.status_code}"}
     except requests.exceptions.RequestException as exc:
         latency_ms = int((time.monotonic() - start) * 1000)
         logger.warning("Proxy %s offline: %s", proxy_id, type(exc).__name__)
-        return {"proxy_id": proxy_id, "ip": None, "latency_ms": latency_ms, "status": "offline",
-                "error": type(exc).__name__}
+        result = {"proxy_id": proxy_id, "ip": None, "latency_ms": latency_ms, "status": "offline",
+                  "error": type(exc).__name__}
+
+    # Store in cache and signal waiters
+    if cache_key is not None:
+        with _verify_cache_lock:
+            _verify_cache[cache_key] = (result, time.monotonic())
+            _verify_inflight.pop(cache_key, None)
+        event.set()
+
+    return result

@@ -210,7 +210,15 @@ ADB_HOST, ADB_PORT            # default 127.0.0.1:5037
 ## 9. Qué NO está conectado (deuda técnica)
 
 1. **`farm-engine.ts` y `mcp.ts`** (raíz): engine mock y MCP TS no referenciados. El MCP real es el Python (`:5001`). *Acción:* borrarlos o etiquetarlos como `legacy/`.
-2. **`GET /api/moneyprinter/voices`, `/api/logs`, `/api/adb/config`**: expuestos pero sin consumidor en la UI actual.
+2. **Endpoints sin consumidor UI — verificados como API-only internos:**
+
+   | Endpoint | Gate | Consumidor | Notas |
+   |---|---|---|---|
+   | `GET /api/moneyprinter/voices` | `requireRole("admin")` | NO — API-only | Lista voces edge-tts. admin-only. Testado en `test/rbac.test.ts`. |
+   | `GET /api/adb/config` | `requireAuth` (global `/api/*`) | NO — API-only | Bridge config. Session auth (cookie). Sin UI pero funcional para curl/MCP. |
+   | `GET /api/logs` | `requireAuth` (global `/api/*`) | NO — API-only | Proxy stats. Logs live van por `/api/stream/logs` (SSE, usado por UI). Este endpoint es estático. |
+
+   *Decisión: mantener — útiles para curl/MCP/agentes. No erosiona la seguridad (gate correcto).*
 3. **`platform/data/*.json`**: semillas Docker obsoletas; riesgo de confusión. *Acción:* documentar que es solo-Docker o regenerar.
 4. **Sesiones IG**: `accounts.json` referencia `sessions/acc_XX.json` que no existen → los jobs caen a `awaiting_manual_upload`. *Acción:* hacer `POST /api/accounts/:id/instagram/login` por cuenta.
 5. **Cifrado en reposo**: `accounts.json` guarda contraseñas IG en claro. *Acción:* cifrar con `age`/Fernet antes de producción.

@@ -15,10 +15,22 @@ import argparse
 import hashlib
 import secrets
 import sys
+import threading
 import time
 from pathlib import Path
 
 from phonefarm import db as pdb
+
+_local = threading.local()
+
+
+def _get_conn():
+    """Thread-local SQLite connection, reused across calls in the same thread."""
+    conn = getattr(_local, "conn", None)
+    if conn is None:
+        conn = pdb.open_migrated(_resolve_db())
+        _local.conn = conn
+    return conn
 
 ALL_SCOPES = {"read", "queue.write", "engagement", "approve", "publish", "admin"}
 
@@ -45,7 +57,7 @@ def find_token(conn, token_hash: str):
 
 def token_is_valid(token: str) -> dict | None:
     """Valida un token: devuelve {id, principal, scopes} o None."""
-    conn = pdb.open_migrated(_resolve_db())
+    conn = _get_conn()
     row = find_token(conn, hash_token(token))
     if row is None:
         return None

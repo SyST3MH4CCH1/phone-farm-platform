@@ -136,6 +136,32 @@ jobs:
       - run: cp platform/.env.example platform/.env
       - run: docker compose -f platform/docker-compose.yml config -q
 
+  lock-verify:
+    name: Lock de terceros (SEC-008)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            platform/third_party.lock
+            docs/THIRD-PARTY-LOCK.md
+          sparse-checkout-cone-mode: false
+      - name: Verificar platform/third_party.lock
+        run: |
+          python -c "
+          import re, sys
+          lock = open('platform/third_party.lock').read()
+          expected = {'MoneyPrinterTurbo': '254cd02', 'taktik-bot': 'c2b7489'}
+          for comp, sha in expected.items():
+              if not re.search(rf'^\[{comp}\].*?commit\s*=\s*[\"']?' + sha, lock, re.M | re.DOTALL):
+                  print(f'LOCK MISMATCH: {comp} sha {sha} not found in platform/third_party.lock')
+                  sys.exit(1)
+              print(f'{comp}: OK ({sha})')
+          print('platform/third_party.lock: PASS')
+          "
+
   secret-scan:
     name: Secret scan (gitleaks — árbol actual y diff)
     runs-on: ubuntu-latest

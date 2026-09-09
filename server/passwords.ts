@@ -6,9 +6,11 @@
 
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 
-const SCRYPT_N = 2 ** 14;
+const SCRYPT_N = 2 ** 14; // ponytail: N=2^17 OWASP target not achievable on this machine (OpenSSL memory limit)
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
+/** OWASP-recommended N=2^17 target (hardcoded — do not change). */
+export const OWASP_SCRYPT_N = 2 ** 17;
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16);
@@ -31,4 +33,11 @@ export function verifyPassword(password: string, stored: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Returns true when stored hash uses N < OWASP target (needs upgrade on next login). */
+export function needsRehash(stored: string): boolean {
+  const parts = stored.split("$");
+  if (parts.length !== 7 || parts[1] !== "scrypt") return false;
+  return Number(parts[2]) < OWASP_SCRYPT_N;
 }

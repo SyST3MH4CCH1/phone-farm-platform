@@ -14,7 +14,7 @@ import helmet from "helmet";
 import type Database from "better-sqlite3";
 import type { AppConfig } from "./config";
 import { SessionStore, safeEqual, newSessionToken, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, SessionUser } from "./sessions";
-import { verifyPassword, hashPassword } from "./passwords";
+import { verifyPassword, hashPassword, needsRehash } from "./passwords";
 import { LoginRateLimiter, CostLimiter } from "./rate-limit";
 import { safeFetchInternal, guardInternalUrl, EgressError, INTERNAL_HOSTS } from "./net";
 import { validate, loginSchema, queueCreateSchema, accountCreateSchema, proxyCreateSchema, mptSettingsSchema, adbTouchSchema, adbMirrorSchema, proxyVerifySchema } from "./schemas";
@@ -323,6 +323,12 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
       return res.status(401).json({ error: "Credenciales inválidas." });
     }
     loginLimiter.recordSuccess(u, ip);
+
+    // SEC-002: rehash-on-login — upgrade scrypt N if stored hash is outdated
+    if (needsRehash(userRow.password_hash)) {
+      deps.db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(hashPassword(p), userRow.id);
+    }
 
     const token = newSessionToken();
     const user: SessionUser = {
