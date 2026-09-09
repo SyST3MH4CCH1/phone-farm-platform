@@ -59,14 +59,34 @@ if (-not (Test-Path (Join-Path $Root "platform\.env"))) {
     Copy-Item (Join-Path $Root "platform\.env.example") (Join-Path $Root "platform\.env")
     Write-Host "  + platform\.env — EDITA: INTERNAL_TOKEN (mismo que el de la raíz), MINIMAX_API_KEY" -ForegroundColor DarkGray
 }
-# Generar token compartido si ambos quedaron vacíos
-$rootTok  = (Select-String -Path (Join-Path $Root ".env") -Pattern '^PHONE_FARM_INTERNAL_TOKEN=' -EA SilentlyContinue).Line
-$platTok  = (Select-String -Path (Join-Path $Root "platform\.env") -Pattern '^INTERNAL_TOKEN=' -EA SilentlyContinue).Line
-if ($rootTok -match '=""$' -and $platTok -match '=""$') {
-    $tok = & python -c "import secrets; print(secrets.token_urlsafe(32))" 2>$null
-    if (-not $tok) { $tok = "pf_" + [guid]::NewGuid().ToString("N") }
-    (Get-Content (Join-Path $Root ".env") -Raw).Replace('PHONE_FARM_INTERNAL_TOKEN=""', "PHONE_FARM_INTERNAL_TOKEN=`"$tok`"") | Set-Content (Join-Path $Root ".env")
-    (Get-Content (Join-Path $Root "platform\.env") -Raw).Replace('INTERNAL_TOKEN=""', "INTERNAL_TOKEN=`"$tok`"") | Set-Content (Join-Path $Root "platform\.env")
+# Lee un valor de un .env (sin comillas). $null si falta la clave.
+function Get-EnvValue($Path, $Name) {
+    $m = Select-String -Path $Path -Pattern "^$Name=(.*)$" -EA SilentlyContinue | Select-Object -First 1
+    if (-not $m) { return $null }
+    return $m.Matches[0].Groups[1].Value.Trim().Trim('"')
+}
+# Escribe (o añade) una clave en un .env.
+function Set-EnvValue($Path, $Name, $Value) {
+    $lines = @()
+    if (Test-Path $Path) { $lines = @(Get-Content $Path) }
+    $found = $false
+    $lines = @($lines | ForEach-Object { if ($_ -match "^$Name=") { $found = $true; "$Name=`"$Value`"" } else { $_ } })
+    if (-not $found) { $lines += "$Name=`"$Value`"" }
+    $lines | Set-Content $Path
+}
+# Generar token compartido si alguno quedó vacío (o falta) y sincronizar ambos.
+# ponytail: antes solo generaba cuando AMBOS estaban vacíos; un .env a medias
+# quedaba con tokens distintos y Flask rechazaba todo.
+$rootTok = Get-EnvValue (Join-Path $Root ".env") "PHONE_FARM_INTERNAL_TOKEN"
+$platTok = Get-EnvValue (Join-Path $Root "platform\.env") "INTERNAL_TOKEN"
+if (-not $rootTok -or -not $platTok) {
+    if ($rootTok) { $tok = $rootTok } elseif ($platTok) { $tok = $platTok }
+    else {
+        $tok = & python -c "import secrets; print(secrets.token_urlsafe(32))" 2>$null
+        if (-not $tok) { $tok = "pf_" + [guid]::NewGuid().ToString("N") }
+    }
+    Set-EnvValue (Join-Path $Root ".env") "PHONE_FARM_INTERNAL_TOKEN" $tok
+    Set-EnvValue (Join-Path $Root "platform\.env") "INTERNAL_TOKEN" $tok
     Write-Host "  ✓ Token interno generado y sincronizado en ambos .env" -ForegroundColor Green
 }
 
@@ -79,14 +99,33 @@ function New-StrongSecret {
     [Convert]::ToBase64String($buf).TrimEnd('=').Replace('+', 'x').Replace('/', 'y')
 }
 $envRootPath = Join-Path $Root ".env"
+$generated = @()
 foreach ($pair in @(@('ADMIN_PASSWORD', 'admin'), @('OPERATOR_PASSWORD', 'operator'))) {
     $name = $pair[0]
     $line = (Select-String -Path $envRootPath -Pattern "^$name=" -EA SilentlyContinue).Line
-    if ($line -match "^$name=\"\"" -or $line -match "^$name=[^""]{0,15}$") {
+    # ponytail: regex en single-quote (las "" dentro de double-quote rompían el
+    # parseo del script entero en HEAD — el instalador ni siquiera arrancaba).
+    $rxEmpty = "^$name=`"`""
+    $rxShort = '^' + $name + '=[^"]{0,15}$'
+    if ($line -match $rxEmpty -or $line -match $rxShort) {
         $strong = New-StrongSecret
         (Get-Content $envRootPath -Raw) -replace "(?m)^$name=.*$", "$name=`"$strong`"" | Set-Content $envRootPath
+        $generated += "$name=$strong"
         Write-Host "  ✓ $name generada (fuerte, aleatoria)" -ForegroundColor Green
     }
+}
+if ($generated.Count -gt 0) {
+    # ponytail: antes el password generado solo vivía en .env y el usuario no lo
+    # veía; se muestra UNA vez aquí para entrar al panel sin abrir el fichero.
+    Write-Host "  GUARDA estas credenciales (solo se muestran una vez):" -ForegroundColor Yellow
+    $generated | ForEach-Object { Write-Host "    $_" -ForegroundColor White }
+}
+
+# NODE_ENV obligatorio (server/config.ts se niega a arrancar sin él):
+# fijar production si falta. Instalación fresca = despliegue, no dev.
+if (-not (Get-EnvValue $envRootPath "NODE_ENV")) {
+    Set-EnvValue $envRootPath "NODE_ENV" "production"
+    Write-Host '  ✓ NODE_ENV="production" fijado en .env' -ForegroundColor Green
 }
 
 # ---------------------------------------------------------------- 2. npm

@@ -13,7 +13,7 @@
   Nota: guardar este archivo en UTF-8 SIN BOM y ASCII (los em-dash rompen PS 5.1).
 #>
 
-param([switch]$Stop, [string]$Python = "")
+param([switch]$Stop, [string]$Python = "", [switch]$ReinstallDeps)
 
 $ErrorActionPreference = "Stop"
 $Root     = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -53,12 +53,16 @@ $PyBootstrap = $Python
 
 function Start-Venv {
     param($Path, $ReqFile)
+    $created = $false
     if (-not (Test-Path (Join-Path $Path "Scripts\python.exe"))) {
         Write-Host "  Creando venv $Path ..." -ForegroundColor Yellow
         & $PyBootstrap -m venv $Path
+        $created = $true
     }
     $py = Join-Path $Path "Scripts\python.exe"
-    if ($ReqFile -and (Test-Path $ReqFile)) {
+    # ponytail: pip install solo al crear el venv (o con -ReinstallDeps).
+    # Antes reinstalaba en cada arranque y el reinicio era lento sin motivo.
+    if ($ReqFile -and (Test-Path $ReqFile) -and ($created -or $ReinstallDeps)) {
         & $py -m pip install --quiet -r $ReqFile
     }
     return $py
