@@ -65,6 +65,17 @@ function Start-Venv {
     # Antes reinstalaba en cada arranque y el reinicio era lento sin motivo.
     if ($ReqFile -and (Test-Path $ReqFile) -and ($created -or $ReinstallDeps)) {
         & $py -m pip install --quiet -r $ReqFile
+        # El worker real corre con el intérprete base (el exe del venv actúa
+        # como supervisor y re-lanza con C:\Python312). Sin deps en el base,
+        # una máquina fresca levanta puertos muertos. Marcador por hash.
+        $hash = (Get-FileHash $ReqFile -Algorithm SHA256).Hash.Substring(0, 12)
+        $marker = Join-Path $Path ".sysdeps-$hash"
+        if (-not (Test-Path $marker)) {
+            Write-Host "  Instalando deps también en el intérprete base (una vez)..." -ForegroundColor Yellow
+            & $PyBootstrap -m pip install --quiet -r $ReqFile
+            Get-ChildItem (Join-Path $Path ".sysdeps-*") -EA SilentlyContinue | Remove-Item -Force
+            New-Item $marker -ItemType File -Force | Out-Null
+        }
     }
     return $py
 }
