@@ -161,12 +161,35 @@ if ($ImportZip) {
     }
 } else { Write-Host "`n[4/6] Sin -ImportZip: arranca con datos vacíos (añade cuentas desde el panel)." -ForegroundColor DarkGray }
 
+# Puerto del panel portable entre servidores: si el configurado está ocupado o
+# en rango excluido de Hyper-V (típico del :3000), usar el primer libre.
+# ponytail: try-bind real en vez de parsear netsh (más corto y no miente).
+function Test-PortFree($Port) {
+    if (Get-NetTCPConnection -LocalPort $Port -State Listen -EA SilentlyContinue) { return $false }
+    try { $l = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, $Port); $l.Start(); $l.Stop(); return $true }
+    catch { return $false }
+}
+$PanelPort = Get-EnvValue $envRootPath "PORT"
+if (-not $PanelPort) { $PanelPort = "3000" }
+if (-not (Test-PortFree $PanelPort)) {
+    foreach ($cand in @("4100", "8888", "5002")) {
+        if (Test-PortFree $cand) {
+            Set-EnvValue $envRootPath "PORT" $cand
+            $pub = Get-EnvValue $envRootPath "PUBLIC_BASE_URL"
+            if ($pub -match "^http://127\.0\.0\.1:3000$") { Set-EnvValue $envRootPath "PUBLIC_BASE_URL" "http://127.0.0.1:$cand" }
+            Write-Host "  Puerto $PanelPort no disponible → PORT=$cand en .env" -ForegroundColor Yellow
+            $PanelPort = $cand
+            break
+        }
+    }
+}
+
 # ---------------------------------------------------------------- 5. Express (panel)
-Write-Host "`n[5/6] Arrancando panel Express :3000..." -ForegroundColor Yellow
+Write-Host "`n[5/6] Arrancando panel Express :$PanelPort..." -ForegroundColor Yellow
 Push-Location $Root
 try {
     $p = Start-Process -FilePath "npx" -ArgumentList "tsx","server.ts" -WorkingDirectory $Root -WindowStyle Hidden -PassThru
-    Write-Host "  ✓ Express PID $($p.Id) — http://127.0.0.1:3000" -ForegroundColor Green
+    Write-Host "  ✓ Express PID $($p.Id) — http://127.0.0.1:$PanelPort" -ForegroundColor Green
 } finally { Pop-Location }
 Start-Sleep -Seconds 8
 
@@ -174,8 +197,8 @@ Start-Sleep -Seconds 8
 Write-Host "`n[6/6] Verificación de endpoints..." -ForegroundColor Yellow
 $checks = @(
     @{ n = "Flask  :5000";   u = "http://127.0.0.1:5000/api/stats" },
-    @{ n = "Express:3000";   u = "http://127.0.0.1:3000/" },
-    @{ n = "Panda  :/panda"; u = "http://127.0.0.1:3000/panda" }
+    @{ n = "Express:$PanelPort";   u = "http://127.0.0.1:$PanelPort/" },
+    @{ n = "Panda  :/panda"; u = "http://127.0.0.1:$PanelPort/panda" }
 )
 foreach ($c in $checks) {
     try {
@@ -190,7 +213,7 @@ Write-Host "  dispositivos ADB detectados: $adbCount" -ForegroundColor DarkGreen
 
 Write-Host ""
 Write-Host "=== LISTO ===" -ForegroundColor Green
-Write-Host "  Panel:  http://127.0.0.1:3000   (credenciales: las que definiste en .env)"
+Write-Host "  Panel:  http://127.0.0.1:$PanelPort   (credenciales: las que definiste en .env)"
 Write-Host "  Panda:  botón 'Panda' en el header (pantallas en vivo)"
 Write-Host "  Docs:   docs\MIGRACION-GPU.md  (GPU/NVENC), docs\INTERCONEXION.md, MANUAL.md"
 Write-Host "  Backup: platform\scripts\export-data.ps1  (para futuras migraciones)"

@@ -9,7 +9,8 @@
   Uso:  powershell -ExecutionPolicy Bypass -File platform\scripts\run-native.ps1
         powershell -ExecutionPolicy Bypass -File platform\scripts\run-native.ps1 -Stop
 
-  Requisitos previos (una vez): python instalado (C:\Python312), adb en PATH, ffmpeg Gyan.
+  Requisitos previos (una vez): python en PATH o -Python <ruta> (auto-detecta
+  py -3.12, installs de winget y C:\Python312 como último recurso), adb, ffmpeg.
   Nota: guardar este archivo en UTF-8 SIN BOM y ASCII (los em-dash rompen PS 5.1).
 #>
 
@@ -102,6 +103,10 @@ if ($stale) {
 }
 
 # 1) Generar config de MPT ANTES de arrancarlo (keys del .env + ffmpeg real).
+# ponytail: el parche de endurecimiento MPT solo lo aplicaba deploy.ps1
+# (Docker); en nativo el checkout quedaba sin parchear. Idempotente.
+Write-Host "  Aplicando parche MPT (idempotente)..." -ForegroundColor Yellow
+& $PyBootstrap (Join-Path $Root "scripts\apply-mpt-patch.py") | Out-Null
 Write-Host "  Generando config segura de MPT..." -ForegroundColor Yellow
 $env:IN_DOCKER = "0"
 & $PyBootstrap (Join-Path $Root "scripts\gen_mpt_config.py") | Out-Null
@@ -114,6 +119,11 @@ if (Test-Path $genCfg) {
 }
 
 # 2) Plataforma (Flask :5000 + MCP :5001 + taktik-bot)
+# ponytail: MCP_ENABLED=1 siempre — platform.py solo abre :5001 con este flag
+# y el banner de este script lo promete; antes nunca se fijaba y el puerto
+# quedaba muerto.
+$env:MCP_ENABLED = "1"
+$env:MCP_PORT = "5001"
 $py = Start-Venv $Venv (Join-Path $Root "requirements.txt")
 Write-Host "  Arrancando plataforma (Flask :5000 + MCP :5001)..." -ForegroundColor Yellow
 Push-Location $Root
