@@ -55,8 +55,8 @@ describe("arranque seguro — HTTP/CSRF", () => {
     expect(joined).toContain("pf_session=");
     expect(joined).toContain("HttpOnly");
     expect(joined).toContain("Secure");
-    // SEC-FIND-015: SameSite=Lax para sesión (navegación normal) y SameSite=Strict para CSRF
-    expect(joined).toMatch(/SameSite=Lax/);
+    // Sesión SameSite=Strict (máxima protección CSRF); CSRF también Strict.
+    expect(joined).toMatch(/SameSite=Strict/);
     expect(joined).toContain(`${CSRF_COOKIE}=`);
     // la cookie CSRF no es HttpOnly (la lee el JS) pero sí SameSite=Strict
     const csrfCookie = cookies.find((c) => c.startsWith(`${CSRF_COOKIE}=`)) || "";
@@ -130,7 +130,7 @@ describe("SEC-FIND-015 — sesión por cookie", () => {
   });
 
   // A. Login devuelve Set-Cookie correcto
-  it("A. login devuelve Set-Cookie con HttpOnly, SameSite=Lax, Secure, Path=/", async () => {
+  it("A. login devuelve Set-Cookie con HttpOnly, SameSite=Strict, Secure, Path=/", async () => {
     const res = await request(app)
       .post("/api/auth/login")
       .send({ username: "admin", password: TEST_ADMIN_PW });
@@ -139,7 +139,7 @@ describe("SEC-FIND-015 — sesión por cookie", () => {
     const sessionCookie = cookies.find((c) => c.startsWith("pf_session=")) || "";
     expect(sessionCookie).toContain("HttpOnly");
     expect(sessionCookie).toContain("Path=/");
-    expect(sessionCookie).toMatch(/SameSite=Lax/i);
+    expect(sessionCookie).toMatch(/SameSite=Strict/i);
     // Secure solo se añade cuando cookieSecure=true (test usa testConfig que no fuerza https)
     // Max-Age debe estar presente (24h)
     expect(sessionCookie).toMatch(/Max-Age=\d+/);

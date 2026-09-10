@@ -260,9 +260,9 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
 
   // --- AUTH (local al panel) ---
 
-  // SEC-FIND-015: SameSite=Lax para cookie de sesión (permite navegación
-  // normal pero bloquea en contextos cross-site).
-  const cookie_attrs = `HttpOnly; Path=/; SameSite=Lax; ${config.cookieSecure ? "Secure; " : ""}`;
+  // Sesión: SameSite=Strict (máxima protección CSRF; el panel es same-origin,
+  // no necesita navegación cross-site). CSRF sigue en Strict.
+  const cookie_attrs = `HttpOnly; Path=/; SameSite=Strict; ${config.cookieSecure ? "Secure; " : ""}`;
   // Cookie CSRF de doble envío: legible por JS (no HttpOnly) pero SameSite=Strict.
   const csrfCookieAttrs = `Path=/; SameSite=Strict; ${config.cookieSecure ? "Secure; " : ""}`;
 
