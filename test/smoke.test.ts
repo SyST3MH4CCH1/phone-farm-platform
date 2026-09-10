@@ -21,7 +21,7 @@ describe("createApp — smoke de seguridad", () => {
     expect(res.body).toMatchObject({ authenticated: false });
   });
 
-  it("login con credenciales válidas → 200, cookie HttpOnly + SameSite=Strict, sin token en body", async () => {
+  it("login con credenciales válidas → 200, cookie HttpOnly + SameSite=Lax, sin token en body", async () => {
     const res = await request(app)
       .post("/api/auth/login")
       .send({ username: "admin", password: TEST_ADMIN_PW });
@@ -30,7 +30,8 @@ describe("createApp — smoke de seguridad", () => {
     expect(res.body.token).toBeUndefined();
     const setCookie = res.headers["set-cookie"]?.[0] || "";
     expect(setCookie).toContain("HttpOnly");
-    expect(setCookie).toContain("SameSite=Strict");
+    // SEC-FIND-015: SameSite=Lax para cookie de sesión
+    expect(setCookie).toMatch(/SameSite=Lax/i);
     expect(setCookie).toContain("Secure"); // cookieSecure por defecto
   });
 
