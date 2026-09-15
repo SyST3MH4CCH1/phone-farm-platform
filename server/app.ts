@@ -14,7 +14,7 @@ import helmet from "helmet";
 import type Database from "better-sqlite3";
 import type { AppConfig } from "./config";
 import { SessionStore, safeEqual, newSessionToken, SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, SessionUser } from "./sessions";
-import { verifyPassword, hashPassword } from "./passwords";
+import { verifyPassword, hashPassword, needsRehash } from "./passwords";
 import { LoginRateLimiter, CostLimiter } from "./rate-limit";
 import { safeFetchInternal, guardInternalUrl, EgressError, INTERNAL_HOSTS } from "./net";
 import { validate, loginSchema, queueCreateSchema, accountCreateSchema, proxyCreateSchema, mptSettingsSchema, adbTouchSchema, adbMirrorSchema, proxyVerifySchema } from "./schemas";
@@ -158,11 +158,13 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     return out;
   }
 
+  // SEC-FIND-015: Bearer tiene prioridad sobre Cookie (evita que un cookie
+  // robado sea usado si ya se tiene un token Bearer válido).
   function getToken(req: express.Request): string | null {
-    const cookieToken = parseCookies(req)[SESSION_COOKIE];
-    if (cookieToken) return cookieToken;
     const auth = req.headers.authorization;
     if (auth && auth.startsWith("Bearer ")) return auth.slice(7).trim();
+    const cookieToken = parseCookies(req)[SESSION_COOKIE];
+    if (cookieToken) return cookieToken;
     return null;
   }
 
@@ -258,7 +260,9 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
 
   // --- AUTH (local al panel) ---
 
-  const cookieAttrs = `HttpOnly; Path=/; SameSite=Strict; ${config.cookieSecure ? "Secure; " : ""}`;
+  // Sesión: SameSite=Strict (máxima protección CSRF; el panel es same-origin,
+  // no necesita navegación cross-site). CSRF sigue en Strict.
+  const cookie_attrs = `HttpOnly; Path=/; SameSite=Strict; ${config.cookieSecure ? "Secure; " : ""}`;
   // Cookie CSRF de doble envío: legible por JS (no HttpOnly) pero SameSite=Strict.
   const csrfCookieAttrs = `Path=/; SameSite=Strict; ${config.cookieSecure ? "Secure; " : ""}`;
 
@@ -324,6 +328,12 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     }
     loginLimiter.recordSuccess(u, ip);
 
+    // SEC-002: rehash-on-login — upgrade scrypt N if stored hash is outdated
+    if (needsRehash(userRow.password_hash)) {
+      deps.db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(hashPassword(p), userRow.id);
+    }
+
     const token = newSessionToken();
     const user: SessionUser = {
       id: userRow.id,
@@ -335,7 +345,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     store.set(token, user); // un token por login; persistido en SQLite
     notifyAudit(user.username, user.role, "auth.login", undefined, { ip }, requestId);
     res.setHeader("Set-Cookie", [
-      `${SESSION_COOKIE}=${token}; ${cookieAttrs}Max-Age=${SESSION_MAX_AGE_SECONDS}`,
+      `${SESSION_COOKIE}=${token}; ${cookie_attrs}Max-Age=${SESSION_MAX_AGE_SECONDS}`,
       `${CSRF_COOKIE}=${randomBytes(18).toString("hex")}; ${csrfCookieAttrs}Max-Age=${SESSION_MAX_AGE_SECONDS}`,
     ]);
     // Nunca devolver el token en el body (va solo en cookie HttpOnly).
@@ -348,7 +358,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     store.delete(getToken(req));
     notifyAudit(user.username, user.role, "auth.logout");
     res.setHeader("Set-Cookie", [
-      `${SESSION_COOKIE}=; ${cookieAttrs}Max-Age=0`,
+      `${SESSION_COOKIE}=; ${cookie_attrs}Max-Age=0`,
       `${CSRF_COOKIE}=; ${csrfCookieAttrs}Max-Age=0`,
     ]);
     res.json({ success: true, message: "Sesión cerrada correctamente" });
@@ -1083,6 +1093,6 @@ async function defaultFlaskFetch(
   url: string,
   init: { method: string; headers: Record<string, string>; body?: string; signal: AbortSignal },
 ): Promise<{ status: number; text: () => Promise<string> }> {
-  const r = await fetch(url, { ...init, redirect: "manual" } as RequestInit);
+  const r = await fetch(url, { ...init, redirect: "manual" });
   return { status: r.status, text: () => r.text() };
 }

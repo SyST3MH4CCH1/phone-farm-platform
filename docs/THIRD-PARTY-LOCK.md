@@ -1,47 +1,84 @@
-# Lock de terceros — MoneyPrinterTurbo y taktik-bot (2026-08-13)
+# Lock de terceros — MoneyPrinterTurbo y taktik-bot
 
-Los checkouts de `platform/third_party/` se fijan a commits verificados
-(fichero máquina: `platform/third_party.lock`). Un despliegue (Docker,
-`deploy.ps1`, `setup-new-machine.ps1`) debe clonar **estos commits** y aplicar
-los parches listados. Un cambio de upstream requiere actualizar este
-documento + el lock + los parches, nunca silenciosamente.
+**Proposito:** fijar los checkouts de `platform/third_party/` a commits concretos,
+verificables en CI. Sin pin, el parche CVE-2025-7897 podria no aplicar
+o aplicar a una version incorrecta. Este documento es la fuente de verdad;
+`platform/third_party.lock` es la version machine-readable.
 
-## MoneyPrinterTurbo
+---
 
-| Campo | Valor |
-|---|---|
-| Versión declarada | 1.3.3 |
-| Commit fijado | `254cd02` |
-| Remote | https://github.com/harry0703/MoneyPrinterTurbo.git |
-| Parche local | `platform/patches/mpt-verify-token.patch` |
-| CVE | CVE-2025-7897 afecta versiones ≤1.2.6 — **no aplica a 1.3.3 declarada**; la falta de auth se cierra con el parche |
+## Componentes fijados
 
-El parche `mpt-verify-token.patch` (aplicar con `platform/scripts/apply-mpt-patch.py`):
+| Componente | Repo | Pinned SHA | Verificar |
+|---|---|---|---|
+| MoneyPrinterTurbo | https://github.com/harry0703/MoneyPrinterTurbo.git | `254cd028906ee657eab844dc94087cdbea2a7aa8` (short: `254cd02`) | `git -C platform/third_party/MoneyPrinterTurbo rev-parse HEAD` |
+| taktik-bot | https://github.com/masterFuf/taktik-bot.git | `c2b748967622c26cc478aa48ebbd2493ab2d1086` (short: `c2b7489`) | `git -C platform/third_party/taktik-bot rev-parse HEAD` |
 
-1. `app/controllers/base.py` — `verify_token` con comparación en **tiempo
-   constante** (`hmac.compare_digest`) y **fail-closed**: sin `MPT_API_KEY`
-   configurado responde 503 y no sirve nada.
-2. `app/controllers/v1/video.py` y `app/controllers/v1/llm.py` — activa
-   `new_router(dependencies=[Depends(base.verify_token)])` (estaba comentado).
-3. `app/asgi.py` — middleware que autentica `/openapi.json`, `/docs` y
-   `/redoc` con `x-api-key`. **Solo `/ping` queda público** (health check).
+**Patch CVE-2025-7897:** `platform/patches/mpt-verify-token.patch`
+- Aplica con: `python platform/scripts/apply-mpt-patch.py`
+- Verifica con: `python platform/scripts/apply-mpt-patch.py --check` → `PATCH APLICADO`
 
-Claves: `generator.py` envía `x-api-key` (env `MPT_API_KEY`); `gen_mpt_config.py`
-inyecta `api_key` en `[app]` del `mpt-config.toml`; el contenedor MPT recibe
-solo variables explícitas (nunca `env_file` con todo el `.env`).
+El parche activa `verify_token` con `hmac.compare_digest` (tiempo constante) en
+todos los routers v1 de MPT, fail-closed sin `MPT_API_KEY`, y protege
+`/openapi.json`/`/docs`/`/redoc` con `x-api-key`. Solo `/ping` queda publico.
 
-## taktik-bot
+**Omision intencional en pip-audit:** taktik-bot no es paquete PyPI; su unico
+ancla de supply-chain es el commit SHA en `platform/requirements.txt`.
 
-| Campo | Valor |
-|---|---|
-| Commit fijado | `c2b7489` |
-| Remote | https://github.com/masterFuf/taktik-bot.git |
-| Parche local | ninguno |
+---
 
-Fijado en `platform/requirements.txt` (`taktik-bot @ git+...@c2b7489...`).
+## Verificacion en CI
 
-## Verificación
+```bash
+# Verificar lock file existe y tiene formato correcto
+python -c "
+import re, sys
+lock = open('platform/third_party.lock').read()
+expected = {'MoneyPrinterTurbo': '254cd02', 'taktik-bot': 'c2b7489'}
+for comp, sha in expected.items():
+    if not re.search(rf'^{comp}.*commit\s*=\s*[\"\']?{sha}', lock, re.M):
+        print(f'LOCK MISMATCH: {comp} sha {sha} not found in platform/third_party.lock')
+        sys.exit(1)
+print('LOCK OK')
+"
+```
 
-- `python platform/scripts/apply-mpt-patch.py --check` → "PATCH APLICADO".
-- Tras un reclonado: `python platform/scripts/apply-mpt-patch.py`.
-- El CI valida el lock frente a los checkouts (paso 14).
+```bash
+# Verificar SHA en disco (si third_party ya esta clonado)
+for dir in platform/third_party/MoneyPrinterTurbo platform/third_party/taktik-bot; do
+  if [ -d "$dir" ]; then
+    sha=$(git -C "$dir" rev-parse HEAD)
+    echo "$dir: $sha"
+  fi
+done
+```
+
+---
+
+## Mismatch runbook
+
+Si la verificacion falla:
+
+1. `git fetch origin` en el checkout afectado
+2. `git checkout <sha-pinned>` para volver al commit фиjado
+3. Si el checkout no existe: `git clone <repo> platform/third_party/<name> --branch <tag> --depth 1` (usar tag si existe, si no el commit фиjado)
+4. `python platform/scripts/apply-mpt-patch.py` para reaplicar parche MPT
+5. Verificar con `python platform/scripts/apply-mpt-patch.py --check`
+
+---
+
+## Formato platform/third_party.lock
+
+```ini
+[MoneyPrinterTurbo]
+version = "1.3.3"
+commit = "254cd02"
+remote = "https://github.com/harry0703/MoneyPrinterTurbo.git"
+patch = "patches/mpt-verify-token.patch"
+
+[taktik-bot]
+version = "1.0.0"
+commit = "c2b7489"
+remote = "https://github.com/masterFuf/taktik-bot.git"
+patch = ""
+```

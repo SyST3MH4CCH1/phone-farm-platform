@@ -29,19 +29,20 @@
 
 - Node.js ≥ 20 (o Bun ≥ 1.1)
 
-## Puesta en marcha
+## Puesta en marcha (un comando)
 
-```bash
-bun install          # o npm install
-cp .env.example .env # rellena ADMIN_PASSWORD, PHONE_FARM_INTERNAL_TOKEN, claves
-bun run dev          # http://localhost:3000
+```powershell
+git clone git@github.com:SyST3MH4CCH1/phone-farm-platform.git
+cd phone-farm-platform
+powershell -ExecutionPolicy Bypass -File platform\scripts\install-all.ps1
+# Panel: http://127.0.0.1:3000 (las credenciales generadas se muestran una vez al final)
 ```
 
-> También necesitas el backend Python: `cd platform && python -m phonefarm.platform` (ver [platform/README.md](platform/README.md)).
+El instalador verifica prerequisitos (winget), crea los `.env`, genera token interno + passwords fuertes, arranca Flask :5000 + MCP :5001 + MPT :8080 y verifica endpoints. Solo queda poner tus API keys en `platform/.env` (`MINIMAX_API_KEY`, `PEXELS_API_KEY`) y reiniciar con `platform\scripts\run-native.ps1`.
 
-**Credenciales de demo (solo dev):** `admin/admin123` (admin) · `operator/operator123` (operator).
+> Desarrollo del frontend: `bun install` + `bun run dev` (requiere el backend Python aparte, ver [platform/README.md](platform/README.md)).
 
-> En producción (`NODE_ENV=production`) es **obligatorio** definir `ADMIN_PASSWORD` y `OPERATOR_PASSWORD`; el servidor se niega a arrancar sin ellas.
+> No hay credenciales demo: el servidor se niega a arrancar con passwords débiles o conocidos (`server/config.ts`). En producción (`NODE_ENV=production`) `ADMIN_PASSWORD` y `OPERATOR_PASSWORD` son obligatorios.
 
 ## API REST
 

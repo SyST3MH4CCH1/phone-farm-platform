@@ -127,10 +127,11 @@ def _build_client(account_id: str, account: dict[str, Any]) -> Client:
 
 
 def login_once(account_id: str, username: str, password: str) -> str:
-    """Login inicial EXPLÍCITO para crear sessions/<account_id>.json.
+    """Login inicial EXPLÍCITO para crear la sesión cifrada en social_sessions.
 
     Este es el ÚNICO login permitido: crea la sesión persistente que luego
-    se reutiliza. Con cooldown de 5 minutos entre intentos por cuenta.
+    se reutiliza (cifrada AES-256-GCM en la tabla social_sessions, nunca en
+    un fichero). Con cooldown de 5 minutos entre intentos por cuenta.
     """
     now = time.monotonic()
     if now - _last_login_attempt.get(account_id, 0) < LOGIN_RETRY_SECONDS:

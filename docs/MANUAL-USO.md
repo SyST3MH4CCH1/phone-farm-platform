@@ -130,20 +130,29 @@ DATAIMPULSE_PASS=
 El pipeline genera el vídeo siempre; la **publicación** requiere una sesión de Instagram:
 
 ```bash
-# 1. Crear la sesión UNA vez (crea sessions/acc_01.json)
+# 1. Login IG por cuenta (una sola vez — la sesión persiste cifrada en SQLite)
+#    El username se toma de la cuenta ya registrada; solo el password va en el body.
 curl -X POST http://127.0.0.1:5000/api/accounts/acc_01/instagram/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"TU_USUARIO_REAL","password":"TU_PASS_REAL"}'
+  -d '{"password":"TU_PASS_REAL"}'
+#    → {"ok":true,"account_id":"acc_01"}     (sesión cifrada AES-256-GCM en social_sessions)
+#    → {"ok":false,"error":"..."}  si credenciales inválidas o Challenge
 
-# 2. Lanzar un job (o usar el panel)
+# 2. Verificar que la sesión existe
+curl http://127.0.0.1:5000/api/accounts/acc_01
+#    → busca en la tabla social_sessions (SQLite), NO en un fichero sessions/*.json
+
+# 3. Lanzar un job (o usar el panel)
 curl -X POST http://127.0.0.1:5000/api/queue \
   -H "Content-Type: application/json" \
   -d '{"keyword":"organizar cocina pequena","target_account":"acc_01","auto_approve":true}'
 
-# 3. El pipeline: guión MiniMax → MPT → ffprobe valida → instagrapi sube → media_id
+# 4. El pipeline: guión MiniMax → MPT → ffprobe valida → instagrapi sube → published
 ```
 
-**Fallback ADB**: si Instagram lanza ChallengeRequired/PleaseWaitFewMinutes, el vídeo se copia a `/sdcard/Download/` del teléfono y se registra en `logs/fallback_queue.json` para subida manual.
+**Si se omite el login**: `publish_video` llama `_has_session()` → no encuentra fila en `social_sessions` → registra el vídeo en `logs/fallback_queue.json` con estado `awaiting_manual_upload` y hace `adb push` al teléfono para subida manual desde el Dashboard.
+
+**Fallback ADB**: si Instagram lanza ChallengeRequired/PleaseWaitFewMinutes (desafío real de IG, no credenciales), el comportamiento es idéntico: vídeo al teléfono + `awaiting_manual_upload`.
 
 ---
 

@@ -9,11 +9,12 @@
   Uso:  powershell -ExecutionPolicy Bypass -File platform\scripts\run-native.ps1
         powershell -ExecutionPolicy Bypass -File platform\scripts\run-native.ps1 -Stop
 
-  Requisitos previos (una vez): python instalado (C:\Python312), adb en PATH, ffmpeg Gyan.
+  Requisitos previos (una vez): python en PATH o -Python <ruta> (auto-detecta
+  py -3.12, installs de winget y C:\Python312 como último recurso), adb, ffmpeg.
   Nota: guardar este archivo en UTF-8 SIN BOM y ASCII (los em-dash rompen PS 5.1).
 #>
 
-param([switch]$Stop, [string]$Python = "")
+param([switch]$Stop, [string]$Python = "", [switch]$ReinstallDeps)
 
 $ErrorActionPreference = "Stop"
 $Root     = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -53,13 +54,28 @@ $PyBootstrap = $Python
 
 function Start-Venv {
     param($Path, $ReqFile)
+    $created = $false
     if (-not (Test-Path (Join-Path $Path "Scripts\python.exe"))) {
         Write-Host "  Creando venv $Path ..." -ForegroundColor Yellow
         & $PyBootstrap -m venv $Path
+        $created = $true
     }
     $py = Join-Path $Path "Scripts\python.exe"
-    if ($ReqFile -and (Test-Path $ReqFile)) {
+    # ponytail: pip install solo al crear el venv (o con -ReinstallDeps).
+    # Antes reinstalaba en cada arranque y el reinicio era lento sin motivo.
+    if ($ReqFile -and (Test-Path $ReqFile) -and ($created -or $ReinstallDeps)) {
         & $py -m pip install --quiet -r $ReqFile
+        # El worker real corre con el intérprete base (el exe del venv actúa
+        # como supervisor y re-lanza con C:\Python312). Sin deps en el base,
+        # una máquina fresca levanta puertos muertos. Marcador por hash.
+        $hash = (Get-FileHash $ReqFile -Algorithm SHA256).Hash.Substring(0, 12)
+        $marker = Join-Path $Path ".sysdeps-$hash"
+        if (-not (Test-Path $marker)) {
+            Write-Host "  Instalando deps también en el intérprete base (una vez)..." -ForegroundColor Yellow
+            & $PyBootstrap -m pip install --quiet -r $ReqFile
+            Get-ChildItem (Join-Path $Path ".sysdeps-*") -EA SilentlyContinue | Remove-Item -Force
+            New-Item $marker -ItemType File -Force | Out-Null
+        }
     }
     return $py
 }
@@ -98,6 +114,10 @@ if ($stale) {
 }
 
 # 1) Generar config de MPT ANTES de arrancarlo (keys del .env + ffmpeg real).
+# ponytail: el parche de endurecimiento MPT solo lo aplicaba deploy.ps1
+# (Docker); en nativo el checkout quedaba sin parchear. Idempotente.
+Write-Host "  Aplicando parche MPT (idempotente)..." -ForegroundColor Yellow
+& $PyBootstrap (Join-Path $Root "scripts\apply-mpt-patch.py") | Out-Null
 Write-Host "  Generando config segura de MPT..." -ForegroundColor Yellow
 $env:IN_DOCKER = "0"
 & $PyBootstrap (Join-Path $Root "scripts\gen_mpt_config.py") | Out-Null
@@ -110,6 +130,11 @@ if (Test-Path $genCfg) {
 }
 
 # 2) Plataforma (Flask :5000 + MCP :5001 + taktik-bot)
+# ponytail: MCP_ENABLED=1 siempre — platform.py solo abre :5001 con este flag
+# y el banner de este script lo promete; antes nunca se fijaba y el puerto
+# quedaba muerto.
+$env:MCP_ENABLED = "1"
+$env:MCP_PORT = "5001"
 $py = Start-Venv $Venv (Join-Path $Root "requirements.txt")
 Write-Host "  Arrancando plataforma (Flask :5000 + MCP :5001)..." -ForegroundColor Yellow
 Push-Location $Root

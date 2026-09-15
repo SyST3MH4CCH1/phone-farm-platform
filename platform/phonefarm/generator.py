@@ -149,7 +149,8 @@ def _poll_task(task_id: str) -> tuple[int, list[str], str | None]:
         if videos:
             return 100, videos, None
 
-        # Workaround: ¿el vídeo final ya existe aunque el estado no flipeó?
+        # MoviePy deadlock (BGM mix): MPT API reporta "success" pero el proceso hijo
+        # se cuelga; final-1.mp4 existe y es estable en disco aunque el estado no avance.
         # Solo en la fase final (progress>=75); se exige tamaño ESTABLE entre
         # TRES muestras (20 s) porque ffmpeg puede pausar la escritura a mitad
         # del encode: 2 muestras no bastan (descargaba el MP4 a medio escribir).
