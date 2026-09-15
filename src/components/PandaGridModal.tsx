@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { motion } from 'motion/react';
+import { useFocusTrap } from '../a11y';
 import { apiFetch } from '../api';
 
 export interface PandaDevice {
@@ -31,6 +33,9 @@ export const PandaGridModal: React.FC<PandaGridModalProps> = ({ onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mirrorMsg, setMirrorMsg] = useState<Record<string, string>>({});
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, onClose);
 
   useEffect(() => {
     const load = async () => {
@@ -78,7 +83,17 @@ export const PandaGridModal: React.FC<PandaGridModalProps> = ({ onClose }) => {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-shell w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.18 }}
+        role="dialog"
+        aria-modal="true"
+        className="modal-shell w-full max-w-3xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-widest font-mono">Dispositivos ADB</h3>
@@ -167,7 +182,7 @@ export const PandaGridModal: React.FC<PandaGridModalProps> = ({ onClose }) => {
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

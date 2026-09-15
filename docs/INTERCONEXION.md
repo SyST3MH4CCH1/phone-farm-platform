@@ -132,7 +132,7 @@ Endpoints **solo admin** (`requireRole("admin")`): `POST/DELETE /api/accounts`, 
 
 | Archivo | Dueño de escritura | Lectores | Notas |
 |---|---|---|---|
-| `platform/accounts.json` | `platform.py` | todos los módulos | contraseñas IG en claro (pendiente cifrado) |
+| `platform/accounts.json` | `platform.py` | todos los módulos | cifrado at-rest AES-256-GCM (enc_password, ver docs/AUDIT.md Ronda 2 paso 4) |
 | `platform/proxies.json` | `platform.py` | `publisher`, `engagement` | nunca expone `pass` por API |
 | `platform/queue.json` | `platform.py` | Express (ZIP), MCP | pipeline 3-etapas |
 | `platform/content_profiles.json` | `platform.py` | `content.py` | nichos + voces |

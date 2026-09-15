@@ -1,141 +1,402 @@
 @import "tailwindcss";
 
 /* ============================================================
-   TH3F4Rm3R Design Tokens (Tailwind v4 @theme)
-   Panel de control REAL — oscuro neutro, sin marca, sin iconos.
+   DESIGN-SYSTEM v2 — TERMINAL INDUSTRIAL
+   Phone Farm Platform · Matrix Green + Dark-Only Surface Ladder
+   Inspirado en: Linear, REKKI, Mission Control, Cordum, Hermes HUD
+   ============================================================ */
+
+/* ============================================================
+   1. TAILWIND v4 @theme — Design Tokens
    ============================================================ */
 @theme {
-  --color-surface: #17181A;        /* fondo raíz */
-  --color-surface-2: #1E2023;      /* paneles / modales / tarjetas */
-  --color-surface-3: #232528;      /* headers de panel / sidebar */
-  --color-surface-4: #1A1C1E;      /* inputs / filas hover */
-  --color-line: #2A2C30;           /* bordes universales */
-  --color-accent: #8A8F98;         /* acento gris claro (botones) */
-  --color-accent-2: #A1A6AE;       /* acento secundario */
-  --color-on-accent: #17181A;      /* texto sobre gris claro */
-  --color-muted: #9CA1A8;          /* texto secundario */
-  --color-muted-2: #6B7076;        /* texto terciario */
-  --color-danger: #E05B5B;         /* errores */
-  --color-ok: #6FBF73;             /* ok / online */
-  --color-warn: #D4A84B;           /* warnings */
+  /* --- Surface Ladder (4 pasos, Linear-inspired, sin sombras) --- */
+  --color-canvas:  #0A0A0B;   /* fondo raíz — casi negro */
+  --color-surface: #111113;   /* paneles principales */
+  --color-surface-2: #161618; /* modales, cards elevated */
+  --color-surface-3: #1C1C1F; /* hover, inputs */
+  --color-surface-4: #232328; /* botones primary */
+
+  /* --- Línea/bordes universal --- */
+  --color-line: #2A2C30;
+
+  /* --- Marca única: Matrix Green (#00FF88) — verde terminal --- */
+  --color-brand: #00FF88;
+  --color-brand-dim: #00CC6E;    /* hover/active */
+  --color-brand-glow: rgba(0, 255, 136, 0.15);
+
+  /* --- Estados semánticos hermes-hud-inspired --- */
+  --color-ok: #00FF88;           /* mismo que brand — coherente */
+  --color-warn: #FFB800;        /* amber — NO amarillo chillón */
+  --color-danger: #FF3B5C;      /* rosa-rojo — NO rojo plano */
+  --color-info: #8B8B95;        /* gris para info pasiva */
+
+  /* --- Tipografía --- */
+  --color-text: #E5E5E5;
+  --color-muted: #9CA1A8;
+  --color-muted-2: #6B7076;
+
+  /* --- Interactivity --- */
+  --color-input-bg: #1A1C1E;
+  --color-input-border: #2A2C30;
 }
 
 /* ============================================================
-   THEME: CSS Custom Properties (Dark / Light)
+   2. DARK MODE ONLY — .theme-dark
+   Eliminamos .theme-light del código nuevo.
+   Los componentes que aún lo referencien reciben .theme-dark por defecto.
    ============================================================ */
 .theme-dark {
-  --color-header-bg: #17181A;
+  --color-header-bg: #111113;
   --color-header-border: #2A2C30;
   --color-header-text: #E5E5E5;
   --color-header-muted: #9CA1A8;
-  --color-header-muted2: #6B7076;
-  --color-header-hover: #232528;
-  --color-sidebar-bg: #17181A;
+  --color-header-muted-2: #6B7076;
+  --color-header-hover: #1C1C1F;
+  --color-sidebar-bg: #111113;
   --color-sidebar-border: #2A2C30;
   --color-sidebar-text: #9CA1A8;
-  --color-sidebar-hover: #232528;
-  --color-stack-bg: #17181A;
+  --color-sidebar-hover: #1C1C1F;
+  --color-stack-bg: #111113;
   --color-stack-border: #2A2C30;
   --color-input-bg: #1A1C1E;
   --color-input-border: #2A2C30;
-  --color-panel-bg: #1E2023;
+  --color-panel-bg: #161618;
   --color-panel-border: #2A2C30;
-  --color-panel-header: #232528;
+  --color-panel-header: #1C1C1F;
 }
 
-.theme-light {
-  --color-header-bg: #FFFFFF;
-  --color-header-border: #E2E8F0;
-  --color-header-text: #1E293B;
-  --color-header-muted: #64748B;
-  --color-header-muted2: #94A3B8;
-  --color-header-hover: #F1F5F9;
-  --color-sidebar-bg: #F8FAFC;
-  --color-sidebar-border: #E2E8F0;
-  --color-sidebar-text: #64748B;
-  --color-sidebar-hover: #F1F5F9;
-  --color-stack-bg: #F8FAFC;
-  --color-stack-border: #E2E8F0;
-  --color-input-bg: #FFFFFF;
-  --color-input-border: #CBD5E1;
-  --color-panel-bg: #FFFFFF;
-  --color-panel-border: #E2E8F0;
-  --color-panel-header: #F8FAFC;
+/* Default (sin tema explícito) = dark — cohorte con .theme-dark */
+body, #root {
+  background-color: #0A0A0B;
+  color: #E5E5E5;
 }
 
+/* ============================================================
+   3. @layer utilities — Componentes base redifinidos
+   Mantienen API pública existente; internamente usan los nuevos tokens.
+   ============================================================ */
 @layer utilities {
+  /* --- Tipografía mono para datos/métricas --- */
   .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
   }
 
-  /* --- Botones (planos, texto) --- */
+  /* ============================================================
+     4. BOTONES — Variantes de acción
+     .btn-brand: Matrix Green, texto negro (acción primaria)
+     .btn-ghost: sin fondo, hover surface-3
+     .btn-danger: rosa-rojo
+     .btn-icon: cuadrado 32px, icono centrado
+     Preservados: .btn-primary, .btn-secondary, .btn-close
+     ============================================================ */
+  .btn-brand {
+    background-color: #00FF88;
+    color: #0A0A0B;
+    font-weight: 700;
+    border-radius: 6px;
+    transition: background-color 80ms ease;
+  }
+  .btn-brand:hover {
+    background-color: #00CC6E;
+  }
+  .btn-brand:active {
+    background-color: #00AA5A;
+  }
+
   .btn-primary {
-    @apply bg-[#8A8F98] hover:bg-[#A1A6AE] text-[#17181A] font-bold rounded-md transition-colors;
+    /* redefinido: antes usaba #8A8F98, ahora brand */
+    background-color: #00FF88;
+    color: #0A0A0B;
+    font-weight: 700;
+    border-radius: 6px;
+    transition: background-color 80ms ease;
   }
-  .btn-secondary {
-    @apply bg-[#232528] hover:bg-[#2A2C30] text-[#A1A6AE] border border-[#33363A] rounded-md font-mono transition-colors;
-  }
-  .btn-ghost {
-    @apply text-[#9CA1A8] hover:text-[#E5E5E5] hover:bg-[#232528] rounded-md transition-colors;
-  }
-  .btn-close {
-    @apply p-1 text-[#6B7076] hover:text-[#E5E5E5] hover:bg-[#232528] rounded-md transition-colors;
+  .btn-primary:hover {
+    background-color: #00CC6E;
   }
 
-  /* --- Superficies (planas) --- */
+  .btn-secondary {
+    background-color: #232328;
+    color: #9CA1A8;
+    border: 1px solid #2A2C30;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    transition: background-color 80ms ease;
+  }
+  .btn-secondary:hover {
+    background-color: #2A2C30;
+    color: #E5E5E5;
+  }
+
+  .btn-ghost {
+    color: #9CA1A8;
+    border-radius: 6px;
+    transition: color 80ms ease, background-color 80ms ease;
+  }
+  .btn-ghost:hover {
+    color: #E5E5E5;
+    background-color: #1C1C1F;
+  }
+
+  .btn-danger {
+    background-color: #FF3B5C;
+    color: #0A0A0B;
+    font-weight: 700;
+    border-radius: 6px;
+    transition: background-color 80ms ease;
+  }
+  .btn-danger:hover {
+    background-color: #E03050;
+  }
+
+  .btn-close {
+    color: #6B7076;
+    border-radius: 6px;
+    padding: 4px;
+    transition: color 80ms ease, background-color 80ms ease;
+  }
+  .btn-close:hover {
+    color: #E5E5E5;
+    background-color: #1C1C1F;
+  }
+
+  /* Botón icono: cuadrado 32px, icono centrado */
+  .btn-icon {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent;
+    color: #9CA1A8;
+    border-radius: 6px;
+    transition: color 80ms ease, background-color 80ms ease;
+  }
+  .btn-icon:hover {
+    color: #E5E5E5;
+    background-color: #1C1C1F;
+  }
+
+  /* ============================================================
+     5. SUPERFICIES — Cards y paneles
+     Elevación por luminancia + borde inset (REKKI style), NO sombras.
+     Preservados: .card, .card-hover
+     ============================================================ */
   .card {
-    @apply bg-[#1E2023] border border-[#2A2C30] rounded-lg;
+    background-color: #161618;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
   }
   .card-hover {
-    @apply hover:border-[#3A3D42] transition-colors;
+    transition: border-color 80ms ease;
+  }
+  .card-hover:hover {
+    border-color: rgba(255, 255, 255, 0.12);
   }
 
-  /* --- Inputs --- */
+  /* ============================================================
+     6. INPUTS — Campos de formulario
+     Preservado: .input
+     ============================================================ */
   .input {
-    @apply bg-[#1A1C1E] border border-[#2A2C30] rounded-md text-[#E5E5E5] placeholder-[#6B7076] focus:outline-none focus:border-[#8A8F98] transition-colors;
+    background-color: #1A1C1E;
+    border: 1px solid #2A2C30;
+    border-radius: 6px;
+    color: #E5E5E5;
+    transition: border-color 80ms ease;
+  }
+  .input::placeholder {
+    color: #6B7076;
+  }
+  .input:focus {
+    outline: none;
+    border-color: #00FF88;
   }
 
-  /* --- Modal shell unificado --- */
+  /* ============================================================
+     7. MODAL — Shell unificado
+     Elevación por borde + luminancia, NO shadow.
+     Preservados: .modal-overlay, .modal-shell, .modal-header
+     ============================================================ */
   .modal-overlay {
-    @apply fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 font-mono;
+    background-color: rgba(0, 0, 0, 0.75);
   }
   .modal-shell {
-    @apply bg-[#1E2023] border border-[#2A2C30] rounded-lg overflow-hidden flex flex-col max-h-[90vh];
+    background-color: #161618;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
   }
   .modal-header {
-    @apply bg-[#232528] px-4 py-3 border-b border-[#2A2C30];
+    background-color: #1C1C1F;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
-  /* --- Estados de texto (sin badges de color) --- */
-  .state-ok { @apply text-[#6FBF73]; }
-  .state-warn { @apply text-[#D4A84B]; }
-  .state-err { @apply text-[#E05B5B]; }
+  /* ============================================================
+     8. ESTADOS DE TEXTO — Sin badges de color
+     Preservados: .state-ok, .state-warn, .state-err
+     ============================================================ */
+  .state-ok   { color: #00FF88; }
+  .state-warn { color: #FFB800; }
+  .state-err  { color: #FF3B5C; }
+
+  /* ============================================================
+     9. STATUS PILLS — Pills con pulso semántico
+     Animaciones controladas para no romper prefers-reduced-motion
+     ============================================================ */
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+  }
+
+  /* Dot decorativo + animación de pulso */
+  .status-pill .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    flex-shrink: 0;
+  }
+
+  .status-pill.ok {
+    color: #00FF88;
+    background-color: rgba(0, 255, 136, 0.1);
+    border: 1px solid rgba(0, 255, 136, 0.2);
+  }
+  .status-pill.ok .dot {
+    background-color: #00FF88;
+    animation: pulse-ok 2s ease-in-out infinite;
+  }
+
+  .status-pill.warn {
+    color: #FFB800;
+    background-color: rgba(255, 184, 0, 0.1);
+    border: 1px solid rgba(255, 184, 0, 0.2);
+  }
+  .status-pill.warn .dot {
+    background-color: #FFB800;
+    animation: pulse-warn 1.5s ease-in-out infinite;
+  }
+
+  .status-pill.danger {
+    color: #FF3B5C;
+    background-color: rgba(255, 59, 92, 0.1);
+    border: 1px solid rgba(255, 59, 92, 0.2);
+  }
+  .status-pill.danger .dot {
+    background-color: #FF3B5C;
+    animation: pulse-danger 1s ease-in-out infinite;
+  }
+
+  .status-pill.info {
+    color: #8B8B95;
+    background-color: rgba(139, 139, 149, 0.1);
+    border: 1px solid rgba(139, 139, 149, 0.2);
+  }
+  .status-pill.info .dot {
+    background-color: #8B8B95;
+  }
+
+  /* Keyframes para pulso semántico */
+  @keyframes pulse-ok {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.85); }
+  }
+  @keyframes pulse-warn {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.5; transform: scale(0.85); }
+  }
+  @keyframes pulse-danger {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.3; transform: scale(0.8); }
+  }
+
+  /* ============================================================
+     10. SPARKLINES — SVG inline para tablas/métricas
+     Utility .sparkline para embeber SVG miniatura.
+     ============================================================ */
+  .sparkline {
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  /* ============================================================
+     11. PROGRESS BARS — Hermes HUD style con urgencia codificada
+     Green → Yellow → Red según nivel de urgencia.
+     ============================================================ */
+  .progress-bar {
+    height: 4px;
+    border-radius: 2px;
+    background-color: #2A2C30;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 300ms ease, background-color 200ms ease;
+  }
+  .progress-bar-fill.ok      { background-color: #00FF88; }
+  .progress-bar-fill.warn     { background-color: #FFB800; }
+  .progress-bar-fill.danger   { background-color: #FF3B5C; }
+  .progress-bar-fill.info     { background-color: #8B8B95; }
 }
 
-/* Custom Uniform TH3F4Rm3R Scrollbars */
+/* ============================================================
+   12. FOCUS VISIBLE — Accesibilidad con marca Matrix Green
+   ============================================================ */
+:focus-visible {
+  outline: 2px solid #00FF88;
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   13. SCROLLBARS — Custom thin scrollbars (ajustados a nueva paleta)
+   ============================================================ */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #17181A;
+  background: #0A0A0B;
 }
 
 ::-webkit-scrollbar-thumb {
   background: #33363A;
   border-radius: 9999px;
-  border: 1px solid #232528;
+  border: 1px solid #232328;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #8A8F98;
+  background: #00FF88;
 }
 
 /* ============================================================
-   react-big-calendar — look GOOGLE CALENDAR (dark mode)
-   Celdas separadas, números de día, eventos como píldoras,
-   vista semana/día con columnas de horas.
+   14. MICRO-INTERACCIONES — Motion identidad, no decoración
+   NO bloqueamos todo el motion. Permitimos micro-interacciones de 80ms.
+   prefers-reduced-motion solo desactiva animaciones largas (status pulses).
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes pulse-ok,
+         @keyframes pulse-warn,
+         @keyframes pulse-danger {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   15. react-big-calendar — Google Calendar dark (INTACTO)
+   NO MODIFICAR — Preserve exact original styling.
    ============================================================ */
 .rbc-dark {
   font-family: Roboto, 'Segoe UI', sans-serif;
@@ -160,10 +421,10 @@
   flex: 1;
 }
 .rbc-dark .rbc-toolbar .rbc-btn-group:first-of-type {
-  order: -1; /* Hoy/←/→ primero */
+  order: -1;
 }
 .rbc-dark .rbc-toolbar .rbc-btn-group:last-of-type {
-  order: 1; /* vistas al final */
+  order: 1;
 }
 .rbc-dark .rbc-toolbar button {
   background: #3c4043;
@@ -338,3 +599,45 @@
   padding: 24px;
   text-align: center;
 }
+
+/* ============================================================
+   LEGACY-TOKENS — Tokens viejos comentados
+   Usados por componentes que aún no se han migrado a FASE 2.
+   NO eliminar hasta que todos los componentes usen los nuevos tokens.
+   ============================================================
+   @theme old {
+     --color-surface:  #17181A;
+     --color-surface-2: #1E2023;
+     --color-surface-3: #232528;
+     --color-surface-4: #1A1C1E;
+     --color-line:      #2A2C30;
+     --color-accent:    #8A8F98;
+     --color-accent-2:  #A1A6AE;
+     --color-on-accent: #17181A;
+     --color-muted:     #9CA1A8;
+     --color-muted-2:   #6B7076;
+     --color-danger:    #E05B5B;
+     --color-ok:        #6FBF73;
+     --color-warn:      #D4A84B;
+   }
+
+   .theme-light old {
+     --color-header-bg:    #FFFFFF;
+     --color-header-border:#E2E8F0;
+     --color-header-text:  #1E293B;
+     --color-header-muted: #64748B;
+     --color-header-muted2:#94A3B8;
+     --color-header-hover: #F1F5F9;
+     --color-sidebar-bg:   #F8FAFC;
+     --color-sidebar-border:#E2E8F0;
+     --color-sidebar-text:  #64748B;
+     --color-sidebar-hover: #F1F5F9;
+     --color-stack-bg:     #F8FAFC;
+     --color-stack-border:  #E2E8F0;
+     --color-input-bg:      #FFFFFF;
+     --color-input-border:  #CBD5E1;
+     --color-panel-bg:      #FFFFFF;
+     --color-panel-border:  #E2E8F0;
+     --color-panel-header:  #F8FAFC;
+   }
+   ============================================================ */

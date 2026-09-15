@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { QueueJob, Account } from '../types';
+import { MoreHorizontal } from 'lucide-react';
 
 interface QueuePanelProps {
   queue: QueueJob[];
@@ -30,6 +31,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
 }) => {
   const [keywordInput, setKeywordInput] = useState('');
   const [targetAccount, setTargetAccount] = useState(accounts[0]?.id || 'acc_01');
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,148 +40,199 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
     setKeywordInput('');
   };
 
-  const getStatusText = (status: QueueJob['status']) => {
+  const getStatusPill = (status: QueueJob['status']) => {
     switch (status) {
-      case 'published': return <span className="text-[#6FBF73]">publicado</span>;
-      case 'generating': return <span className="text-[#A1A6AE]">generando IA...</span>;
-      case 'awaiting_manual_upload': return <span className="text-[#D4A84B]" title="Instagram Challenge! Copiado a /sdcard/Download vía ADB">fallback ADB push</span>;
-      case 'failed': return <span className="text-[#E05B5B]">error</span>;
-      case 'awaiting_approval': return <span className="text-[#D4A84B]">revisión</span>;
-      case 'rejected': return <span className="text-[#E05B5B]">rechazado</span>;
-      case 'awaiting_preview': return <span className="text-[#6FBF73]">vídeo listo — preview</span>;
-      case 'ready_for_publish': return <span className="text-[#8FBF6F]">listo para publicar</span>;
-      case 'publishing': return <span className="text-[#A1A6AE]">publicando...</span>;
-      case 'scripting': return <span className="text-[#A1A6AE]">guión...</span>;
-      default: return <span className="text-[#6B7076]">pendiente</span>;
+      case 'published':
+        return <span className="status-pill ok"><span className="dot" />publicado</span>;
+      case 'generating':
+        return <span className="status-pill info"><span className="dot" />generando</span>;
+      case 'awaiting_manual_upload':
+        return <span className="status-pill warn"><span className="dot" />fallback ADB</span>;
+      case 'failed':
+        return <span className="status-pill danger"><span className="dot" />error</span>;
+      case 'awaiting_approval':
+        return <span className="status-pill warn"><span className="dot" />revisión</span>;
+      case 'rejected':
+        return <span className="status-pill danger"><span className="dot" />rechazado</span>;
+      case 'awaiting_preview':
+        return <span className="status-pill ok"><span className="dot" />preview</span>;
+      case 'ready_for_publish':
+        return <span className="status-pill ok"><span className="dot" />listo</span>;
+      case 'publishing':
+        return <span className="status-pill info"><span className="dot" />publicando</span>;
+      case 'scripting':
+        return <span className="status-pill info"><span className="dot" />guión</span>;
+      default:
+        return <span className="status-pill info"><span className="dot" />pendiente</span>;
     }
   };
 
-  const btnBase = 'px-2 py-1 rounded-md text-[11px] font-bold transition-colors border border-[#2A2C30]';
-
   return (
-    <div className="bg-[#1E2023] border border-[#2A2C30] rounded-lg flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-line)' }}>
       {/* Panel Header */}
-      <div className="bg-[#232528] px-4 py-3 border-b border-[#2A2C30] flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xs font-bold text-[#E5E5E5] uppercase tracking-wider font-mono">
-          Cola de Producción <span className="text-[#6B7076]">({queue.length})</span>
+      <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2" style={{ background: 'var(--color-surface-3)', borderBottom: '1px solid var(--color-line)' }}>
+        <h2 className="text-[11px] font-bold uppercase tracking-wider font-mono" style={{ color: 'var(--color-text)' }}>
+          Cola <span style={{ color: 'var(--color-muted-2)' }}>({queue.length})</span>
         </h2>
         <button
           onClick={onProcessNextJob}
           disabled={isProcessing || queue.filter(j => j.status === 'pending').length === 0}
-          className="btn-primary text-xs px-3.5 py-1.5 disabled:opacity-40"
+          className="btn-brand text-xs px-3 py-1 disabled:opacity-40"
         >
-          {isProcessing ? 'Generando Reels...' : 'Generar Siguiente'}
+          {isProcessing ? 'Generando...' : 'Generar Siguiente'}
         </button>
       </div>
 
-      {/* Add Keyword Form */}
-      <div className="p-3 bg-[#1A1C1E] border-b border-[#2A2C30]">
-        <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-2 font-mono">
+      {/* Add Keyword Form — single line */}
+      <div className="px-4 py-2" style={{ borderBottom: '1px solid var(--color-line)', background: 'var(--color-surface-2)' }}>
+        <form onSubmit={handleSubmit} className="flex items-center gap-2 font-mono">
           <input
             type="text"
             value={keywordInput}
             onChange={(e) => setKeywordInput(e.target.value)}
-            placeholder="Keyword para el reel (ej: organizar escritorio)"
-            className="input flex-1 min-w-[220px] px-3 py-2 text-xs"
+            placeholder="keyword para el reel..."
+            className="input flex-1 min-w-[160px] px-3 py-1.5 text-[11px]"
+            aria-label="Keyword para nuevo reel"
           />
           <select
             value={targetAccount}
             onChange={(e) => setTargetAccount(e.target.value)}
-            className="input w-48 px-3 py-2 text-xs"
+            className="input w-36 px-2 py-1.5 text-[11px]"
+            aria-label="Cuenta destino"
           >
             {accounts.map((acc) => (
               <option key={acc.id} value={acc.id}>@{acc.username}</option>
             ))}
           </select>
-          <button type="submit" className="btn-secondary px-3 py-2 text-xs">Encolar</button>
+          <button type="submit" className="btn-secondary text-[11px] px-3 py-1.5">Encolar</button>
         </form>
       </div>
 
       {/* Queue Table */}
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="flex-1 overflow-y-auto">
         {queue.length === 0 && (
-          <div className="border border-dashed border-[#2A2C30] rounded-lg px-4 py-10 text-center">
-            <p className="text-xs text-[#9CA1A8] font-mono mb-1">No hay trabajos en la cola</p>
-            <p className="text-[11px] text-[#6B7076] font-sans">
-              Escribe una keyword arriba y presiona «Encolar».
+          <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+            <p className="text-lg font-mono font-bold" style={{ color: 'var(--color-muted)' }}>
+              &gt; Cola vacía — Encolar primer job ↓
             </p>
           </div>
         )}
         {queue.length > 0 && (
-        <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs border-collapse font-mono">
-          <thead>
-            <tr className="border-b border-[#2A2C30] text-[#6B7076] font-bold uppercase text-[10px] tracking-wider">
-              <th className="py-2 px-3">Job</th>
-              <th className="py-2 px-3">Keyword</th>
-              <th className="py-2 px-3">Cuenta</th>
-              <th className="py-2 px-3">Estado</th>
-              <th className="py-2 px-3 text-right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#2A2C30]">
-            {queue.map((job) => {
-              const acc = accounts.find(a => a.id === job.target_account);
-              return (
-                <tr key={job.id} className="hover:bg-[#1A1C1E] transition-colors">
-                  <td className="py-2 px-3 font-bold text-[#8A8F98]">{job.id}</td>
-                  <td className="py-2 px-3 text-[#E5E5E5] cursor-pointer" onClick={() => onOpenPreview && onOpenPreview(job)}>
-                    {job.keyword}
-                  </td>
-                  <td className="py-2 px-3 text-[#9CA1A8] cursor-pointer" onClick={() => onOpenPreview && onOpenPreview(job)}>
-                    @{acc ? acc.username : job.target_account}
-                  </td>
-                  <td className="py-2 px-3">{getStatusText(job.status)}</td>
-                  <td className="py-2 px-3 text-right whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1">
-                      {job.status === 'awaiting_approval' && onApproveJob && (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); onApproveJob(job.id); }}
-                          className={`${btnBase} bg-[#232528] hover:bg-[#2A2C30] text-[#A1A6AE]`} title="Aprobar guión -> generar vídeo">
-                          Aprobar
+          <table className="w-full text-left text-[11px] border-collapse font-mono">
+            <thead className="sticky top-0 z-10" style={{ background: 'var(--color-surface-3)' }}>
+              <tr className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-muted-2)' }}>
+                <th className="px-3 py-2 font-bold">Job</th>
+                <th className="px-3 py-2 font-bold">Keyword</th>
+                <th className="px-3 py-2 font-bold">Cuenta</th>
+                <th className="px-3 py-2 font-bold">Estado</th>
+                <th className="px-3 py-2 font-bold text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {queue.map((job) => {
+                const acc = accounts.find(a => a.id === job.target_account);
+                return (
+                  <tr
+                    key={job.id}
+                    className="transition-colors"
+                    style={{ borderBottom: '1px solid var(--color-line)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-surface-2)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td className="px-3 py-2 font-bold" style={{ color: 'var(--color-muted)' }}>{job.id}</td>
+                    <td
+                      className="px-3 py-2 cursor-pointer"
+                      style={{ color: 'var(--color-text)' }}
+                      onClick={() => onOpenPreview && onOpenPreview(job)}
+                    >
+                      {job.keyword}
+                    </td>
+                    <td
+                      className="px-3 py-2 cursor-pointer"
+                      style={{ color: 'var(--color-muted)' }}
+                      onClick={() => onOpenPreview && onOpenPreview(job)}
+                    >
+                      @{acc ? acc.username : job.target_account}
+                    </td>
+                    <td className="px-3 py-2">{getStatusPill(job.status)}</td>
+                    <td className="px-3 py-2 text-right">
+                      {/* Dropdown menu ⋯ */}
+                      <div className="relative inline-block">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === job.id ? null : job.id); }}
+                          className="p-1 rounded hover:bg-[var(--color-surface-3)] transition-colors"
+                          style={{ color: 'var(--color-muted)' }}
+                          aria-label="Menú de acciones"
+                          aria-haspopup="true"
+                          aria-expanded={openMenu === job.id}
+                        >
+                          <MoreHorizontal size={16} />
                         </button>
-                      )}
-                      {job.status === 'awaiting_approval' && onRejectJob && (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); onRejectJob(job.id); }}
-                          className={`${btnBase} bg-[#232528] hover:bg-[#2A2C30] text-[#E05B5B]`} title="Rechazar guión">
-                          Rechazar
-                        </button>
-                      )}
-                      {job.status === 'awaiting_preview' && onMarkReady && (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); onMarkReady(job.id); }}
-                          className={`${btnBase} bg-[#232528] hover:bg-[#2A2C30] text-[#A1A6AE]`} title="Marcar el vídeo como listo para publicar (lo publica un admin)">
-                          Listo
-                        </button>
-                      )}
-                      {job.status === 'ready_for_publish' && onPublishJob && (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); onPublishJob(job.id, job.version || 1); }}
-                          className={`${btnBase} bg-[#232528] hover:bg-[#2A2C30] text-[#6FBF73]`} title="Publicar (admin; requiere confirmación y versión esperada)">
-                          Publicar
-                        </button>
-                      )}
-                      {job.status === 'awaiting_preview' && onRejectJob && (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); onRejectJob(job.id); }}
-                          className={`${btnBase} bg-[#232528] hover:bg-[#2A2C30] text-[#E05B5B]`} title="Rechazar vídeo">
-                          Rechazar
-                        </button>
-                      )}
-                      <button type="button" onClick={(e) => { e.stopPropagation(); if (onOpenPreview) onOpenPreview(job); }}
-                        className={`${btnBase} bg-[#33363A] hover:bg-[#3A3D42] text-[#A1A6AE]`} title="Previsualizar Reel 9:16">
-                        Ver
-                      </button>
-                      {onDeleteJob && (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); onDeleteJob(job.id); }}
-                          className={`${btnBase} bg-[#232528] hover:bg-[#2A2C30] text-[#6B7076]`} title="Eliminar de la cola">
-                          Eliminar
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        </div>
+                        {openMenu === job.id && (
+                          <div
+                            className="absolute right-0 top-full mt-1 py-1 z-20 min-w-[120px] rounded-lg"
+                            style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)' }}
+                            role="menu"
+                          >
+                            {onOpenPreview && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onOpenPreview(job); setOpenMenu(null); }}
+                                className="w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--color-surface-4)] transition-colors"
+                                style={{ color: 'var(--color-text)' }}
+                                role="menuitem"
+                              >
+                                Ver
+                              </button>
+                            )}
+                            {job.status === 'awaiting_approval' && onApproveJob && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onApproveJob(job.id); setOpenMenu(null); }}
+                                className="w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--color-surface-4)] transition-colors"
+                                style={{ color: 'var(--color-ok)' }}
+                                role="menuitem"
+                              >
+                                Aprobar
+                              </button>
+                            )}
+                            {job.status === 'awaiting_approval' && onRejectJob && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onRejectJob(job.id); setOpenMenu(null); }}
+                                className="w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--color-surface-4)] transition-colors"
+                                style={{ color: 'var(--color-danger)' }}
+                                role="menuitem"
+                              >
+                                Rechazar
+                              </button>
+                            )}
+                            {job.status === 'ready_for_publish' && onPublishJob && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onPublishJob(job.id, job.version || 1); setOpenMenu(null); }}
+                                className="w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--color-surface-4)] transition-colors"
+                                style={{ color: 'var(--color-ok)' }}
+                                role="menuitem"
+                              >
+                                Publicar
+                              </button>
+                            )}
+                            {onDeleteJob && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onDeleteJob(job.id); setOpenMenu(null); }}
+                                className="w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--color-surface-4)] transition-colors"
+                                style={{ color: 'var(--color-danger)' }}
+                                role="menuitem"
+                              >
+                                Eliminar
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
     </div>

@@ -6,7 +6,6 @@ interface TerminalLogsProps {
   onClearLogs: () => void;
   isMinimized?: boolean;
   onToggleMinimize?: () => void;
-  /** FE-04: estado REAL del stream SSE (derivado de onopen/onerror). */
   sseConnected?: boolean;
 }
 
@@ -27,45 +26,58 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
 
   const getLevelColor = (level: LogEntry['level']) => {
     switch (level) {
-      case 'ERROR': return 'text-[#E05B5B] font-bold';
-      case 'WARN': return 'text-[#A1A6AE] font-bold';
-      case 'DEBUG': return 'text-zinc-500';
-      default: return 'text-[#8A8F98] font-bold';
+      case 'ERROR': return 'var(--color-danger)';
+      case 'WARN': return 'var(--color-warn)';
+      case 'DEBUG': return 'var(--color-muted-2)';
+      default: return 'var(--color-muted)';
     }
   };
 
   return (
-    <div className={`bg-[#1E2023] border border-[#2A2C30] rounded-xl flex flex-col font-mono text-xs overflow-hidden transition-all duration-300 ${
-      isMinimized ? 'h-11' : 'h-full'
-    }`}>
+    <div
+      className="flex flex-col font-mono overflow-hidden"
+      style={{ background: 'var(--color-canvas)', border: '1px solid var(--color-line)' }}
+    >
       {/* Terminal Header */}
-      <div className="bg-[#232528] px-4 py-2.5 border-b border-[#2A2C30] flex items-center justify-between select-none">
-        <div className="flex items-center gap-2 cursor-pointer" onClick={onToggleMinimize}>
-          <span className="font-bold text-[#E5E5E5] uppercase text-xs tracking-wider">Consola de Logs en Vivo — SSE Stream</span>
-          <span className="text-[10px] text-[#A1A6AE] bg-[#1A1C1E] px-2 py-0.5 rounded-full border border-[#2A2C30]">
-            127.0.0.1:3000 / server.log
+      <div
+        className="px-4 py-2 flex items-center justify-between select-none cursor-pointer"
+        style={{ background: 'var(--color-surface-3)', borderBottom: '1px solid var(--color-line)' }}
+        onClick={onToggleMinimize}
+      >
+        <div className="flex items-center gap-3">
+          <span className="font-bold text-[11px] uppercase tracking-wider" style={{ color: 'var(--color-text)' }}>
+            Consola Logs — SSE
           </span>
-          <span className="text-[10px] text-[#6B7076] ml-2 font-sans hidden sm:inline">
+          <span className="text-[10px] font-mono" style={{ color: 'var(--color-muted-2)' }}>
+            127.0.0.1:3000/server.log
+          </span>
+          <span className="text-[10px]" style={{ color: 'var(--color-muted-2)' }}>
             ({logs.length} eventos)
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-[11px] text-[#8A8F98] font-bold">
-            <span className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-[#6FBF73] animate-pulse' : 'bg-[#E05B5B]'}`}></span>
-            {sseConnected ? 'SSE Conectado' : 'SSE Desconectado'}
+        <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+          {/* Status — text only, no animation */}
+          <span
+            className="text-[10px] font-bold"
+            style={{ color: sseConnected ? 'var(--color-ok)' : 'var(--color-muted-2)' }}
+            aria-live="polite"
+          >
+            {sseConnected ? '● CONNECTED' : '○ DISCONNECTED'}
           </span>
+
           <button
             onClick={onClearLogs}
-            className="text-[10px] text-[#6B7076] hover:text-[#E5E5E5] px-2 py-1 rounded transition-colors font-bold uppercase"
+            className="btn-ghost text-[10px] px-2 py-1 uppercase tracking-wide"
             title="Limpiar consola"
           >
             Limpiar
           </button>
+
           {onToggleMinimize && (
             <button
               onClick={onToggleMinimize}
-              className="text-[10px] text-[#9CA1A8] hover:text-[#8A8F98] px-2 py-1 rounded transition-colors font-bold uppercase"
+              className="btn-ghost text-[10px] px-2 py-1 uppercase tracking-wide"
               title={isMinimized ? 'Maximizar consola' : 'Minimizar consola'}
             >
               {isMinimized ? 'Maximizar' : 'Minimizar'}
@@ -74,16 +86,24 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
         </div>
       </div>
 
-      {/* Terminal Content Body */}
+      {/* Terminal Content */}
       {!isMinimized && (
-        <div className="p-3 flex-1 overflow-y-auto space-y-1 bg-[#1A1C1E] text-[#9CA1A8]">
-          
+        <div
+          className="p-3 flex-1 overflow-y-auto text-[11px] space-y-0.5"
+          style={{ background: 'var(--color-canvas)', color: 'var(--color-muted)' }}
+          role="log"
+          aria-live="polite"
+          aria-atomic="false"
+        >
           {logs.map((log) => (
-            <div key={log.id} className="leading-relaxed hover:bg-[#1E2023] px-1.5 py-0.5 rounded transition-colors">
-              <span className="text-[#6B7076]">[{log.timestamp}]</span>{' '}
-              <span className={getLevelColor(log.level)}>[{log.level}]</span>{' '}
-              <span className="text-[#8A8F98] font-bold">[{log.module}]:</span>{' '}
-              <span className="text-[#E5E5E5]">{log.message}</span>
+            <div
+              key={log.id}
+              className="leading-relaxed px-1.5 py-0.5 rounded transition-colors hover:bg-[var(--color-surface-2)]"
+            >
+              <span style={{ color: 'var(--color-muted-2)' }}>[{log.timestamp}]</span>{' '}
+              <span style={{ color: getLevelColor(log.level), fontWeight: 700 }}>[{log.level}]</span>{' '}
+              <span style={{ color: 'var(--color-info)', fontWeight: 700 }}>[{log.module}]:</span>{' '}
+              <span style={{ color: 'var(--color-text)' }}>{log.message}</span>
             </div>
           ))}
           <div ref={terminalEndRef} />
@@ -92,4 +112,3 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
     </div>
   );
 };
-

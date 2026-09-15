@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { motion } from 'motion/react';
+import { useFocusTrap } from '../a11y';
 import { Account, ProxyItem, QueueJob } from '../types';
 
 interface AccountDetailModalProps {
@@ -18,50 +20,64 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
   onToggleBot,
   onOpenMoneyPrinterForAccount
 }) => {
-  if (!account) return null;
-
   const [activeTab, setActiveTab] = useState<'overview' | 'posts' | 'warmup' | 'proxy'>('overview');
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, onClose);
+
+  if (!account) return null;
 
   const proxy: ProxyItem | undefined = proxies.find(p => p.id === account.proxy_id) || proxies[0];
   const accountJobs = queue.filter(j => j.target_account === account.id || j.target_account === account.username);
 
   const followers = account.followers_count || 4820;
-  const following = account.following_count || 1240;
-  const postsCount = account.posts_count || accountJobs.filter(j => j.status === 'published').length || 18;
   const engagementRate = account.engagement_rate || 4.8;
   const niche = account.niche || 'Decoración & Estilo de Vida';
 
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 font-mono">
-      <div className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header Banner */}
-        <div className="bg-[#232528] p-6 border-b border-[#2A2C30] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative overflow-hidden">
-          <div className="flex items-center gap-4 z-10">
-            <div className="w-14 h-14 rounded-2xl bg-[#8A8F98]/10 border border-[#8A8F98]/30 p-0.5">
-              <div className="w-full h-full rounded-[14px] bg-[#1A1C1E] flex items-center justify-center text-[#8A8F98] font-bold text-lg">
-                @{account.username.substring(0, 2).toUpperCase()}
-              </div>
-            </div>
+  const getWarmupProgress = () => {
+    const pct = Math.min((account.warmup_day / 30) * 100, 100);
+    let color = 'ok';
+    if (account.warmup_day > 20) color = 'danger';
+    else if (account.warmup_day > 10) color = 'warn';
+    return { pct, color };
+  };
+  const warmup = getWarmupProgress();
 
+  const tabs = [
+    { id: 'overview' as const, label: 'Resumen' },
+    { id: 'posts' as const, label: `Publicaciones (${accountJobs.length})` },
+    { id: 'warmup' as const, label: `Warmup (Día ${account.warmup_day})` },
+    { id: 'proxy' as const, label: 'Proxy & ADB' },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}>
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.18 }}
+        className="modal-shell w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
+        {/* Header Banner */}
+        <div className="modal-header p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-[#E5E5E5] tracking-wide">@{account.username}</h2>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full border uppercase font-bold ${
-                  account.status === 'active'
-                    ? 'bg-[#8A8F98]/10 text-[#8A8F98] border-[#8A8F98]/30'
-                    : 'bg-[#A1A6AE]/10 text-[#A1A6AE] border-[#A1A6AE]/30'
-                }`}>
+                <h2 className="text-lg font-bold font-mono" style={{ color: 'var(--color-text)' }}>@{account.username}</h2>
+                <span
+                  className="text-[10px] px-2 py-0.5 rounded-full uppercase font-bold"
+                  style={{
+                    color: account.status === 'active' ? 'var(--color-ok)' : 'var(--color-muted)',
+                    background: account.status === 'active' ? 'rgba(0,255,136,0.1)' : 'rgba(139,139,149,0.1)',
+                    border: `1px solid ${account.status === 'active' ? 'rgba(0,255,136,0.2)' : 'rgba(139,139,149,0.2)'}`,
+                  }}
+                >
                   {account.status}
                 </span>
-                {account.bot_active && (
-                  <span className="text-[10px] bg-[#A1A6AE]/10 text-[#A1A6AE] border border-[#A1A6AE]/30 px-2 py-0.5 rounded-full animate-pulse">
-                    Bot Taktik Activo
-                  </span>
-                )}
               </div>
-              <p className="text-xs text-[#9CA1A8] font-sans mt-0.5 flex items-center gap-2">
-                <span>Nicho: <strong className="text-[#A1A6AE]">{niche}</strong></span> •
-                <span>Plataforma: <strong className="text-[#8A8F98]">{account.platform || 'Instagram Reels & TikTok'}</strong></span>
+              <p className="text-[11px] font-sans mt-0.5" style={{ color: 'var(--color-muted)' }}>
+                Nicho: <strong style={{ color: 'var(--color-muted)' }}>{niche}</strong> · {account.platform || 'Instagram Reels & TikTok'}
               </p>
             </div>
           </div>
@@ -69,13 +85,14 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
           <div className="flex items-center gap-2 z-10">
             <button
               onClick={() => onOpenMoneyPrinterForAccount(account)}
-              className="px-3.5 py-2 bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold rounded-lg text-xs flex items-center gap-1.5 transition-all"
-            > Generar Reel
+              className="btn-brand px-3.5 py-2 text-[11px] flex items-center gap-1.5"
+            >
+              Generar Reel
             </button>
             <button
               onClick={onClose}
-              className="text-[#9CA1A8] hover:text-[#E5E5E5] p-2 rounded-lg hover:bg-white/5 transition-colors"
-              title="Cerrar"
+              aria-label="Cerrar"
+              className="btn-close"
             >
               ✕
             </button>
@@ -83,116 +100,75 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-[#2A2C30] bg-[#1A1C1E] text-xs">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`px-5 py-3 font-bold flex items-center gap-2 border-b-2 transition-colors ${
-              activeTab === 'overview'
-                ? 'border-[#8A8F98] text-[#8A8F98] bg-[#1E2023]'
-                : 'border-transparent text-[#9CA1A8] hover:text-[#E5E5E5]'
-            }`}
-          > Resumen & Métricas
-          </button>
-          <button
-            onClick={() => setActiveTab('posts')}
-            className={`px-5 py-3 font-bold flex items-center gap-2 border-b-2 transition-colors ${
-              activeTab === 'posts'
-                ? 'border-[#8A8F98] text-[#8A8F98] bg-[#1E2023]'
-                : 'border-transparent text-[#9CA1A8] hover:text-[#E5E5E5]'
-            }`}
-          > Publicaciones ({accountJobs.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('warmup')}
-            className={`px-5 py-3 font-bold flex items-center gap-2 border-b-2 transition-colors ${
-              activeTab === 'warmup'
-                ? 'border-[#8A8F98] text-[#8A8F98] bg-[#1E2023]'
-                : 'border-transparent text-[#9CA1A8] hover:text-[#E5E5E5]'
-            }`}
-          > Progreso Warmup (Día {account.warmup_day})
-          </button>
-          <button
-            onClick={() => setActiveTab('proxy')}
-            className={`px-5 py-3 font-bold flex items-center gap-2 border-b-2 transition-colors ${
-              activeTab === 'proxy'
-                ? 'border-[#8A8F98] text-[#8A8F98] bg-[#1E2023]'
-                : 'border-transparent text-[#9CA1A8] hover:text-[#E5E5E5]'
-            }`}
-          > Proxy & Hardware ADB
-          </button>
+        <div className="flex gap-1 px-4 text-[11px] font-mono" style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-line)' }}>
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className="px-4 py-2.5 rounded-t-md transition-colors"
+              style={{
+                background: activeTab === tab.id ? 'var(--color-surface-3)' : 'transparent',
+                color: activeTab === tab.id ? 'var(--color-text)' : 'var(--color-muted)',
+                borderBottom: activeTab === tab.id ? '2px solid var(--color-brand)' : '2px solid transparent',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* Tab Content */}
-        <div className="p-6 overflow-y-auto space-y-5 flex-1 text-xs">
+        <div className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
           {activeTab === 'overview' && (
-            <div className="space-y-5">
-              {/* KPI Stat Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-3.5 space-y-1">
-                  <span className="text-[10px] text-[#9CA1A8] uppercase tracking-wider block">Seguidores</span>
-                  <div className="text-lg font-bold text-[#E5E5E5] flex items-center justify-between">
-                    <span>{followers.toLocaleString()}</span>
-                    <span className="text-[10px] text-[#8A8F98] font-sans">+12.4% este mes</span>
-                  </div>
+            <div className="space-y-4">
+              {/* KPI — 4 numbers inline */}
+              <div className="flex gap-4 text-center">
+                <div className="flex-1 p-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                  <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>Seguidores</div>
+                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-text)' }}>{followers.toLocaleString()}</div>
                 </div>
-
-                <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-3.5 space-y-1">
-                  <span className="text-[10px] text-[#9CA1A8] uppercase tracking-wider block">Engagement Rate</span>
-                  <div className="text-lg font-bold text-[#A1A6AE] flex items-center justify-between">
-                    <span>{engagementRate}%</span>
-                    <span className="text-[10px] font-sans text-[#8A8F98]">Alto</span>
-                  </div>
+                <div className="flex-1 p-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                  <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>Engagement</div>
+                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-text)' }}>{engagementRate}%</div>
                 </div>
-
-                <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-3.5 space-y-1">
-                  <span className="text-[10px] text-[#9CA1A8] uppercase tracking-wider block">Likes Hoy</span>
-                  <div className="text-lg font-bold text-rose-400 flex items-center justify-between">
-                    <span>{account.likes_today || 24}</span>
-                  </div>
+                <div className="flex-1 p-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                  <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>Likes Hoy</div>
+                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-danger)' }}>{account.likes_today || 24}</div>
                 </div>
-
-                <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-3.5 space-y-1">
-                  <span className="text-[10px] text-[#9CA1A8] uppercase tracking-wider block">Follows / Comments</span>
-                  <div className="text-lg font-bold text-[#A1A6AE] flex items-center justify-between">
-                    <span>{account.follows_today || 12} / {account.comments_today || 5}</span>
-                  </div>
+                <div className="flex-1 p-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                  <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>Follows/Comms</div>
+                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-text)' }}>{account.follows_today || 12} / {account.comments_today || 5}</div>
                 </div>
               </div>
 
-              {/* Bot Controller Banner */}
-              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="space-y-1 text-center sm:text-left">
-                  <h4 className="font-bold text-[#E5E5E5] flex items-center gap-2"> State Machine Taktik Bot (Warmup Día {account.warmup_day})
+              {/* Bot Controller */}
+              <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                <div>
+                  <h4 className="font-bold font-mono" style={{ color: 'var(--color-text)' }}>
+                    Taktik Bot — Warmup Día {account.warmup_day}
                   </h4>
-                  <p className="text-[11px] text-[#9CA1A8] font-sans">
-                    Automatiza scroll humano, likes aleatorios a competidores y comentarios orgánicos según la fase del algoritmo.
+                  <p className="text-[11px] font-sans mt-0.5" style={{ color: 'var(--color-muted)' }}>
+                    Automatiza scroll humano y engagement orgánico según fase del algoritmo.
                   </p>
                 </div>
-
                 <button
                   onClick={() => onToggleBot(account.id)}
-                  className={`px-5 py-2.5 rounded-lg font-bold transition-all flex items-center gap-2 text-xs ${
-                    account.bot_active
-                      ? 'bg-[#232528] border border-[#2A2C30] text-[#E05B5B] hover:bg-[#2A2C30]'
-                      : 'bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023]'
-                  }`}
+                  className={account.bot_active ? 'btn-danger px-5 py-2 text-[11px]' : 'btn-brand px-5 py-2 text-[11px]'}
                 >
                   {account.bot_active ? 'Detener Taktik Bot' : 'Iniciar Taktik Bot'}
                 </button>
               </div>
 
               {/* Account Technical Details */}
-              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
-                <h4 className="text-xs font-bold text-[#A1A6AE] uppercase tracking-wide">
-                  Ficha Técnica & Configuración de Sesión ADB
+              <div className="p-4 space-y-2" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                <h4 className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>
+                  Ficha Técnica & Sesión ADB
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[#9CA1A8] font-mono text-[11px]">
-                  <div>• ID Cuenta Interno: <strong className="text-[#E5E5E5]">{account.id}</strong></div>
-                  <div>• Dispositivo Serial ADB: <strong className="text-[#A1A6AE]">{account.device_serial}</strong></div>
-                  <div>• Archivo Sesión instagrapi: <strong className="text-[#8A8F98]">{account.session_file}</strong></div>
-                  <div>• Proxy SOCKS5 Asignado: <strong className="text-[#A1A6AE]">{proxy ? `${proxy.host}:${proxy.port}` : '—'}</strong></div>
-                  <div>• IP Salida Dedicada: <strong className="text-[#8A8F98]">{proxy?.ip || '—'}</strong></div>
-                  <div>• Latencia de Respuesta: <strong className="text-[#E5E5E5]">{proxy?.latency_ms || '—'} ms</strong></div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono" style={{ color: 'var(--color-muted)' }}>
+                  <div>• ID: <strong style={{ color: 'var(--color-text)' }}>{account.id}</strong></div>
+                  <div>• Serial ADB: <strong style={{ color: 'var(--color-text)' }}>{account.device_serial}</strong></div>
+                  <div>• Proxy: <strong style={{ color: 'var(--color-text)' }}>{proxy ? `${proxy.host}:${proxy.port}` : '—'}</strong></div>
+                  <div>• IP Exit: <strong style={{ color: 'var(--color-text)' }}>{proxy?.ip || '—'}</strong></div>
                 </div>
               </div>
             </div>
@@ -201,48 +177,51 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
           {activeTab === 'posts' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="font-bold text-[#E5E5E5] uppercase text-xs">Historial de Publicaciones de @{account.username}</h4>
-                <span className="text-[11px] text-[#9CA1A8] font-sans">Generados con MoneyPrinterTurbo</span>
+                <h4 className="font-bold uppercase text-[11px] font-mono" style={{ color: 'var(--color-text)' }}>
+                  Historial de Publicaciones
+                </h4>
               </div>
 
               {accountJobs.length === 0 ? (
-                <div className="p-8 text-center bg-[#1A1C1E] border border-[#2A2C30] rounded-xl text-[#9CA1A8] space-y-2">
-                  <p>No hay publicaciones registradas para esta cuenta todavía.</p>
+                <div className="p-8 text-center" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px', color: 'var(--color-muted)' }}>
+                  <p>No hay publicaciones registradas para esta cuenta.</p>
                   <button
                     onClick={() => onOpenMoneyPrinterForAccount(account)}
-                    className="text-[#8A8F98] hover:underline font-bold text-xs"
+                    className="mt-2 font-bold text-[11px]"
+                    style={{ color: 'var(--color-brand)' }}
                   >
-                    + Generar primer Reel 9:16 ahora
+                    + Generar primer Reel 9:16
                   </button>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {accountJobs.map(j => (
-                    <div key={j.id} className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-3.5 flex items-center justify-between gap-3">
+                    <div
+                      key={j.id}
+                      className="p-3 flex items-center justify-between gap-3"
+                      style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}
+                    >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-[#1E2023] border border-[#2A2C30] flex items-center justify-center text-[#8A8F98] font-bold">
+                        <div className="w-8 h-8 flex items-center justify-center font-bold text-[10px]" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-line)', borderRadius: '4px', color: 'var(--color-info)' }}>
                           9:16
                         </div>
                         <div>
-                          <div className="font-bold text-[#E5E5E5] text-xs">{j.keyword}</div>
-                          <div className="text-[10px] text-[#9CA1A8] font-sans">
-                            ID: {j.id} • {new Date(j.created_at).toLocaleString()}
+                          <div className="font-bold text-[11px] font-mono" style={{ color: 'var(--color-text)' }}>{j.keyword}</div>
+                          <div className="text-[10px] font-sans" style={{ color: 'var(--color-muted-2)' }}>
+                            {new Date(j.created_at).toLocaleString()}
                           </div>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-3">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full border uppercase font-bold ${
-                          j.status === 'published' ? 'bg-[#8A8F98]/10 text-[#8A8F98] border-[#8A8F98]/30' : 'bg-[#A1A6AE]/10 text-[#A1A6AE] border-[#A1A6AE]/30'
-                        }`}>
-                          {j.status}
-                        </span>
-                        {j.media_id && (
-                          <span className="text-[10px] text-[#A1A6AE] font-mono hidden sm:inline">
-                            Media ID: {j.media_id.substring(0, 10)}...
-                          </span>
-                        )}
-                      </div>
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded-full uppercase font-bold"
+                        style={{
+                          color: j.status === 'published' ? 'var(--color-ok)' : 'var(--color-muted)',
+                          background: j.status === 'published' ? 'rgba(0,255,136,0.1)' : 'rgba(139,139,149,0.1)',
+                          border: `1px solid ${j.status === 'published' ? 'rgba(0,255,136,0.2)' : 'rgba(139,139,149,0.2)'}`,
+                        }}
+                      >
+                        {j.status}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -252,28 +231,27 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
 
           {activeTab === 'warmup' && (
             <div className="space-y-4">
-              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
-                <h4 className="font-bold text-[#E5E5E5] uppercase text-xs">Cronograma del Calentamiento de Cuenta (Warmup Protocol)</h4>
-                <p className="text-[11px] text-[#9CA1A8] font-sans">
-                  El protocolo incrementa paulatinamente la tasa de interacción para evitar flags en el algoritmo de Meta / TikTok.
+              <div className="p-4 space-y-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                <h4 className="font-bold uppercase text-[11px]" style={{ color: 'var(--color-text)' }}>
+                  Progreso Warmup — Día {account.warmup_day} de 30
+                </h4>
+                <p className="text-[11px] font-sans" style={{ color: 'var(--color-muted)' }}>
+                  El protocolo incrementa paulatinamente la tasa de interacción para evitar flags.
                 </p>
 
-                <div className="grid grid-cols-5 gap-2 pt-2">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(day => (
+                {/* Progress bar instead of grid */}
+                <div className="space-y-2">
+                  <div className="progress-bar">
                     <div
-                      key={day}
-                      className={`p-2.5 rounded-lg border text-center font-mono ${
-                        day <= account.warmup_day
-                          ? 'bg-[#8A8F98]/10 border-[#8A8F98]/40 text-[#8A8F98]'
-                          : 'bg-[#1E2023] border-[#2A2C30] text-[#6B7076]'
-                      }`}
-                    >
-                      <div className="text-[10px] uppercase font-bold">Día {day}</div>
-                      <div className="text-[9px] mt-1 font-sans">
-                        {day <= account.warmup_day ? 'Completado' : 'Pendiente'}
-                      </div>
-                    </div>
-                  ))}
+                      className={`progress-bar-fill ${warmup.color}`}
+                      style={{ width: `${warmup.pct}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono" style={{ color: 'var(--color-muted-2)' }}>
+                    <span>Inicio</span>
+                    <span>Día {account.warmup_day}</span>
+                    <span>Día 30</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -281,21 +259,23 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
 
           {activeTab === 'proxy' && (
             <div className="space-y-4">
-              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
-                <h4 className="font-bold text-[#E5E5E5] uppercase text-xs">Información del Proxy SOCKS5 Dedicado</h4>
-                <div className="grid grid-cols-2 gap-3 text-[11px] text-[#9CA1A8]">
-                  <div>• Proveedor: <strong className="text-[#E5E5E5]">{proxy?.provider || '—'}</strong></div>
-                  <div>• Protocolo: <strong className="text-[#E5E5E5]">{proxy?.type?.toUpperCase() || '—'}</strong></div>
-                  <div>• Host & Puerto: <strong className="text-[#E5E5E5]">{proxy ? `${proxy.host}:${proxy.port}` : '—'}</strong></div>
-                  <div>• IP Pública Exit: <strong className="text-[#A1A6AE]">{proxy?.ip || '—'}</strong></div>
-                  <div>• Estado Proxy: <strong className="text-[#8A8F98]">{proxy?.status?.toUpperCase() || '—'}</strong></div>
-                  <div>• Latencia de Respuesta: <strong className="text-[#E5E5E5]">{proxy?.latency_ms || '—'} ms</strong></div>
+              <div className="p-4 space-y-2" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                <h4 className="font-bold uppercase text-[11px]" style={{ color: 'var(--color-text)' }}>
+                  Proxy SOCKS5 & Hardware ADB
+                </h4>
+                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono" style={{ color: 'var(--color-muted)' }}>
+                  <div>• Proveedor: <strong style={{ color: 'var(--color-text)' }}>{proxy?.provider || '—'}</strong></div>
+                  <div>• Protocolo: <strong style={{ color: 'var(--color-text)' }}>{proxy?.type?.toUpperCase() || '—'}</strong></div>
+                  <div>• Host: <strong style={{ color: 'var(--color-text)' }}>{proxy ? `${proxy.host}:${proxy.port}` : '—'}</strong></div>
+                  <div>• IP Exit: <strong style={{ color: 'var(--color-text)' }}>{proxy?.ip || '—'}</strong></div>
+                  <div>• Estado: <strong style={{ color: 'var(--color-text)' }}>{proxy?.status?.toUpperCase() || '—'}</strong></div>
+                  <div>• Latencia: <strong style={{ color: 'var(--color-text)' }}>{proxy?.latency_ms || '—'} ms</strong></div>
                 </div>
               </div>
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

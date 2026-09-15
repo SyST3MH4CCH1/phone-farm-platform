@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AnimatePresence } from 'motion/react';
 import type { Account, ProxyItem, QueueJob, LogEntry, SystemStats, AuthUser, StackInfo, DraftPost } from './types';
 import { Header, ActiveTab } from './components/Header';
 import { AccountsPanel } from './components/AccountsPanel';
@@ -624,7 +625,6 @@ export default function App() {
         accounts={accounts}
         proxies={proxies}
         currentUser={currentUser}
-        theme={theme}
         deviceCount={deviceCount}
         onOpenPandaGrid={() => window.open('/panda', '_blank', 'noopener,width=1100,height=760')}
         onOpenMoneyPrinter={() => openTab('moneyprinter', () => setShowMoneyPrinterModal(true))}
@@ -634,7 +634,6 @@ export default function App() {
         onOpenVersionControl={() => openTab('versions', () => setShowVersionControlModal(true))}
         onDownloadAllZip={() => { window.location.href = '/api/download-zip'; }}
         onToggleMaster={handleToggleMaster}
-        onToggleTheme={toggleTheme}
         onLogout={handleLogout}
       />
 
@@ -660,105 +659,265 @@ export default function App() {
         <span className="text-[#6B7076]">drafts: {stack.drafts}</span>
       </div>
 
-      {/* Layout principal: sidebar + contenido */}
+      {/* Layout principal: sidebar dock + contenido con tabs */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar — texto plano con contadores reales */}
+        {/* Sidebar dock — 56px icono-only, expander a 200px on hover */}
         <aside
-          className="w-48 shrink-0 border-r flex flex-col font-mono text-[12px] overflow-y-auto"
-          style={{ background: 'var(--color-sidebar-bg)', borderColor: 'var(--color-sidebar-border)' }}
+          className="w-14 hover:w-52 shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200 group"
+          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
         >
-          <div className="px-4 py-2 border-b text-[10px] uppercase tracking-wider" style={{ borderColor: 'var(--color-sidebar-border)', color: 'var(--color-header-muted2)' }}>Secciones</div>
-          <button onClick={() => openTab('panda', () => setShowPandaModal(true))} title="Dispositivos ADB + manejo scrcpy" className={`px-4 py-2 text-left flex justify-between transition-colors ${activeTab === 'panda' ? 'font-bold' : ''}`} style={{ background: activeTab === 'panda' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'panda' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
-            <span>Dispositivos</span><span style={{ color: 'var(--color-header-muted2)' }}>{deviceCount}</span>
-          </button>
-          <button onClick={() => window.open('/panda', '_blank', 'noopener,width=1100,height=760')} title="Abrir Panda live (grid de pantallas) en ventana nueva" className="px-4 py-2 text-left flex justify-between transition-colors" style={{ color: 'var(--color-sidebar-text)' }}>
-            <span>Panda live</span><span style={{ color: 'var(--color-header-muted2)' }}>↗</span>
-          </button>
-          <button onClick={() => openTab('proxies', () => setShowProxyModal(true))} className={`px-4 py-2 text-left flex justify-between transition-colors ${activeTab === 'proxies' ? 'font-bold' : ''}`} style={{ background: activeTab === 'proxies' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'proxies' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
-            <span>Proxies</span><span style={{ color: 'var(--color-header-muted2)' }}>{proxies.length}</span>
-          </button>
-          <button onClick={() => openTab('schedule', () => setShowScheduleModal(true))} className={`px-4 py-2 text-left flex justify-between transition-colors ${activeTab === 'schedule' ? 'font-bold' : ''}`} style={{ background: activeTab === 'schedule' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'schedule' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
-            <span>Calendario</span><span style={{ color: 'var(--color-header-muted2)' }}>{queue.filter(j => j.scheduled_ts).length}</span>
-          </button>
-
-          <div className="px-4 py-2 mt-2 border-t text-[10px] uppercase tracking-wider" style={{ borderColor: 'var(--color-sidebar-border)', color: 'var(--color-header-muted2)' }}>Herramientas</div>
-          <button onClick={() => openTab('moneyprinter', () => setShowMoneyPrinterModal(true))} className={`px-4 py-2 text-left transition-colors ${activeTab === 'moneyprinter' ? 'font-bold' : ''}`} style={{ background: activeTab === 'moneyprinter' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'moneyprinter' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
-            Generador de Reels
-          </button>
-          <button onClick={() => openTab('adb', () => setShowAdbModal(true))} className={`px-4 py-2 text-left transition-colors ${activeTab === 'adb' ? 'font-bold' : ''}`} style={{ background: activeTab === 'adb' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'adb' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
-            ADB Bridge
-          </button>
-          <button onClick={() => openTab('curl', () => setShowCurlModal(true))} className={`px-4 py-2 text-left transition-colors ${activeTab === 'curl' ? 'font-bold' : ''}`} style={{ background: activeTab === 'curl' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'curl' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
-            cURL API
-          </button>
-          <button onClick={() => openTab('code', () => setShowCodeModal(true))} className={`px-4 py-2 text-left transition-colors ${activeTab === 'code' ? 'font-bold' : ''}`} style={{ background: activeTab === 'code' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'code' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
-            Código Python
-          </button>
-          <button onClick={() => openTab('versions', () => setShowVersionControlModal(true))} className={`px-4 py-2 text-left transition-colors ${activeTab === 'versions' ? 'font-bold' : ''}`} style={{ background: activeTab === 'versions' ? 'var(--color-sidebar-hover)' : undefined, color: activeTab === 'versions' ? 'var(--color-header-text)' : 'var(--color-sidebar-text)' }}>
-            Versiones
-          </button>
-          <button onClick={handleDownloadAllZip} className="px-4 py-2 text-left transition-colors" style={{ color: 'var(--color-sidebar-text)' }}>
-            Descargar ZIP
-          </button>
-
-          <div className="mt-auto px-4 py-3 border-t text-[10px]" style={{ borderColor: 'var(--color-sidebar-border)', color: 'var(--color-header-muted2)' }}>
-            {stats.panda_grid_status} · cpu {stats.cpu_percent}%
+          {/* Status footer */}
+          <div className="px-3 py-3 border-b text-[10px] tabular-nums" style={{ borderColor: 'var(--color-line)', color: 'var(--color-muted-2)' }}>
+            <span className="hidden group-hover:inline">cpu {stats.cpu_percent}%</span>
+            <span
+              className="w-2 h-2 rounded-full inline-block ml-1"
+              style={{
+                background: stack.flask_online ? 'var(--color-ok)' : 'var(--color-danger)',
+              }}
+            />
           </div>
+
+          {/* Nav items — icon + label on hover */}
+          <button
+            onClick={() => openTab('panda', () => setShowPandaModal(true))}
+            title="Dispositivos ADB"
+            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
+            style={{
+              borderColor: activeTab === 'panda' ? 'var(--color-brand)' : 'transparent',
+              background: activeTab === 'panda' ? 'var(--color-surface-2)' : undefined,
+              color: activeTab === 'panda' ? 'var(--color-text)' : 'var(--color-muted)',
+            }}
+          >
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+            </span>
+            <span className="hidden group-hover:block text-[11px]">Dispositivos</span>
+            <span className="hidden group-hover:block ml-auto text-[10px]" style={{ color: 'var(--color-muted-2)' }}>{deviceCount}</span>
+          </button>
+
+          <button
+            onClick={() => window.open('/panda', '_blank', 'noopener,width=1100,height=760')}
+            title="Panda live"
+            className="px-3 py-2.5 flex items-center gap-3 transition-colors"
+            style={{ color: 'var(--color-muted)' }}
+          >
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </span>
+            <span className="hidden group-hover:block text-[11px]">Panda live</span>
+          </button>
+
+          <button
+            onClick={() => openTab('proxies', () => setShowProxyModal(true))}
+            title="Proxies"
+            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
+            style={{
+              borderColor: activeTab === 'proxies' ? 'var(--color-brand)' : 'transparent',
+              background: activeTab === 'proxies' ? 'var(--color-surface-2)' : undefined,
+              color: activeTab === 'proxies' ? 'var(--color-text)' : 'var(--color-muted)',
+            }}
+          >
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            </span>
+            <span className="hidden group-hover:block text-[11px]">Proxies</span>
+            <span className="hidden group-hover:block ml-auto text-[10px]" style={{ color: 'var(--color-muted-2)' }}>{proxies.length}</span>
+          </button>
+
+          <button
+            onClick={() => openTab('schedule', () => setShowScheduleModal(true))}
+            title="Calendario"
+            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
+            style={{
+              borderColor: activeTab === 'schedule' ? 'var(--color-brand)' : 'transparent',
+              background: activeTab === 'schedule' ? 'var(--color-surface-2)' : undefined,
+              color: activeTab === 'schedule' ? 'var(--color-text)' : 'var(--color-muted)',
+            }}
+          >
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </span>
+            <span className="hidden group-hover:block text-[11px]">Calendario</span>
+            <span className="hidden group-hover:block ml-auto text-[10px]" style={{ color: 'var(--color-muted-2)' }}>{queue.filter(j => j.scheduled_ts).length}</span>
+          </button>
+
+          <button
+            onClick={() => openTab('moneyprinter', () => setShowMoneyPrinterModal(true))}
+            title="MoneyPrinter"
+            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
+            style={{
+              borderColor: activeTab === 'moneyprinter' ? 'var(--color-brand)' : 'transparent',
+              background: activeTab === 'moneyprinter' ? 'var(--color-surface-2)' : undefined,
+              color: activeTab === 'moneyprinter' ? 'var(--color-text)' : 'var(--color-muted)',
+            }}
+          >
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </span>
+            <span className="hidden group-hover:block text-[11px]">MoneyPrinter</span>
+          </button>
+
+          <button
+            onClick={() => openTab('adb', () => setShowAdbModal(true))}
+            title="ADB Bridge"
+            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
+            style={{
+              borderColor: activeTab === 'adb' ? 'var(--color-brand)' : 'transparent',
+              background: activeTab === 'adb' ? 'var(--color-surface-2)' : undefined,
+              color: activeTab === 'adb' ? 'var(--color-text)' : 'var(--color-muted)',
+            }}
+          >
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </span>
+            <span className="hidden group-hover:block text-[11px]">ADB Bridge</span>
+          </button>
+
+          <button
+            onClick={() => openTab('curl', () => setShowCurlModal(true))}
+            title="cURL API"
+            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
+            style={{
+              borderColor: activeTab === 'curl' ? 'var(--color-brand)' : 'transparent',
+              background: activeTab === 'curl' ? 'var(--color-surface-2)' : undefined,
+              color: activeTab === 'curl' ? 'var(--color-text)' : 'var(--color-muted)',
+            }}
+          >
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            </span>
+            <span className="hidden group-hover:block text-[11px]">cURL API</span>
+          </button>
+
+          <button
+            onClick={() => openTab('code', () => setShowCodeModal(true))}
+            title="Código Python"
+            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
+            style={{
+              borderColor: activeTab === 'code' ? 'var(--color-brand)' : 'transparent',
+              background: activeTab === 'code' ? 'var(--color-surface-2)' : undefined,
+              color: activeTab === 'code' ? 'var(--color-text)' : 'var(--color-muted)',
+            }}
+          >
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            </span>
+            <span className="hidden group-hover:block text-[11px]">Código Python</span>
+          </button>
+
+          <button
+            onClick={() => openTab('versions', () => setShowVersionControlModal(true))}
+            title="Versiones"
+            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
+            style={{
+              borderColor: activeTab === 'versions' ? 'var(--color-brand)' : 'transparent',
+              background: activeTab === 'versions' ? 'var(--color-surface-2)' : undefined,
+              color: activeTab === 'versions' ? 'var(--color-text)' : 'var(--color-muted)',
+            }}
+          >
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+            </span>
+            <span className="hidden group-hover:block text-[11px]">Versiones</span>
+          </button>
+
+          <button
+            onClick={handleDownloadAllZip}
+            title="Descargar ZIP"
+            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
+            style={{ borderColor: 'transparent', color: 'var(--color-muted)' }}
+          >
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </span>
+            <span className="hidden group-hover:block text-[11px]">Descargar ZIP</span>
+          </button>
         </aside>
 
-        {/* Contenido principal */}
-        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 grid-rows-[1fr_200px] gap-3 p-3 overflow-hidden">
-        {/* Left Column: Accounts & ADB Devices (4 cols) */}
-        <div className="lg:col-span-4 h-full overflow-hidden">
-          <AccountsPanel
-            accounts={accounts}
-            proxies={proxies}
-            onToggleBot={handleToggleBot}
-            onAddAccount={handleAddAccount}
-            onDeleteAccount={handleDeleteAccount}
-            onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
-          />
-        </div>
+        {/* Main — tabs layout: Cuentas | Cola | Calendario */}
+        <main className="flex-1 flex flex-col overflow-hidden">
+          {/* Tab bar */}
+          <div className="flex border-b px-3 pt-2 gap-0.5 text-[11px] font-mono" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
+            <button
+              onClick={() => {}}
+              className="px-4 py-2 rounded-t-md border-b-2 transition-colors"
+              style={{ borderColor: 'var(--color-brand)', color: 'var(--color-text)', background: 'var(--color-surface-2)' }}
+            >
+              Cuentas <span className="ml-1 text-[10px]" style={{ color: 'var(--color-muted)' }}>{accounts.length}</span>
+            </button>
+            <button
+              onClick={() => {}}
+              className="px-4 py-2 rounded-t-md border-b-2 transition-colors"
+              style={{ borderColor: 'transparent', color: 'var(--color-muted)' }}
+            >
+              Cola <span className="ml-1 text-[10px]" style={{ color: 'var(--color-muted-2)' }}>{queue.length}</span>
+            </button>
+            <button
+              onClick={() => openTab('schedule', () => setShowScheduleModal(true))}
+              className="px-4 py-2 rounded-t-md border-b-2 transition-colors"
+              style={{ borderColor: 'transparent', color: 'var(--color-muted)' }}
+            >
+              Calendario
+            </button>
+          </div>
 
-        {/* Right Column: Video Production Queue (8 cols) */}
-        <div className="lg:col-span-8 h-full overflow-hidden">
-          <QueuePanel
-            queue={queue}
-            accounts={accounts}
-            isProcessing={isProcessingJob}
-            onAddJob={handleAddJob}
-            onProcessNextJob={handleProcessNextJob}
-            onOpenPreview={handleOpenPreviewForJob}
-            onApproveJob={handleApproveJob}
-            onPublishJob={handlePublishJob}
-            onMarkReady={handleMarkReady}
-            onRejectJob={handleRejectJob}
-            onDeleteJob={handleDeleteJob}
-          />
-        </div>
+          {/* Tab content */}
+          <div className="flex-1 flex overflow-hidden p-3 gap-3">
+            {/* Accounts Panel */}
+            <div className="flex-1 overflow-hidden">
+              <AccountsPanel
+                accounts={accounts}
+                proxies={proxies}
+                onToggleBot={handleToggleBot}
+                onAddAccount={handleAddAccount}
+                onDeleteAccount={handleDeleteAccount}
+                onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
+              />
+            </div>
 
-        {/* Bottom Full-Width Row: Live Terminal SSE Stream (12 cols) */}
-        <div className={`lg:col-span-12 overflow-hidden ${terminalMinimized ? 'h-10' : 'h-full'}`}>
-          <TerminalLogs
-            logs={logs}
-            onClearLogs={() => setLogs([])}
-            isMinimized={terminalMinimized}
-            onToggleMinimize={() => setTerminalMinimized(!terminalMinimized)}
-            sseConnected={sseConnected}
-          />
-        </div>
-      </main>
+            {/* Queue Panel */}
+            <div className="flex-1 overflow-hidden">
+              <QueuePanel
+                queue={queue}
+                accounts={accounts}
+                isProcessing={isProcessingJob}
+                onAddJob={handleAddJob}
+                onProcessNextJob={handleProcessNextJob}
+                onOpenPreview={handleOpenPreviewForJob}
+                onApproveJob={handleApproveJob}
+                onPublishJob={handlePublishJob}
+                onMarkReady={handleMarkReady}
+                onRejectJob={handleRejectJob}
+                onDeleteJob={handleDeleteJob}
+              />
+            </div>
+          </div>
+
+          {/* Terminal Logs — fixed at bottom */}
+          <div className={`shrink-0 overflow-hidden ${terminalMinimized ? 'h-10' : 'h-48'}`} style={{ transition: 'height 200ms ease' }}>
+            <TerminalLogs
+              logs={logs}
+              onClearLogs={() => setLogs([])}
+              isMinimized={terminalMinimized}
+              onToggleMinimize={() => setTerminalMinimized(!terminalMinimized)}
+              sseConnected={sseConnected}
+            />
+          </div>
+        </main>
 
       {/* Modals */}
-      {showProxyModal && (
-        <ProxyModal
-          isOpen={showProxyModal}
-          proxies={proxies}
-          onClose={() => setShowProxyModal(false)}
-          onAddProxy={handleAddProxy}
-          onVerifyProxy={handleVerifyProxy}
-        />
-      )}
+      <AnimatePresence>
+        {showProxyModal && (
+          <ProxyModal
+            key="proxy-modal"
+            isOpen={showProxyModal}
+            proxies={proxies}
+            onClose={() => setShowProxyModal(false)}
+            onAddProxy={handleAddProxy}
+            onVerifyProxy={handleVerifyProxy}
+          />
+        )}
+      </AnimatePresence>
 
       {showCodeModal && (
         <CodeViewerModal
@@ -800,30 +959,36 @@ export default function App() {
         />
       )}
 
-      {showMoneyPrinterModal && (
-        <MoneyPrinterModal
-          accounts={accounts}
-          initialAccount={moneyPrinterAccount || undefined}
-          onClose={() => { setShowMoneyPrinterModal(false); setMoneyPrinterAccount(null); }}
-          onRefreshData={refreshBackendData}
-        />
-      )}
+      <AnimatePresence>
+        {showMoneyPrinterModal && (
+          <MoneyPrinterModal
+            key="moneyprinter-modal"
+            accounts={accounts}
+            initialAccount={moneyPrinterAccount || undefined}
+            onClose={() => { setShowMoneyPrinterModal(false); setMoneyPrinterAccount(null); }}
+            onRefreshData={refreshBackendData}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Account Data & Analytics Consultation Modal */}
-      {selectedAccountForDetail && (
-        <AccountDetailModal
-          account={selectedAccountForDetail}
-          proxies={proxies}
-          queue={queue}
-          onClose={() => setSelectedAccountForDetail(null)}
-          onToggleBot={handleToggleBot}
-          onOpenMoneyPrinterForAccount={(acc) => {
-            setMoneyPrinterAccount(acc);
-            setSelectedAccountForDetail(null);
-            setShowMoneyPrinterModal(true);
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {selectedAccountForDetail && (
+          <AccountDetailModal
+            key="account-detail-modal"
+            account={selectedAccountForDetail}
+            proxies={proxies}
+            queue={queue}
+            onClose={() => setSelectedAccountForDetail(null)}
+            onToggleBot={handleToggleBot}
+            onOpenMoneyPrinterForAccount={(acc) => {
+              setMoneyPrinterAccount(acc);
+              setSelectedAccountForDetail(null);
+              setShowMoneyPrinterModal(true);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Video Preview Modal (Instagram Reels & TikTok 9:16) */}
       {activePreviewDraft && (

@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { motion } from 'motion/react';
+import { useFocusTrap } from '../a11y';
 import { ProxyItem } from '../types';
 
 interface ProxyModalProps {
@@ -21,8 +23,8 @@ export const ProxyModal: React.FC<ProxyModalProps> = ({
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [provider, setProvider] = useState('DataImpulse');
-
-  if (!isOpen) return null;
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, onClose);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,43 +42,65 @@ export const ProxyModal: React.FC<ProxyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 font-mono">
-      <div className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl p-6 w-full max-w-2xl flex flex-col max-h-[85vh]">
-        <div className="flex items-center justify-between pb-3 border-b border-[#2A2C30]">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-wider">Gestión de Proxies SOCKS5 Residenciales (DataImpulse)</h3>
-          </div>
-          <button onClick={onClose} className="text-[#9CA1A8] hover:text-[#E5E5E5] text-sm p-1">✕</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}>
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.18 }}
+        className="modal-shell w-full max-w-2xl flex flex-col max-h-[85vh]"
+      >
+        {/* Header */}
+        <div className="modal-header px-5 py-3 flex items-center justify-between">
+          <h3 className="text-sm font-bold uppercase tracking-wider font-mono" style={{ color: 'var(--color-text)' }}>
+            Gestión de Proxies SOCKS5 — DataImpulse
+          </h3>
+          <button onClick={onClose} aria-label="Cerrar" className="btn-close">✕</button>
         </div>
 
         {/* Proxy List */}
-        <div className="my-4 flex-1 overflow-y-auto space-y-2">
+        <div className="p-4 flex-1 overflow-y-auto space-y-2">
           {proxies.map((p) => (
-            <div key={p.id} className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-3 flex items-center justify-between text-xs">
+            <div
+              key={p.id}
+              className="p-3 flex items-center justify-between text-[11px] font-mono"
+              style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}
+            >
               <div>
-                <div className="flex items-center gap-2 font-bold text-[#E5E5E5]">
-                  {p.id} ({p.provider}) — <span className="text-[#A1A6AE] font-semibold">{p.type.toUpperCase()}</span>
+                <div className="flex items-center gap-2 font-bold" style={{ color: 'var(--color-text)' }}>
+                  {p.id} ({p.provider}) — <span style={{ color: 'var(--color-muted)' }}>{p.type.toUpperCase()}</span>
                 </div>
-                <div className="text-[#9CA1A8] text-[11px] mt-0.5">
+                <div className="mt-0.5" style={{ color: 'var(--color-muted)' }}>
                   Host: {p.host}:{p.port} | Auth: {p.user ? `${p.user.slice(0, 6)}***` : 'No auth'}
                 </div>
                 {p.ip && (
-                  <div className="text-[#9CA1A8] text-[11px] mt-1">
-                    IP Pública Actual: <strong className="text-[#8A8F98] font-bold">{p.ip}</strong> | Latencia: {p.latency_ms}ms
+                  <div className="mt-1" style={{ color: 'var(--color-muted)' }}>
+                    IP Actual: <strong style={{ color: 'var(--color-info)' }}>{p.ip}</strong> | Latencia: {p.latency_ms}ms
                   </div>
                 )}
               </div>
 
               <div className="flex items-center gap-2">
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  p.status === 'online' ? 'bg-[#8A8F98]/10 text-[#8A8F98] border border-[#8A8F98]/30' : 'bg-red-950/60 text-[#E05B5B] border border-red-500/40'
-                }`}>
+                <span
+                  className="status-pill"
+                  style={{
+                    color: p.status === 'online' ? 'var(--color-ok)' : 'var(--color-danger)',
+                    background: p.status === 'online' ? 'rgba(0,255,136,0.1)' : 'rgba(255,59,92,0.1)',
+                    border: `1px solid ${p.status === 'online' ? 'rgba(0,255,136,0.2)' : 'rgba(255,59,92,0.2)'}`,
+                  }}
+                >
+                  <span
+                    className="dot"
+                    style={{ background: p.status === 'online' ? 'var(--color-ok)' : 'var(--color-danger)' }}
+                  />
                   {p.status.toUpperCase()}
                 </span>
                 <button
                   onClick={() => onVerifyProxy(p.id)}
-                  className="bg-[#33363A] hover:bg-[#3A3D42] text-[#8A8F98] border border-[#A1A6AE]/30 px-2.5 py-1 rounded-lg text-xs flex items-center gap-1 transition-colors"
-                > Test IP
+                  className="btn-secondary text-[10px] px-2.5 py-1 flex items-center gap-1"
+                >
+                  Test IP
                 </button>
               </div>
             </div>
@@ -84,57 +108,64 @@ export const ProxyModal: React.FC<ProxyModalProps> = ({
         </div>
 
         {/* Add Proxy Form */}
-        <form onSubmit={handleSubmit} className="border-t border-[#2A2C30] pt-3 grid grid-cols-2 gap-2 text-xs">
-          <div>
-            <label className="block text-[#9CA1A8] mb-1 uppercase tracking-wide">Host SOCKS5</label>
-            <input
-              type="text"
-              required
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-              className="w-full bg-[#1A1C1E] border border-[#2A2C30] rounded-lg px-2.5 py-1.5 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
-            />
-          </div>
-          <div>
-            <label className="block text-[#9CA1A8] mb-1 uppercase tracking-wide">Puerto</label>
-            <input
-              type="number"
-              required
-              value={port}
-              onChange={(e) => setPort(Number(e.target.value))}
-              className="w-full bg-[#1A1C1E] border border-[#2A2C30] rounded-lg px-2.5 py-1.5 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
-            />
-          </div>
-          <div>
-            <label className="block text-[#9CA1A8] mb-1 uppercase tracking-wide">User Token</label>
-            <input
-              type="text"
-              value={user}
-              onChange={(e) => setUser(e.target.value)}
-              placeholder="user_token_abc"
-              className="w-full bg-[#1A1C1E] border border-[#2A2C30] rounded-lg px-2.5 py-1.5 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
-            />
-          </div>
-          <div>
-            <label className="block text-[#9CA1A8] mb-1 uppercase tracking-wide">Pass Token</label>
-            <input
-              type="password"
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
-              placeholder="pass_token_123"
-              className="w-full bg-[#1A1C1E] border border-[#2A2C30] rounded-lg px-2.5 py-1.5 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
-            />
+        <form onSubmit={handleSubmit} className="p-4 space-y-3" style={{ borderTop: '1px solid var(--color-line)' }}>
+          <div className="grid grid-cols-2 gap-3 text-[11px]">
+            <div>
+              <label htmlFor="proxy-host" className="block mb-1 uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>Host SOCKS5</label>
+              <input
+                id="proxy-host"
+                type="text"
+                required
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                className="input w-full px-2.5 py-1.5"
+              />
+            </div>
+            <div>
+              <label htmlFor="proxy-port" className="block mb-1 uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>Puerto</label>
+              <input
+                id="proxy-port"
+                type="number"
+                required
+                value={port}
+                onChange={(e) => setPort(Number(e.target.value))}
+                className="input w-full px-2.5 py-1.5"
+              />
+            </div>
+            <div>
+              <label htmlFor="proxy-user" className="block mb-1 uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>User Token</label>
+              <input
+                id="proxy-user"
+                type="text"
+                value={user}
+                onChange={(e) => setUser(e.target.value)}
+                placeholder="user_token_abc"
+                className="input w-full px-2.5 py-1.5"
+              />
+            </div>
+            <div>
+              <label htmlFor="proxy-pass" className="block mb-1 uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>Pass Token</label>
+              <input
+                id="proxy-pass"
+                type="password"
+                value={pass}
+                onChange={(e) => setPass(e.target.value)}
+                placeholder="pass_token_123"
+                className="input w-full px-2.5 py-1.5"
+              />
+            </div>
           </div>
 
-          <div className="col-span-2 flex justify-end gap-2 mt-2">
+          <div className="flex justify-end">
             <button
               type="submit"
-              className="bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold px-4 py-1.5 rounded-lg text-xs flex items-center gap-1"
-            > Agregar Proxy SOCKS5
+              className="btn-brand px-4 py-1.5 flex items-center gap-1"
+            >
+              Agregar Proxy
             </button>
           </div>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 };

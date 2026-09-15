@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
+import { useFocusTrap } from '../a11y';
 import { MoneyPrinterConfig, Account } from '../types';
 import { apiFetch } from '../api';
+import { Sparkles, Settings, Subtitles } from 'lucide-react';
 
 interface MoneyPrinterModalProps {
   accounts: Account[];
@@ -31,8 +34,11 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
   });
 
   const [activeTab, setActiveTab] = useState<'generator' | 'engine' | 'subtitles'>('generator');
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, onClose);
+
   const [keyword, setKeyword] = useState('');
-  const [targetAccount, setTargetAccount] = useState(accounts[0]?.id || '');
+  const [targetAccount, setTargetAccount] = useState(initialAccount?.id || accounts[0]?.id || '');
   const [customPrompt, setCustomPrompt] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -41,10 +47,8 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
   const [pexelsResult, setPexelsResult] = useState<{ valid: boolean; message: string } | null>(null);
 
   const [genResult, setGenResult] = useState<{ success: boolean; job: any; error?: string } | null>(null);
-  // FE-06: representación de error (sin job) — evita `genResult.job.id` en null.
   const setGenError = (message: string) => setGenResult({ success: false, job: null, error: message });
 
-  // Fetch current MoneyPrinterTurbo config
   useEffect(() => {
     apiFetch('/api/moneyprinter/config')
       .then(r => r.ok ? r.json() : null)
@@ -70,7 +74,6 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
         window.alert(`No se pudo guardar la configuración: ${data?.error || res.status}`);
       }
     } catch (err) {
-      // FE-06: el fallo ya no se traga en silencio.
       window.alert(`No se pudo guardar la configuración: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSaving(false);
@@ -96,8 +99,6 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
         setPexelsResult({ valid: false, message: 'API Key de Pexels inválida o sin respuesta.' });
       }
     } catch (err) {
-      // FE-06: antes se pintaba valid:true con "mock offline" — un fallo de red
-      // ya NO se muestra como verificación exitosa.
       setPexelsResult({
         valid: false,
         message: `No se pudo verificar Pexels (red): ${err instanceof Error ? err.message : String(err)}`
@@ -131,110 +132,97 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
         onRefreshData();
       } else {
         const data = await res.json().catch(() => ({}));
-        // FE-06: el 400/500 se muestra, no se traga.
         setGenError(data?.error || `HTTP ${res.status}`);
       }
     } catch (err) {
-      // FE-06: el fallo de red se muestra.
       setGenError(`Fallo de red: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
   };
 
+  const tabs = [
+    { id: 'generator' as const, label: 'Generador Rápido', icon: Sparkles },
+    { id: 'engine' as const, label: 'Motores IA & API', icon: Settings },
+    { id: 'subtitles' as const, label: 'Subtítulos & Audio', icon: Subtitles },
+  ];
+
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 font-mono">
-      <div className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}>
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.18 }}
+        className="modal-shell w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
         {/* Header */}
-        <div className="bg-[#232528] px-5 py-4 border-b border-[#2A2C30] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-[#8A8F98]/10 border border-[#8A8F98]/30 rounded-xl flex items-center justify-center text-[#8A8F98]">
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-wider flex items-center gap-2">
-                MoneyPrinterTurbo Engine Integration
-                <a
-                  href="https://github.com/harry0703/MoneyPrinterTurbo/blob/main/README-en.md"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[10px] text-[#A1A6AE] hover:underline flex items-center gap-1 font-sans"
-                >
-                  GitHub Repo
-                </a>
-              </h3>
-              <p className="text-[11px] text-[#9CA1A8] font-sans">
-                Generación automática de vídeos virales 9:16 (Shorts/Reels) mediante IA + Pexels + EdgeTTS
-              </p>
-            </div>
+        <div className="modal-header px-5 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-wider font-mono" style={{ color: 'var(--color-text)' }}>
+              MoneyPrinterTurbo Engine
+            </h3>
+            <p className="text-[11px] mt-0.5 font-sans" style={{ color: 'var(--color-muted)' }}>
+              Generación automática de vídeos virales 9:16 mediante IA + Pexels + EdgeTTS
+            </p>
           </div>
-          <button onClick={onClose} className="text-[#9CA1A8] hover:text-[#E5E5E5] font-bold text-sm p-1">
-            ✕
-          </button>
+          <button onClick={onClose} aria-label="Cerrar" className="btn-close">✕</button>
         </div>
 
-        {/* Tab Selector */}
-        <div className="flex border-b border-[#2A2C30] bg-[#1A1C1E] text-xs">
-          <button
-            onClick={() => setActiveTab('generator')}
-            className={`px-4 py-2.5 font-bold flex items-center gap-2 border-b-2 transition-colors ${
-              activeTab === 'generator'
-                ? 'border-[#8A8F98] text-[#8A8F98] bg-[#1E2023]'
-                : 'border-transparent text-[#9CA1A8] hover:text-[#E5E5E5]'
-            }`}
-          > Generador Rápido de Reel
-          </button>
-          <button
-            onClick={() => setActiveTab('engine')}
-            className={`px-4 py-2.5 font-bold flex items-center gap-2 border-b-2 transition-colors ${
-              activeTab === 'engine'
-                ? 'border-[#8A8F98] text-[#8A8F98] bg-[#1E2023]'
-                : 'border-transparent text-[#9CA1A8] hover:text-[#E5E5E5]'
-            }`}
-          > Motores IA & API Keys
-          </button>
-          <button
-            onClick={() => setActiveTab('subtitles')}
-            className={`px-4 py-2.5 font-bold flex items-center gap-2 border-b-2 transition-colors ${
-              activeTab === 'subtitles'
-                ? 'border-[#8A8F98] text-[#8A8F98] bg-[#1E2023]'
-                : 'border-transparent text-[#9CA1A8] hover:text-[#E5E5E5]'
-            }`}
-          > Subtítulos & Audio
-          </button>
+        {/* Tab Selector — pills style */}
+        <div className="flex gap-1 px-4 pt-3 pb-0 text-[11px] font-mono" style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-line)' }}>
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-t-md transition-colors"
+              style={{
+                background: activeTab === tab.id ? 'var(--color-surface-3)' : 'transparent',
+                color: activeTab === tab.id ? 'var(--color-text)' : 'var(--color-muted)',
+              }}
+            >
+              <tab.icon size={14} />
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* Content Body */}
         <div className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
           {activeTab === 'generator' && (
             <form onSubmit={handleGenerateVideo} className="space-y-4">
-              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#8A8F98] uppercase tracking-wide flex items-center gap-2"> Generar Reel 9:16 con MoneyPrinterTurbo Pipeline
+              <div className="p-4 space-y-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                <div className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'var(--color-info)' }}>
+                  Generar Reel 9:16 con MoneyPrinterTurbo
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">
+                    <label htmlFor="gen-keyword" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>
                       Keyword / Nicho Principal
                     </label>
                     <input
+                      id="gen-keyword"
                       type="text"
                       required
                       value={keyword}
                       onChange={(e) => setKeyword(e.target.value)}
                       placeholder="ej. rutina fitness alta intensidad en casa"
-                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
+                      className="input w-full px-3 py-2"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">
-                        Cuenta Instagram de Destino (ADB)
+                      <label htmlFor="gen-account" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>
+                        Cuenta Instagram de Destino
                       </label>
                       <select
+                        id="gen-account"
                         value={targetAccount}
                         onChange={(e) => setTargetAccount(e.target.value)}
-                        className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
+                        className="input w-full px-3 py-2"
                       >
                         {accounts.map(acc => (
                           <option key={acc.id} value={acc.id}>
@@ -245,15 +233,16 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                     </div>
 
                     <div>
-                      <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">
+                      <label htmlFor="gen-aspect" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>
                         Formato Aspect Ratio
                       </label>
                       <select
+                        id="gen-aspect"
                         value={config.video_aspect}
                         onChange={(e) => setConfig({ ...config, video_aspect: e.target.value as any })}
-                        className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
+                        className="input w-full px-3 py-2"
                       >
-                        <option value="9:16">9:16 (Instagram Reels / TikTok / Shorts)</option>
+                        <option value="9:16">9:16 (Reels / TikTok / Shorts)</option>
                         <option value="16:9">16:9 (YouTube Standard)</option>
                         <option value="1:1">1:1 (Post Cuadrado)</option>
                       </select>
@@ -261,56 +250,49 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                   </div>
 
                   <div>
-                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">
-                      Instrucción Opcional para LLM (Prompt Custom)
+                    <label htmlFor="gen-prompt" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>
+                      Instrucción Opcional para LLM
                     </label>
                     <textarea
+                      id="gen-prompt"
                       rows={2}
                       value={customPrompt}
                       onChange={(e) => setCustomPrompt(e.target.value)}
-                      placeholder="ej. Enfatizar un tono humorístico y usar palabras de alto gancho en los primeros 3 segundos."
-                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-1.5 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98] text-xs"
+                      placeholder="ej. Enfatizar un tono humorístico..."
+                      className="input w-full px-3 py-1.5 text-[11px] resize-none"
                     />
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center justify-between pt-2">
-                <div className="text-[11px] text-[#9CA1A8] font-sans flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#8A8F98] animate-pulse" />
-                  <span>Configuración activa: <strong>{config.voice_name}</strong> + Pexels HD Clips</span>
+                <div className="text-[11px] font-sans flex items-center gap-2" style={{ color: 'var(--color-muted)' }}>
+                  <span className="w-2 h-2 rounded-full" style={{ background: 'var(--color-info)' }} />
+                  <span>Activo: <strong>{config.voice_name}</strong> + Pexels</span>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold px-5 py-2.5 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                  className="btn-brand px-5 py-2 flex items-center gap-2 disabled:opacity-50"
                 >
-                  {loading ? (
-                    <> Ejecutando MoneyPrinterTurbo...
-                    </>
-                  ) : (
-                    <> Generar & Inyectar a Granja ADB
-                    </>
-                  )}
+                  {loading ? 'Ejecutando...' : 'Generar & Inyectar'}
                 </button>
               </div>
 
               {genResult && genResult.error && (
-                <div className="p-4 rounded-xl border border-[#E05B5B]/40 bg-[#E05B5B]/10 text-[#E05B5B] font-mono text-xs">
-                  <div className="flex items-center gap-2 font-bold">⚠ Fallo al generar el vídeo</div>
-                  <div className="text-[11px] text-[#E5E5E5] mt-1">{genResult.error}</div>
+                <div className="p-4 border font-mono text-[11px]" style={{ borderColor: 'var(--color-danger)', background: 'rgba(255,59,92,0.1)', color: 'var(--color-danger)', borderRadius: '6px' }}>
+                  <div className="font-bold flex items-center gap-2">⚠ Fallo al generar el vídeo</div>
+                  <div className="mt-1" style={{ color: 'var(--color-text)' }}>{genResult.error}</div>
                 </div>
               )}
               {genResult && !genResult.error && (
-                <div className="p-4 rounded-xl border border-[#8A8F98]/40 bg-[#8A8F98]/10 text-[#8A8F98] font-mono text-xs space-y-2">
-                  <div className="flex items-center gap-2 font-bold">
-                    <span>¡Vídeo procesado e inyectado a la cola de teléfonos físicos ADB!</span>
-                  </div>
-                  <div className="text-[11px] text-[#E5E5E5]">
+                <div className="p-4 border font-mono text-[11px] space-y-2" style={{ borderColor: 'var(--color-info)', background: 'rgba(139,139,149,0.1)', color: 'var(--color-info)', borderRadius: '6px' }}>
+                  <div className="font-bold">¡Vídeo procesado e inyectado a la cola ADB!</div>
+                  <div style={{ color: 'var(--color-text)' }}>
                     <div>• Job ID: <strong>{genResult.job?.id}</strong></div>
-                    <div>• RUTA VÍDEO: <strong>{genResult.job?.video_path}</strong></div>
-                    <div>• ESTADO: <strong>Auto-Publicando mediante instagrapi en @{accounts.find(a => a.id === genResult.job?.target_account)?.username}</strong></div>
+                    <div>• RUTA: <strong>{genResult.job?.video_path}</strong></div>
+                    <div>• ESTADO: <strong>Auto-Publicando en @{accounts.find(a => a.id === genResult.job?.target_account)?.username}</strong></div>
                   </div>
                 </div>
               )}
@@ -319,25 +301,25 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
 
           {activeTab === 'engine' && (
             <form onSubmit={handleSaveConfig} className="space-y-4">
-              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#A1A6AE] uppercase tracking-wide flex items-center gap-2"> Configuración de Pexels API Key & Clips de Vídeo Stock
+              <div className="p-4 space-y-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                <div className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>
+                  Pexels API Key & Clips de Vídeo Stock
                 </div>
                 <div>
-                  <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">
-                    Pexels API Key
-                  </label>
+                  <label htmlFor="engine-pexels" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>Pexels API Key</label>
                   <div className="flex gap-2">
                     <input
+                      id="engine-pexels"
                       type="password"
                       value={config.pexels_api_key}
                       onChange={(e) => setConfig({ ...config, pexels_api_key: e.target.value })}
-                      className="flex-1 bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-1.5 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
+                      className="input flex-1 px-3 py-1.5"
                     />
                     <button
                       type="button"
                       onClick={handleTestPexels}
                       disabled={testingPexels}
-                      className="bg-[#33363A] hover:bg-[#3A3D42] border border-[#2A2C30] px-3 py-1.5 rounded-lg text-[#8A8F98] font-bold"
+                      className="btn-secondary px-3 py-1.5"
                     >
                       {testingPexels ? 'Verificando...' : 'Probar Key'}
                     </button>
@@ -345,28 +327,35 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                 </div>
 
                 {pexelsResult && (
-                  <div className={`p-2.5 rounded-lg border text-[11px] flex items-center gap-2 ${
-                    pexelsResult.valid ? 'bg-[#8A8F98]/10 border-[#8A8F98]/30 text-[#8A8F98]' : 'bg-red-950/40 border-red-500/40 text-red-300'
-                  }`}>
-                    {pexelsResult.valid ? true : null}
+                  <div
+                    className="p-2.5 border text-[11px] flex items-center gap-2"
+                    style={{
+                      borderColor: pexelsResult.valid ? 'var(--color-info)' : 'var(--color-danger)',
+                      background: pexelsResult.valid ? 'rgba(139,139,149,0.1)' : 'rgba(255,59,92,0.1)',
+                      color: pexelsResult.valid ? 'var(--color-info)' : 'var(--color-danger)',
+                      borderRadius: '6px',
+                    }}
+                  >
                     <span>{pexelsResult.message}</span>
                   </div>
                 )}
               </div>
 
-              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#8A8F98] uppercase tracking-wide flex items-center gap-2"> Proveedor de Modelo de Lenguaje (LLM Script Generator)
+              <div className="p-4 space-y-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                <div className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'var(--color-info)' }}>
+                  Proveedor LLM (Script Generator)
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Proveedor LLM</label>
+                    <label htmlFor="engine-llm" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>Proveedor LLM</label>
                     <select
+                      id="engine-llm"
                       value={config.llm_provider}
                       onChange={(e) => setConfig({ ...config, llm_provider: e.target.value as any })}
-                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5] focus:outline-none"
+                      className="input w-full px-3 py-2"
                     >
-                      <option value="gemini">Google Gemini API (gemini-2.5-flash)</option>
+                      <option value="gemini">Google Gemini API</option>
                       <option value="openai">OpenAI (gpt-4o-mini)</option>
                       <option value="claude">Anthropic Claude 3.5 Sonnet</option>
                       <option value="deepseek">DeepSeek AI</option>
@@ -375,13 +364,14 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                   </div>
 
                   <div>
-                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Puerto / Address Enlace</label>
+                    <label htmlFor="engine-bind" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>Puerto / Bind Address</label>
                     <input
+                      id="engine-bind"
                       type="text"
                       value={config.bind_address}
                       onChange={(e) => setConfig({ ...config, bind_address: e.target.value })}
                       placeholder="127.0.0.1:8501"
-                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5]"
+                      className="input w-full px-3 py-2"
                     />
                   </div>
                 </div>
@@ -391,9 +381,9 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                 <button
                   type="submit"
                   disabled={saving}
-                  className="bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold px-4 py-2 rounded-lg"
+                  className="btn-brand px-4 py-2"
                 >
-                  {saving ? 'Guardando...' : 'Guardar Configuración MoneyPrinter'}
+                  {saving ? 'Guardando...' : 'Guardar Configuración'}
                 </button>
               </div>
             </form>
@@ -401,75 +391,80 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
 
           {activeTab === 'subtitles' && (
             <form onSubmit={handleSaveConfig} className="space-y-4">
-              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#8A8F98] uppercase tracking-wide flex items-center gap-2"> Motor de Síntesis de Voz (Text-to-Speech)
+              <div className="p-4 space-y-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                <div className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'var(--color-info)' }}>
+                  Motor de Síntesis de Voz (TTS)
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Voz Predeterminada</label>
+                    <label htmlFor="sub-voice" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>Voz Predeterminada</label>
                     <select
+                      id="sub-voice"
                       value={config.voice_name}
                       onChange={(e) => setConfig({ ...config, voice_name: e.target.value })}
-                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#E5E5E5]"
+                      className="input w-full px-3 py-2"
                     >
-                      <option value="es-ES-AlvaroNeural">Álvaro (Español España - Natural)</option>
-                      <option value="es-ES-[#1]ElviraNeural">Elvira (Español España - Expresivo)</option>
-                      <option value="es-MX-DaliaNeural">Dalia (Español México - Dinámico)</option>
-                      <option value="es-MX-[#1]JorgeNeural">Jorge (Español México - Profundo)</option>
-                      <option value="en-US-[#1]AnaNeural">Ana (English US - Shorts/Reels)</option>
+                      <option value="es-ES-AlvaroNeural">Álvaro (Español España)</option>
+                      <option value="es-MX-DaliaNeural">Dalia (Español México)</option>
+                      <option value="en-US-AnaNeural">Ana (English US)</option>
                       <option value="openai-alloy">OpenAI TTS - Alloy</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Volumen de Música de Fondo (BGM)</label>
+                    <label htmlFor="sub-bgm" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>Volumen BGM ({Math.round(config.bgm_volume * 100)}%)</label>
                     <input
+                      id="sub-bgm"
                       type="range"
                       min="0"
                       max="1"
                       step="0.05"
                       value={config.bgm_volume}
                       onChange={(e) => setConfig({ ...config, bgm_volume: parseFloat(e.target.value) })}
-                      className="w-full accent-[#8A8F98]"
+                      className="w-full"
                     />
-                    <div className="text-[10px] text-[#9CA1A8] text-right">{Math.round(config.bgm_volume * 100)}%</div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-3">
-                <div className="text-xs font-bold text-[#A1A6AE] uppercase tracking-wide flex items-center gap-2"> Estilo de Subtítulos FFmpeg SRT
+              <div className="p-4 space-y-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
+                <div className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>
+                  Estilo de Subtítulos FFmpeg SRT
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Tipografía Font</label>
+                    <label htmlFor="sub-font" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>Tipografía</label>
                     <input
+                      id="sub-font"
                       type="text"
                       value={config.subtitle_font}
                       onChange={(e) => setConfig({ ...config, subtitle_font: e.target.value })}
-                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-1.5 text-[#E5E5E5]"
+                      className="input w-full px-3 py-1.5"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Color de Texto</label>
+                    <label htmlFor="sub-color" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>Color</label>
                     <input
+                      id="sub-color"
                       type="color"
                       value={config.subtitle_color}
                       onChange={(e) => setConfig({ ...config, subtitle_color: e.target.value })}
-                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg h-8 px-1 py-1 cursor-pointer"
+                      className="w-full h-8 px-1 py-1 cursor-pointer"
+                      style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '4px' }}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">Tamaño de Letra</label>
+                    <label htmlFor="sub-size" className="block mb-1 uppercase text-[10px]" style={{ color: 'var(--color-muted)' }}>Tamaño</label>
                     <input
+                      id="sub-size"
                       type="number"
                       value={config.subtitle_size}
                       onChange={(e) => setConfig({ ...config, subtitle_size: Number(e.target.value) })}
-                      className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-1.5 text-[#E5E5E5]"
+                      className="input w-full px-3 py-1.5"
                     />
                   </div>
                 </div>
@@ -479,15 +474,15 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({ accounts, 
                 <button
                   type="submit"
                   disabled={saving}
-                  className="bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold px-4 py-2 rounded-lg"
+                  className="btn-brand px-4 py-2"
                 >
-                  {saving ? 'Guardando...' : 'Guardar Preferencias de Subtítulos'}
+                  {saving ? 'Guardando...' : 'Guardar Preferencias'}
                 </button>
               </div>
             </form>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

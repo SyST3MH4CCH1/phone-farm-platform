@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
+import { useFocusTrap } from '../a11y';
 import { apiFetch } from '../api';
 
 interface CodeViewerModalProps {
@@ -20,6 +22,9 @@ export const CodeViewerModal: React.FC<CodeViewerModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, onClose);
 
   // Cargar lista de archivos al abrir el modal
   useEffect(() => {
@@ -106,7 +111,16 @@ export const CodeViewerModal: React.FC<CodeViewerModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 font-mono">
-      <div className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.18 }}
+        role="dialog"
+        aria-modal="true"
+        className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
+      >
         {/* Modal Header */}
         <div className="bg-[#232528] px-5 py-4 border-b border-[#2A2C30] flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -175,7 +189,7 @@ export const CodeViewerModal: React.FC<CodeViewerModalProps> = ({
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { motion } from 'motion/react';
+import { useFocusTrap } from '../a11y';
 import { Account, ProxyItem, QueueJob } from '../types';
 import { apiFetch } from '../api';
 
@@ -18,6 +20,9 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
   onDownloadZip
 }) => {
   const [selectedVersion, setSelectedVersion] = useState<'v2.4' | 'v2.3' | 'v2.2'>('v2.4');
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, onClose);
 
   const versions = [
     {
@@ -98,7 +103,16 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 font-mono">
-      <div className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.18 }}
+        role="dialog"
+        aria-modal="true"
+        className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
         {/* Header */}
         <div className="bg-[#232528] px-6 py-4 border-b border-[#2A2C30] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -196,7 +210,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

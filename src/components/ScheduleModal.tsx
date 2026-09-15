@@ -1,4 +1,6 @@
-import { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useRef } from 'react';
+import { motion } from 'motion/react';
+import { useFocusTrap } from '../a11y';
 import { QueueJob, Account } from '../types';
 
 interface ScheduleModalProps {
@@ -53,6 +55,9 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
   const [dragJobId, setDragJobId] = useState<string | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null); // ISO date key for highlight
   const [dragOverHour, setDragOverHour] = useState<number | null>(null); // hour slot in week/day
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, onClose);
 
   const accountOf = (job: QueueJob) => accounts.find(a => a.id === job.target_account);
   const terminals = useMemo(() => [...new Set(accounts.map(a => a.device_serial).filter(Boolean))], [accounts]);
@@ -219,7 +224,17 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-shell w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.18 }}
+        role="dialog"
+        aria-modal="true"
+        className="modal-shell w-full max-w-5xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-widest font-mono">Calendario de Programación</h3>
@@ -460,7 +475,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
             {msg && <p className={`mt-2 text-[11px] font-mono ${msg.ok ? 'text-[#6FBF73]' : 'text-[#E05B5B]'}`}>{msg.text}</p>}
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

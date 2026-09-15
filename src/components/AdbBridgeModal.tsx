@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { motion } from 'motion/react';
+import { useFocusTrap } from '../a11y';
 import { apiFetch } from '../api';
 
 interface AdbBridgeModalProps {
@@ -23,6 +25,9 @@ export const AdbBridgeModal: React.FC<AdbBridgeModalProps> = ({ onClose, onRefre
   } | null>(null);
 
   const [activeTab, setActiveTab] = useState<'config' | 'pairing' | 'diagnostics'>('config');
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, onClose);
 
   const handleTestConnection = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -71,7 +76,16 @@ export const AdbBridgeModal: React.FC<AdbBridgeModalProps> = ({ onClose, onRefre
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 font-mono">
-      <div className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.18 }}
+        role="dialog"
+        aria-modal="true"
+        className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
         {/* Modal Header */}
         <div className="bg-[#232528] px-5 py-4 border-b border-[#2A2C30] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -282,7 +296,7 @@ curl -X GET http://127.0.0.1:5000/api/stats`}
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };
