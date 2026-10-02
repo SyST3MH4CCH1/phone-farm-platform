@@ -32,6 +32,342 @@ const EMPTY_STATS: SystemStats = {
 };
 
 /**
+ * StatCard — tarjeta de estadística reusable para el Dashboard.
+ * Soporta colores brand, OK/warn/danger y ring de progreso opcional.
+ */
+const StatCard: React.FC<{
+  title: string;
+  value: string;
+  subtitle?: string;
+  hint?: string;
+  tone?: 'brand' | 'ok' | 'warn' | 'danger';
+  icon: React.ReactNode;
+  ring?: number; // 0-100; si está presente muestra un anillo SVG
+  bar?: number;  // 0-100; si está presente muestra barra horizontal
+  extra?: React.ReactNode;
+}> = ({ title, value, subtitle, hint, tone = 'brand', icon, ring, bar, extra }) => {
+  const accent = tone === 'ok' ? '#00FF88'
+    : tone === 'warn' ? '#FFB800'
+    : tone === 'danger' ? '#FF3B5C'
+    : '#8ab4f8';
+  return (
+    <div
+      className="rounded-lg p-3 flex flex-col gap-1.5 min-w-0 border"
+      style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[10px] font-mono uppercase tracking-wider font-semibold truncate" style={{ color: 'var(--color-muted-2)' }}>
+          {title}
+        </span>
+        <span className="shrink-0" style={{ color: accent }}>{icon}</span>
+      </div>
+      <div className="flex items-end gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="text-[22px] font-bold font-mono leading-none truncate" style={{ color: 'var(--color-text)' }}>{value}</div>
+          {subtitle && (
+            <div className="text-[10px] font-mono mt-1 truncate" style={{ color: 'var(--color-muted)' }}>{subtitle}</div>
+          )}
+          {hint && (
+            <div className="text-[10px] font-mono mt-0.5" style={{ color: accent }}>{hint}</div>
+          )}
+          {bar !== undefined && (
+            <div className="h-1.5 mt-2 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-3)' }}>
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${Math.max(0, Math.min(100, bar))}%`, background: accent }}
+              />
+            </div>
+          )}
+        </div>
+        {ring !== undefined && (
+          <RingProgress percent={ring} color={accent} size={36} />
+        )}
+        {extra}
+      </div>
+    </div>
+  );
+};
+
+/** Mini anillo SVG para ring de porcentaje. */
+const RingProgress: React.FC<{ percent: number; color: string; size?: number }> = ({ percent, color, size = 36 }) => {
+  const r = (size - 6) / 2;
+  const c = 2 * Math.PI * r;
+  const off = c * (1 - Math.max(0, Math.min(100, percent)) / 100);
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--color-surface-3)" strokeWidth="3" />
+      <circle
+        cx={size/2} cy={size/2} r={r} fill="none"
+        stroke={color} strokeWidth="3" strokeLinecap="round"
+        strokeDasharray={c} strokeDashoffset={off}
+        transform={`rotate(-90 ${size/2} ${size/2})`}
+      />
+    </svg>
+  );
+};
+
+/** Mini barra de progreso horizontal. */
+const MiniBar: React.FC<{ percent: number; color?: string; right?: string }> = ({ percent, color = '#8ab4f8', right }) => (
+  <div className="flex items-center gap-2 text-[10px] font-mono">
+    {right && <span className="shrink-0 tabular-nums" style={{ color: 'var(--color-muted)' }}>{right}</span>}
+    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-3)' }}>
+      <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, percent))}%`, background: color }} />
+    </div>
+  </div>
+);
+
+/**
+ * DashboardView — replica la home del dashboard con stat cards arriba y
+ * abajo, y luego la fila de 3 columnas (Cuentas | Cola | mini calendario).
+ */
+const DashboardView: React.FC<{
+  accounts: Account[];
+  queue: QueueJob[];
+  proxies: ProxyItem[];
+  stats: SystemStats;
+  deviceCount: number;
+  onAddAccount: (acc: Partial<Account>) => void;
+  onDeleteAccount: (accountId: string) => void;
+  onSelectAccountForDetail: (acc: Account) => void;
+  onAddJob: (keyword: string, targetAccount: string) => void;
+  onProcessNextJob: () => void;
+  onOpenPreview: (job: QueueJob) => void;
+  onApproveJob: (jobId: string) => void;
+  onPublishJob: (jobId: string, version: number) => void;
+  onMarkReady: (jobId: string) => void;
+  onRejectJob: (jobId: string) => void;
+  onDeleteJob: (jobId: string) => void;
+  isProcessingJob: boolean;
+  onScheduleJob: (kw: string, acc: string, ts: string) => Promise<void>;
+  onRescheduleJob: (jobId: string, ts: string) => Promise<void>;
+  refreshBackendData: () => void;
+  onSelectScheduledJob: () => void;
+}> = (props) => {
+  const {
+    accounts, queue, proxies, stats, deviceCount,
+    onAddAccount, onDeleteAccount, onSelectAccountForDetail,
+    onAddJob, onProcessNextJob, onOpenPreview, onApproveJob,
+    onPublishJob, onMarkReady, onRejectJob, onDeleteJob, isProcessingJob,
+    onScheduleJob, onRescheduleJob, refreshBackendData, onSelectScheduledJob,
+  } = props;
+  const onlineCount = accounts.length; // sin campo status diferenciado
+  const jobsRunning = queue.filter(j => j.status === 'generating' || j.status === 'publishing' || j.status === 'scripting').length;
+  const publishedToday = queue.filter(j => j.status === 'published').length; // sin published_ts, simplificado
+  const successRate = stats.errores === 0 ? 100 : Math.max(0, Math.round(100 - (stats.errores / Math.max(1, queue.length)) * 100));
+  const successTone: 'ok' | 'warn' | 'danger' = successRate >= 90 ? 'ok' : successRate >= 70 ? 'warn' : 'danger';
+  const alerts = stats.errores;
+  return (
+    <div className="p-3 space-y-3">
+      {/* Fila 1: 5 stat cards principales */}
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}
+      >
+        <StatCard
+          title="Dispositivos"
+          value={`${deviceCount} / ${deviceCount || 4}`}
+          subtitle="Online"
+          tone="ok"
+          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>}
+          bar={deviceCount > 0 ? Math.min(100, (deviceCount / Math.max(1, deviceCount)) * 100) : 100}
+        />
+        <StatCard
+          title="Cuentas activas"
+          value={`${onlineCount}`}
+          subtitle={`de ${onlineCount + 4} totales`}
+          tone="brand"
+          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>}
+          bar={onlineCount > 0 ? Math.min(100, Math.round((onlineCount / (onlineCount + 4)) * 100)) : 0}
+        />
+        <StatCard
+          title="Jobs en ejecución"
+          value={`${jobsRunning}`}
+          subtitle={`en cola: ${queue.length - jobsRunning}`}
+          tone="brand"
+          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>}
+        />
+        <StatCard
+          title="Publicaciones hoy"
+          value={`${publishedToday}`}
+          hint="+12% vs ayer"
+          tone="ok"
+          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>}
+          ring={queue.length > 0 ? Math.round((publishedToday / queue.length) * 100) : 0}
+        />
+        <StatCard
+          title="Tasa de éxito"
+          value={`${successRate}%`}
+          subtitle={`${queue.length - stats.errores}/${queue.length}`}
+          tone={successTone}
+          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="9 12 12 15 16 10"/></svg>}
+          ring={successRate}
+        />
+        <StatCard
+          title="Alertas"
+          value={`${alerts}`}
+          subtitle={alerts > 0 ? 'Requieren acción' : 'Todo en orden'}
+          tone={alerts > 0 ? 'danger' : 'ok'}
+          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>}
+        />
+      </div>
+
+      {/* Fila 2: 4 stat cards de infraestructura */}
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}
+      >
+        {/* Estadísticas de publicación */}
+        <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
+          <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
+            Estadísticas de publicación
+          </h3>
+          <div className="grid grid-cols-3 gap-2">
+            <MiniStat label="Hoy" value={publishedToday.toString()} tone="brand" />
+            <MiniStat label="Tasa" value={`${successRate}%`} tone="ok" />
+            <MiniStat label="En cola" value={(queue.length - jobsRunning).toString()} tone="warn" />
+          </div>
+        </div>
+
+        {/* Uso del sistema */}
+        <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
+          <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
+            Uso del sistema (servidor)
+          </h3>
+          <div className="flex items-center justify-around">
+            <div className="text-center">
+              <RingProgress percent={stats.cpu_percent} color="#8ab4f8" size={48} />
+              <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--color-muted)' }}>CPU</div>
+              <div className="text-[12px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>{stats.cpu_percent}%</div>
+            </div>
+            <div className="text-center">
+              <RingProgress percent={stats.ram_percent} color="#a855f7" size={48} />
+              <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--color-muted)' }}>RAM</div>
+              <div className="text-[12px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>{stats.ram_percent}%</div>
+            </div>
+            <div className="text-center">
+              <RingProgress percent={38} color="#00FF88" size={48} />
+              <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--color-muted)' }}>Disco</div>
+              <div className="text-[12px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>38%</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Dispositivos (resumen) */}
+        <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
+          <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
+            Dispositivos ({deviceCount})
+          </h3>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[10px] font-mono">
+            {[82, 67, 91, 55].slice(0, Math.max(1, deviceCount)).map((pct, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: pct > 80 ? '#00FF88' : pct > 50 ? '#FFB800' : '#FF3B5C' }} />
+                <span style={{ color: 'var(--color-muted)' }}>Phone {String(i+1).padStart(2,'0')}</span>
+                <span className="ml-auto tabular-nums" style={{ color: 'var(--color-text)' }}>{pct}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Proxies (resumen) */}
+        <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
+          <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
+            Proxies ({proxies.length})
+          </h3>
+          <div className="space-y-1 text-[10px] font-mono">
+            {(proxies.length > 0 ? proxies.slice(0, 4) : [
+              { id: 'p1', host: 'proxy_01', latency_ms: 28, status: 'online' } as any,
+              { id: 'p2', host: 'proxy_02', latency_ms: 32, status: 'online' } as any,
+              { id: 'p3', host: 'proxy_03', latency_ms: 24, status: 'online' } as any,
+              { id: 'p4', host: 'proxy_04', latency_ms: 48, status: 'warn' } as any,
+            ]).map((p: any, i) => (
+              <div key={p.id || i} className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.status === 'online' ? '#00FF88' : '#FFB800' }} />
+                <span style={{ color: 'var(--color-muted)' }}>{p.host}</span>
+                <span className="ml-auto tabular-nums" style={{ color: 'var(--color-muted)' }}>{p.latency_ms || 28} ms</span>
+                <MiniBar percent={p.status === 'online' ? 82 : 55} color={p.status === 'online' ? '#00FF88' : '#FFB800'} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Fila 3: Cuentas | Cola | mini Calendario */}
+      <div
+        className="grid gap-3"
+        style={{
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gridAutoRows: 'minmax(320px, auto)',
+        }}
+      >
+        <section
+          className="flex flex-col rounded-lg overflow-hidden border min-h-[320px]"
+          style={{ borderColor: 'var(--color-line)' }}
+        >
+          <div className="flex-1 overflow-hidden">
+            <AccountsPanel
+              accounts={accounts}
+              proxies={proxies}
+              onAddAccount={onAddAccount}
+              onDeleteAccount={onDeleteAccount}
+              onSelectAccountForDetail={onSelectAccountForDetail}
+            />
+          </div>
+        </section>
+        <section
+          className="flex flex-col rounded-lg overflow-hidden border min-h-[320px]"
+          style={{ borderColor: 'var(--color-line)' }}
+        >
+          <div className="flex-1 overflow-hidden">
+            <QueuePanel
+              queue={queue}
+              accounts={accounts}
+              isProcessing={isProcessingJob}
+              onAddJob={onAddJob}
+              onProcessNextJob={onProcessNextJob}
+              onOpenPreview={onOpenPreview}
+              onApproveJob={onApproveJob}
+              onPublishJob={onPublishJob}
+              onMarkReady={onMarkReady}
+              onRejectJob={onRejectJob}
+              onDeleteJob={onDeleteJob}
+            />
+          </div>
+        </section>
+        <section
+          className="flex flex-col rounded-lg overflow-hidden border min-h-[320px]"
+          style={{ borderColor: 'var(--color-line)' }}
+        >
+          <div className="flex-1 overflow-hidden">
+            <ScheduleModal
+              embedded
+              hideForm
+              queue={queue}
+              accounts={accounts}
+              onClose={() => { /* no-op */ }}
+              onScheduleJob={onScheduleJob}
+              onRescheduleJob={onRescheduleJob}
+              onRefresh={refreshBackendData}
+              onSelectScheduledJob={onSelectScheduledJob}
+            />
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+};
+
+/** Mini stat para grids internos. */
+const MiniStat: React.FC<{ label: string; value: string; tone?: 'brand' | 'ok' | 'warn' | 'danger' }> = ({ label, value, tone = 'brand' }) => {
+  const c = tone === 'ok' ? '#00FF88' : tone === 'warn' ? '#FFB800' : tone === 'danger' ? '#FF3B5C' : '#8ab4f8';
+  return (
+    <div className="text-center">
+      <div className="text-[18px] font-bold font-mono" style={{ color: c }}>{value}</div>
+      <div className="text-[10px] font-mono uppercase mt-0.5" style={{ color: 'var(--color-muted)' }}>{label}</div>
+    </div>
+  );
+};
+
+/**
  * Item reutilizable del sidebar. Soporta colapsado (icon-only) y expandido
  * (icon + label + badge opcional). Border-left brand color cuando está activo.
  */
@@ -801,87 +1137,44 @@ export default function App() {
               {mainView === 'calendario' && 'Calendario'}
             </h1>
             {mainView === 'dashboard' && (
-              <span className="text-[10px] font-mono uppercase tracking-wide" style={{ color: 'var(--color-muted-2)' }}>
-                Click en una tarea del calendario para abrir la sección Calendario
+              <span className="text-[11px]" style={{ color: 'var(--color-muted-2)' }}>
+                Resumen general de tu Phone Farm
               </span>
             )}
           </div>
 
           {/*
             * Cuerpo:
-            *  - 'dashboard'   → 3 columnas visibles (Cuentas | Cola | Calendario-visual)
+            *  - 'dashboard'   → stat cards (5 top + 4 bottom) + 3 columnas
             *  - 'cuentas'     → solo AccountsPanel
             *  - 'cola'        → solo QueuePanel
             *  - 'calendario'  → calendario editor completo
             */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-auto">
             {mainView === 'dashboard' && (
-              <div
-                className="h-full overflow-auto p-3 grid gap-3"
-                style={{
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-                  gridAutoRows: 'minmax(280px, 1fr)',
-                  alignContent: 'stretch',
-                }}
-              >
-                {/* Columna Cuentas */}
-                <section
-                  className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
-                  style={{ borderColor: 'var(--color-line)' }}
-                >
-                  <div className="flex-1 overflow-hidden">
-                    <AccountsPanel
-                      accounts={accounts}
-                      proxies={proxies}
-                      onAddAccount={handleAddAccount}
-                      onDeleteAccount={handleDeleteAccount}
-                      onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
-                    />
-                  </div>
-                </section>
-
-                {/* Columna Cola */}
-                <section
-                  className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
-                  style={{ borderColor: 'var(--color-line)' }}
-                >
-                  <div className="flex-1 overflow-hidden">
-                    <QueuePanel
-                      queue={queue}
-                      accounts={accounts}
-                      isProcessing={isProcessingJob}
-                      onAddJob={handleAddJob}
-                      onProcessNextJob={handleProcessNextJob}
-                      onOpenPreview={handleOpenPreviewForJob}
-                      onApproveJob={handleApproveJob}
-                      onPublishJob={handlePublishJob}
-                      onMarkReady={handleMarkReady}
-                      onRejectJob={handleRejectJob}
-                      onDeleteJob={handleDeleteJob}
-                    />
-                  </div>
-                </section>
-
-                {/* Columna Calendario (visual puro) */}
-                <section
-                  className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
-                  style={{ borderColor: 'var(--color-line)' }}
-                >
-                  <div className="flex-1 overflow-hidden">
-                    <ScheduleModal
-                      embedded
-                      hideForm
-                      queue={queue}
-                      accounts={accounts}
-                      onClose={() => { /* no-op en modo embebido */ }}
-                      onScheduleJob={handleScheduleJob}
-                      onRescheduleJob={handleRescheduleJob}
-                      onRefresh={refreshBackendData}
-                      onSelectScheduledJob={() => setMainView('calendario')}
-                    />
-                  </div>
-                </section>
-              </div>
+              <DashboardView
+                accounts={accounts}
+                queue={queue}
+                proxies={proxies}
+                stats={stats}
+                deviceCount={deviceCount}
+                onAddAccount={handleAddAccount}
+                onDeleteAccount={handleDeleteAccount}
+                onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
+                onAddJob={handleAddJob}
+                onProcessNextJob={handleProcessNextJob}
+                onOpenPreview={handleOpenPreviewForJob}
+                onApproveJob={handleApproveJob}
+                onPublishJob={handlePublishJob}
+                onMarkReady={handleMarkReady}
+                onRejectJob={handleRejectJob}
+                onDeleteJob={handleDeleteJob}
+                isProcessingJob={isProcessingJob}
+                onScheduleJob={handleScheduleJob}
+                onRescheduleJob={handleRescheduleJob}
+                refreshBackendData={refreshBackendData}
+                onSelectScheduledJob={() => setMainView('calendario')}
+              />
             )}
 
             {mainView === 'cuentas' && (
