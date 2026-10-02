@@ -132,9 +132,13 @@ if (-not (Get-EnvValue $envRootPath "NODE_ENV")) {
 Write-Host "`n[2/6] Dependencias Node..." -ForegroundColor Yellow
 if (-not $SkipInstall -and -not (Test-Path (Join-Path $Root "node_modules"))) {
     Push-Location $Root
-    try { npm install --no-audit --no-fund 2>&1 | Select-Object -Last 2 }
+    # --ignore-scripts: better-sqlite3@13.0.3 ships native prebuilds en
+    # node_modules/better-sqlite3/prebuilds/<platform>-<arch>.node; npm/bun
+    # lanzan node-gyp rebuild por defecto cuando hay binding.gyp, lo que falla
+    # en hosts sin Visual Studio Build Tools. Los prebuilds son funcionales.
+    try { npm install --ignore-scripts --no-audit --no-fund 2>&1 | Select-Object -Last 2 }
     finally { Pop-Location }
-    Write-Host "  ✓ npm install" -ForegroundColor Green
+    Write-Host "  ✓ npm install (--ignore-scripts; usa prebuilds de better-sqlite3)" -ForegroundColor Green
 } else { Write-Host "  (node_modules ya existe o -SkipInstall)" }
 
 # ---------------------------------------------------------------- 3. Stack Python

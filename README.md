@@ -29,6 +29,38 @@
 
 - Node.js ≥ 20 (o Bun ≥ 1.1)
 
+## Gestor de paquetes y lockfiles
+
+El repo mantiene **dos lockfiles** por razones operativas:
+
+| Lockfile | Gestor | Quién lo usa | Quién lo produce |
+|---|---|---|---|
+| `bun.lock` | Bun | **typecheck, build** (CI `bun install --frozen-lockfile`) | Workflows typecheck/build jobs |
+| `package-lock.json` | npm | **test-node, audit-deps** (CI `npm ci`) | Workflows test-node/audit-deps jobs |
+
+Ambos reflejan el mismo árbol de dependencias y deben estar sincronizados. El CI los regenera con lockfiles separados por necesidad: `bun install` y `npm ci` resuelven grafos ligeramente distintos.
+
+**Comando de instalación limpia (cualquier host):**
+
+```powershell
+# gestor canónico en dev: Bun (más rápido)
+bun install --ignore-scripts --frozen-lockfile
+
+# gestor canónico alternativo: npm (también funciona)
+npm install --ignore-scripts
+```
+
+El flag `--ignore-scripts` es necesario en hosts sin Visual Studio Build Tools: `better-sqlite3@13.0.3` ya envía el binding nativo precompilado en `node_modules/better-sqlite3/prebuilds/<platform>-<arch>.node`, pero npm/bun lanzan `node-gyp rebuild` por defecto cuando hay `binding.gyp`. Los prebuilds son la solución válida; ver `docs/RUN-IN-SUBPROCESS.md` (si existe) o el comentario en `.github/workflows/ci.yml`.
+
+Si los dos lockfiles divergen accidentalmente, el CI falla porque tanto `bun install --frozen-lockfile` como `npm ci` son sensibles a drift. Para sincronizarlos localmente:
+
+```powershell
+# 1. regenerar bun.lock desde package-lock.json (o al revés)
+bun install --ignore-scripts
+npm install --ignore-scripts --package-lock-only
+# 2. typecheck + build + test (ver §P4/§P5)
+```
+
 ## Puesta en marcha (un comando)
 
 ```powershell
@@ -40,7 +72,7 @@ powershell -ExecutionPolicy Bypass -File platform\scripts\install-all.ps1
 
 El instalador verifica prerequisitos (winget), crea los `.env`, genera token interno + passwords fuertes, arranca Flask :5000 + MCP :5001 + MPT :8080 y verifica endpoints. Solo queda poner tus API keys en `platform/.env` (`MINIMAX_API_KEY`, `PEXELS_API_KEY`) y reiniciar con `platform\scripts\run-native.ps1`.
 
-> Desarrollo del frontend: `bun install` + `bun run dev` (requiere el backend Python aparte, ver [platform/README.md](platform/README.md)).
+> Desarrollo del frontend: `bun install --ignore-scripts` + `bun run dev` (requiere el backend Python aparte, ver [platform/README.md](platform/README.md)). `--ignore-scripts` es necesario en hosts sin Visual Studio Build Tools: `better-sqlite3@13.0.3` ya envía el binding nativo precompilado en `node_modules/better-sqlite3/prebuilds/<platform>-<arch>.node`, pero npm/bun lanzan `node-gyp rebuild` por defecto cuando hay `binding.gyp`.
 
 > No hay credenciales demo: el servidor se niega a arrancar con passwords débiles o conocidos (`server/config.ts`). En producción (`NODE_ENV=production`) `ADMIN_PASSWORD` y `OPERATOR_PASSWORD` son obligatorios.
 
