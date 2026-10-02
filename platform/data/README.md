@@ -18,7 +18,7 @@ It is **not** the active data directory for native execution.
 
 ## Why hand-editing has no effect (native)
 
-`platform/phonefarm/proxy_manager.py:37` and `engagement.py:33` both resolve:
+`platform/phonefarm/proxy_manager.py:37` resuelve las rutas de trabajo; el path es compartido con ADB vía variable `WORKDIR_DATA`.
 
 ```python
 DATA_DIR = Path(os.getenv("PHONE_FARM_DATA_DIR", BASE_DIR))
