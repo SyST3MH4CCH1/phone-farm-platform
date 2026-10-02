@@ -17,6 +17,19 @@ interface ScheduleModalProps {
    * modal centrado con botón ✕ y click-outside-to-close.
    */
   embedded?: boolean;
+  /**
+   * Si se pasa, se llama al hacer click sobre una píldora del calendario
+   * (job ya creado y programado). Sirve para que el dashboard navegue a la
+   * sección de Calendario cuando el usuario quiere profundizar.
+   * Si es `undefined`, las píldoras no son clickables (modo visual puro).
+   */
+  onSelectScheduledJob?: (jobId: string) => void;
+  /**
+   * Si `true`, no se renderiza el formulario de "Programar nueva publicación"
+   * en la parte inferior. Útil cuando el calendario es solo de visualización
+   * (dashboard) y no se quiere permitir crear nuevas publicaciones desde ahí.
+   */
+  hideForm?: boolean;
 }
 
 type View = 'month' | 'week' | 'day' | 'agenda';
@@ -44,7 +57,7 @@ const fmtTime = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', mi
 /** Calendario de programación estilo Google Calendar — hecho a mano (sin librerías):
  *  vista mes (píldoras), semana y día (tramos de horas), agenda, filtros por cuenta/terminal.
  *  Drag & drop: arrastra píldoras entre días/horas para reprogramar. */
-export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, onClose, onScheduleJob, onRescheduleJob, onRefresh, embedded = false }) => {
+export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, onClose, onScheduleJob, onRescheduleJob, onRefresh, embedded = false, onSelectScheduledJob, hideForm = false }) => {
   const now = new Date();
   const [view, setView] = useState<View>('month');
   const [cursor, setCursor] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -304,9 +317,10 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
                           draggable
                           onDragStart={(e) => handleDragStart(e, job.id)}
                           onDragEnd={handleDragEnd}
+                          onClick={() => onSelectScheduledJob?.(job.id)}
                           className="truncate rounded px-1.5 py-0.5 text-[10px] font-medium text-[#E8EAED] border-l-[4px] cursor-grab active:cursor-grabbing"
                           style={{ background: `${colorOf(job)}1F`, borderLeftColor: colorOf(job) }}
-                          title={`${job.id} · ${job.keyword} · ${fmtTime(date)} — arrastrar para reprogramar`}
+                          title={`${job.id} · ${job.keyword} · ${fmtTime(date)} — arrastrar para reprogramar, click para abrir en sección Calendario`}
                         >
                           {fmtTime(date)} {job.keyword}
                         </div>
@@ -372,6 +386,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
                         draggable
                         onDragStart={(e) => handleDragStart(e, job.id)}
                         onDragEnd={handleDragEnd}
+                        onClick={() => onSelectScheduledJob?.(job.id)}
                         className="absolute mx-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-[#E8EAED] border-l-[4px] overflow-hidden whitespace-nowrap cursor-grab active:cursor-grabbing z-10"
                         style={{
                           top,
@@ -419,7 +434,11 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
                     <tr><td colSpan={5} className="py-6 text-center text-[#9aa0a6]">Sin publicaciones programadas.</td></tr>
                   )}
                   {[...scheduled].sort((a, b) => a.date.getTime() - b.date.getTime()).map(({ job, date }) => (
-                    <tr key={job.id} className="border-t border-[#3c4043]">
+                    <tr
+                      key={job.id}
+                      onClick={() => onSelectScheduledJob?.(job.id)}
+                      className={`border-t border-[#3c4043] ${onSelectScheduledJob ? 'cursor-pointer hover:bg-[#2f3133]' : ''}`}
+                    >
                       <td className="py-2 px-3 text-[#E8EAED]">{date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</td>
                       <td className="py-2 px-3 text-[#9aa0a6]">{fmtTime(date)}</td>
                       <td className="py-2 px-3">
@@ -436,7 +455,8 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
             </div>
           )}
 
-          {/* Formulario rápido */}
+          {/* Formulario rápido (oculto en modo dashboard/visual) */}
+          {!hideForm && (
           <div className="mt-3 border-t border-[#2A2C30] pt-3">
             <div className="font-mono text-xs font-bold text-[#E5E5E5] mb-2">
               Programar nueva publicación
@@ -461,6 +481,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
             </form>
             {msg && <p className={`mt-2 text-[11px] font-mono ${msg.ok ? 'text-[#6FBF73]' : 'text-[#E05B5B]'}`}>{msg.text}</p>}
           </div>
+          )}
         </div>
   );
 

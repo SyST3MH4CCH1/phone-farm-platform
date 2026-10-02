@@ -31,6 +31,39 @@ const EMPTY_STATS: SystemStats = {
   panda_grid_status: 'Disconnected'
 };
 
+/**
+ * Item reutilizable del sidebar. Soporta colapsado (icon-only) y expandido
+ * (icon + label + badge opcional). Border-left brand color cuando está activo.
+ */
+const SidebarItem: React.FC<{
+  collapsed: boolean;
+  active?: boolean;
+  onClick: () => void;
+  title: string;
+  label: string;
+  icon: React.ReactNode;
+  badge?: number;
+}> = ({ collapsed, active = false, onClick, title, label, icon, badge }) => (
+  <button
+    onClick={onClick}
+    title={title}
+    aria-label={title}
+    className="w-full px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2 text-[12px]"
+    style={{
+      borderColor: active ? 'var(--color-brand)' : 'transparent',
+      background: active ? 'var(--color-surface-2)' : undefined,
+      color: active ? 'var(--color-text)' : 'var(--color-muted)',
+      justifyContent: collapsed ? 'center' : 'flex-start',
+    }}
+  >
+    <span className="w-5 h-5 shrink-0 flex items-center justify-center">{icon}</span>
+    {!collapsed && <span className="truncate">{label}</span>}
+    {!collapsed && badge !== undefined && (
+      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--color-surface-3)', color: 'var(--color-muted-2)' }}>{badge}</span>
+    )}
+  </button>
+);
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -55,9 +88,14 @@ export default function App() {
   const [showAdbModal, setShowAdbModal] = useState(false);
   const [showQueueModal, setShowQueueModal] = useState(false);
   const [showPandaModal, setShowPandaModal] = useState(false);
-  // (Fase A.4: activeMainTab eliminado — las 3 columnas se ven siempre, no
-  // hay tabs que conmuten. El icono Calendario del sidebar hace scrollIntoView
-  // sobre la columna correspondiente.)
+  // Página principal: 'dashboard' = solo calendario visual (default),
+  // 'cuentas' = lista de cuentas, 'cola' = cola de jobs, 'calendario' =
+  // calendario completo con formulario de programación.
+  const [mainView, setMainView] = useState<'dashboard' | 'cuentas' | 'cola' | 'calendario'>('dashboard');
+  // Sidebar izquierdo colapsado (reducido a iconos). Default expandido.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Terminal logs colapsado (5 líneas expandido, 2 líneas colapsado).
+  const [terminalExpanded, setTerminalExpanded] = useState(false);
   const [showMoneyPrinterModal, setShowMoneyPrinterModal] = useState(false);
   const [showVersionControlModal, setShowVersionControlModal] = useState(false);
   const [terminalMinimized, setTerminalMinimized] = useState(false);
@@ -618,270 +656,210 @@ export default function App() {
 
       {/* Layout principal: sidebar dock + contenido con tabs */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar dock — 56px icono-only, expander a 200px on hover */}
+        {/* Sidebar dock — colapsado (56px iconos) / expandido (200px). Toggle con flecha abajo. */}
         <aside
-          className="w-14 hover:w-52 shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200 group"
+          className={`${sidebarCollapsed ? 'w-14' : 'w-52'} shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200`}
           style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
         >
-          {/* Status footer */}
-          <div className="px-3 py-3 border-b text-[10px] tabular-nums" style={{ borderColor: 'var(--color-line)', color: 'var(--color-muted-2)' }}>
-            <span className="hidden group-hover:inline">cpu {stats.cpu_percent}%</span>
-            <span
-              className="w-2 h-2 rounded-full inline-block ml-1"
-              style={{
-                background: stack.flask_online ? 'var(--color-ok)' : 'var(--color-danger)',
-              }}
+          {/* Status footer (siempre visible) */}
+          <div className="px-3 py-3 border-b text-[10px] tabular-nums flex items-center justify-between" style={{ borderColor: 'var(--color-line)', color: 'var(--color-muted-2)' }}>
+            <span className="flex items-center gap-1.5">
+              <span
+                className="w-2 h-2 rounded-full inline-block"
+                style={{ background: stack.flask_online ? 'var(--color-ok)' : 'var(--color-danger)' }}
+              />
+              {!sidebarCollapsed && <span>cpu {stats.cpu_percent}%</span>}
+            </span>
+          </div>
+
+          {/* Navegación principal: Dashboard, Cuentas, Cola, Calendario */}
+          <nav className="flex-1 py-2">
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              active={mainView === 'dashboard'}
+              onClick={() => setMainView('dashboard')}
+              title="Dashboard"
+              label="Dashboard"
+              icon={
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+              }
+            />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              active={mainView === 'cuentas'}
+              onClick={() => setMainView('cuentas')}
+              title="Cuentas"
+              label="Cuentas"
+              badge={accounts.length}
+              icon={
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              }
+            />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              active={mainView === 'cola'}
+              onClick={() => setMainView('cola')}
+              title="Cola"
+              label="Cola"
+              badge={queue.length}
+              icon={
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              }
+            />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              active={mainView === 'calendario'}
+              onClick={() => setMainView('calendario')}
+              title="Calendario"
+              label="Calendario"
+              badge={queue.filter(j => j.scheduled_ts).length}
+              icon={
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              }
+            />
+          </nav>
+
+          {/* Separador + items secundarios (modales del header original) */}
+          <div className="border-t py-1" style={{ borderColor: 'var(--color-line)' }}>
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              onClick={() => openTab('moneyprinter', () => setShowMoneyPrinterModal(true))}
+              title="MoneyPrinter"
+              label="MoneyPrinter"
+              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>}
+            />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              onClick={() => openTab('adb', () => setShowAdbModal(true))}
+              title="ADB Bridge"
+              label="ADB Bridge"
+              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>}
+            />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              onClick={() => openTab('panda', () => setShowPandaModal(true))}
+              title="Panda live"
+              label="Panda live"
+              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="8" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/></svg>}
+            />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              onClick={() => openTab('curl', () => setShowCurlModal(true))}
+              title="cURL API"
+              label="cURL API"
+              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>}
+            />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              onClick={() => openTab('code', () => setShowCodeModal(true))}
+              title="Código Python"
+              label="Código Python"
+              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>}
+            />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              onClick={() => openTab('versions', () => setShowVersionControlModal(true))}
+              title="Versiones"
+              label="Versiones"
+              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
+            />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              onClick={() => openTab('proxies', () => setShowProxyModal(true))}
+              title="Proxies"
+              label="Proxies"
+              badge={proxies.length}
+              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>}
             />
           </div>
 
-          {/* Nav items — icon + label on hover */}
+          {/* Toggle colapsar/expandir (flecha discreta abajo) */}
           <button
-            onClick={() => openTab('panda', () => setShowPandaModal(true))}
-            title="Dispositivos ADB"
-            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
-            style={{
-              borderColor: activeTab === 'panda' ? 'var(--color-brand)' : 'transparent',
-              background: activeTab === 'panda' ? 'var(--color-surface-2)' : undefined,
-              color: activeTab === 'panda' ? 'var(--color-text)' : 'var(--color-muted)',
-            }}
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            title={sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}
+            aria-label={sidebarCollapsed ? 'Expandir menú lateral' : 'Colapsar menú lateral'}
+            className="px-3 py-2.5 flex items-center gap-2 transition-colors border-t text-[10px] uppercase tracking-wider"
+            style={{ borderColor: 'var(--color-line)', color: 'var(--color-muted)' }}
           >
             <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {sidebarCollapsed ? <polyline points="9 18 15 12 9 6" /> : <polyline points="15 18 9 12 15 6" />}
+              </svg>
             </span>
-            <span className="hidden group-hover:block text-[11px]">Dispositivos</span>
-            <span className="hidden group-hover:block ml-auto text-[10px]" style={{ color: 'var(--color-muted-2)' }}>{deviceCount}</span>
+            {!sidebarCollapsed && <span>{sidebarCollapsed ? 'Expandir' : 'Colapsar'}</span>}
           </button>
 
-          <button
-            onClick={() => window.open('/panda', '_blank', 'noopener,width=1100,height=760')}
-            title="Panda live"
-            className="px-3 py-2.5 flex items-center gap-3 transition-colors"
-            style={{ color: 'var(--color-muted)' }}
-          >
-            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-            </span>
-            <span className="hidden group-hover:block text-[11px]">Panda live</span>
-          </button>
+          </aside>
 
-          <button
-            onClick={() => openTab('proxies', () => setShowProxyModal(true))}
-            title="Proxies"
-            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
-            style={{
-              borderColor: activeTab === 'proxies' ? 'var(--color-brand)' : 'transparent',
-              background: activeTab === 'proxies' ? 'var(--color-surface-2)' : undefined,
-              color: activeTab === 'proxies' ? 'var(--color-text)' : 'var(--color-muted)',
-            }}
-          >
-            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-            </span>
-            <span className="hidden group-hover:block text-[11px]">Proxies</span>
-            <span className="hidden group-hover:block ml-auto text-[10px]" style={{ color: 'var(--color-muted-2)' }}>{proxies.length}</span>
-          </button>
-
-          <button
-            onClick={() => openTab('schedule', () => {
-              // Las 3 columnas viven siempre; el icono solo hace scroll + highlight
-              // de la columna de Calendario.
-              const el = document.getElementById('section-calendario');
-              el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              el?.animate(
-                [
-                  { boxShadow: '0 0 0 0 rgba(138,180,248,0.0)' },
-                  { boxShadow: '0 0 0 2px rgba(138,180,248,0.6)' },
-                  { boxShadow: '0 0 0 0 rgba(138,180,248,0.0)' },
-                ],
-                { duration: 800, easing: 'ease-out' }
-              );
-            })}
-            title="Calendario"
-            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
-            style={{
-              borderColor: activeTab === 'schedule' ? 'var(--color-brand)' : 'transparent',
-              background: activeTab === 'schedule' ? 'var(--color-surface-2)' : undefined,
-              color: activeTab === 'schedule' ? 'var(--color-text)' : 'var(--color-muted)',
-            }}
-          >
-            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            </span>
-            <span className="hidden group-hover:block text-[11px]">Calendario</span>
-            <span className="hidden group-hover:block ml-auto text-[10px]" style={{ color: 'var(--color-muted-2)' }}>{queue.filter(j => j.scheduled_ts).length}</span>
-          </button>
-
-          <button
-            onClick={() => openTab('moneyprinter', () => setShowMoneyPrinterModal(true))}
-            title="MoneyPrinter"
-            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
-            style={{
-              borderColor: activeTab === 'moneyprinter' ? 'var(--color-brand)' : 'transparent',
-              background: activeTab === 'moneyprinter' ? 'var(--color-surface-2)' : undefined,
-              color: activeTab === 'moneyprinter' ? 'var(--color-text)' : 'var(--color-muted)',
-            }}
-          >
-            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            </span>
-            <span className="hidden group-hover:block text-[11px]">MoneyPrinter</span>
-          </button>
-
-          <button
-            onClick={() => openTab('adb', () => setShowAdbModal(true))}
-            title="ADB Bridge"
-            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
-            style={{
-              borderColor: activeTab === 'adb' ? 'var(--color-brand)' : 'transparent',
-              background: activeTab === 'adb' ? 'var(--color-surface-2)' : undefined,
-              color: activeTab === 'adb' ? 'var(--color-text)' : 'var(--color-muted)',
-            }}
-          >
-            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            </span>
-            <span className="hidden group-hover:block text-[11px]">ADB Bridge</span>
-          </button>
-
-          <button
-            onClick={() => openTab('curl', () => setShowCurlModal(true))}
-            title="cURL API"
-            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
-            style={{
-              borderColor: activeTab === 'curl' ? 'var(--color-brand)' : 'transparent',
-              background: activeTab === 'curl' ? 'var(--color-surface-2)' : undefined,
-              color: activeTab === 'curl' ? 'var(--color-text)' : 'var(--color-muted)',
-            }}
-          >
-            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-            </span>
-            <span className="hidden group-hover:block text-[11px]">cURL API</span>
-          </button>
-
-          <button
-            onClick={() => openTab('code', () => setShowCodeModal(true))}
-            title="Código Python"
-            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
-            style={{
-              borderColor: activeTab === 'code' ? 'var(--color-brand)' : 'transparent',
-              background: activeTab === 'code' ? 'var(--color-surface-2)' : undefined,
-              color: activeTab === 'code' ? 'var(--color-text)' : 'var(--color-muted)',
-            }}
-          >
-            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-            </span>
-            <span className="hidden group-hover:block text-[11px]">Código Python</span>
-          </button>
-
-          <button
-            onClick={() => openTab('versions', () => setShowVersionControlModal(true))}
-            title="Versiones"
-            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
-            style={{
-              borderColor: activeTab === 'versions' ? 'var(--color-brand)' : 'transparent',
-              background: activeTab === 'versions' ? 'var(--color-surface-2)' : undefined,
-              color: activeTab === 'versions' ? 'var(--color-text)' : 'var(--color-muted)',
-            }}
-          >
-            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-            </span>
-            <span className="hidden group-hover:block text-[11px]">Versiones</span>
-          </button>
-
-          <button
-            onClick={handleDownloadAllZip}
-            title="Descargar ZIP"
-            className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
-            style={{ borderColor: 'transparent', color: 'var(--color-muted)' }}
-          >
-            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </span>
-            <span className="hidden group-hover:block text-[11px]">Descargar ZIP</span>
-          </button>
-        </aside>
-
-        {/* Main — tabs layout: Cuentas | Cola | Calendario */}
+        {/* Main — vista única seleccionada por mainView */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          {/* Etiquetas de sección (NO son tabs: las 3 columnas se ven siempre) */}
-          <div className="flex border-b px-3 pt-2 gap-1 text-[11px] font-mono" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
-            <span className="px-3 py-1.5 rounded-t-md font-medium" style={{ color: 'var(--color-text)' }}>
-              Cuentas <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--color-surface-3)', color: 'var(--color-muted-2)' }}>{accounts.length}</span>
-            </span>
-            <span className="px-3 py-1.5 rounded-t-md font-medium" style={{ color: 'var(--color-text)' }}>
-              Cola <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--color-surface-3)', color: 'var(--color-muted-2)' }}>{queue.length}</span>
-            </span>
-            <span className="px-3 py-1.5 rounded-t-md font-medium" style={{ color: 'var(--color-text)' }}>
-              Calendario
-            </span>
+          {/* Encabezado de página */}
+          <div className="flex items-center justify-between border-b px-4 py-2.5" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
+            <h1 className="text-[13px] font-mono uppercase tracking-wider font-bold" style={{ color: 'var(--color-text)' }}>
+              {mainView === 'dashboard' && 'Dashboard'}
+              {mainView === 'cuentas' && 'Cuentas'}
+              {mainView === 'cola' && 'Cola'}
+              {mainView === 'calendario' && 'Calendario'}
+            </h1>
+            {mainView === 'dashboard' && (
+              <span className="text-[10px] font-mono uppercase tracking-wide" style={{ color: 'var(--color-muted-2)' }}>
+                Solo vista · click en una tarea para abrir la sección Calendario
+              </span>
+            )}
           </div>
 
           {/*
-            * Cuerpo principal: 3 columnas visibles siempre.
-            *  - En pantallas >=1280px: 3 columnas iguales (Cuentas | Cola | Calendario).
-            *  - En 1024-1280px: Cuentas + Cola, Calendario debajo (2x1).
-            *  - En <1024px: stack vertical.
-            * El icono Calendario del sidebar hace scrollIntoView de la columna
-            * correspondiente (focus sin navegación).
+            * Cuerpo: una sola vista a la vez, seleccionada por mainView.
+            *  - 'dashboard' → calendario visual (sin formulario de programación)
+            *  - 'cuentas' → AccountsPanel
+            *  - 'cola'     → QueuePanel
+            *  - 'calendario' → calendario completo con formulario
             */}
-          <div
-            className="flex-1 overflow-auto p-3 grid gap-3"
-            style={{
-              gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-              gridAutoRows: 'minmax(280px, 1fr)',
-              alignContent: 'stretch',
-            }}
-          >
-            {/* Columna 1 — Cuentas */}
-            <section
-              id="section-cuentas"
-              className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
-              style={{ borderColor: 'var(--color-line)' }}
-            >
-              <div className="flex-1 overflow-hidden">
-                <AccountsPanel
-                  accounts={accounts}
-                  proxies={proxies}
-                  onAddAccount={handleAddAccount}
-                  onDeleteAccount={handleDeleteAccount}
-                  onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
-                />
-              </div>
-            </section>
-
-            {/* Columna 2 — Cola */}
-            <section
-              id="section-cola"
-              className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
-              style={{ borderColor: 'var(--color-line)' }}
-            >
-              <div className="flex-1 overflow-hidden">
-                <QueuePanel
+          <div className="flex-1 overflow-hidden p-3">
+            {mainView === 'dashboard' && (
+              <div className="h-full flex flex-col rounded-lg overflow-hidden border" style={{ borderColor: 'var(--color-line)' }}>
+                <ScheduleModal
+                  embedded
+                  hideForm
                   queue={queue}
                   accounts={accounts}
-                  isProcessing={isProcessingJob}
-                  onAddJob={handleAddJob}
-                  onProcessNextJob={handleProcessNextJob}
-                  onOpenPreview={handleOpenPreviewForJob}
-                  onApproveJob={handleApproveJob}
-                  onPublishJob={handlePublishJob}
-                  onMarkReady={handleMarkReady}
-                  onRejectJob={handleRejectJob}
-                  onDeleteJob={handleDeleteJob}
+                  onClose={() => { /* no-op en modo embebido */ }}
+                  onScheduleJob={handleScheduleJob}
+                  onRescheduleJob={handleRescheduleJob}
+                  onRefresh={refreshBackendData}
+                  onSelectScheduledJob={() => setMainView('calendario')}
                 />
               </div>
-            </section>
+            )}
 
-            {/* Columna 3 — Calendario */}
-            <section
-              id="section-calendario"
-              className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
-              style={{ borderColor: 'var(--color-line)' }}
-            >
-              <div className="flex-1 overflow-hidden">
+            {mainView === 'cuentas' && (
+              <AccountsPanel
+                accounts={accounts}
+                proxies={proxies}
+                onAddAccount={handleAddAccount}
+                onDeleteAccount={handleDeleteAccount}
+                onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
+              />
+            )}
+
+            {mainView === 'cola' && (
+              <QueuePanel
+                queue={queue}
+                accounts={accounts}
+                isProcessing={isProcessingJob}
+                onAddJob={handleAddJob}
+                onProcessNextJob={handleProcessNextJob}
+                onOpenPreview={handleOpenPreviewForJob}
+                onApproveJob={handleApproveJob}
+                onPublishJob={handlePublishJob}
+                onMarkReady={handleMarkReady}
+                onRejectJob={handleRejectJob}
+                onDeleteJob={handleDeleteJob}
+              />
+            )}
+
+            {mainView === 'calendario' && (
+              <div className="h-full flex flex-col rounded-lg overflow-hidden border" style={{ borderColor: 'var(--color-line)' }}>
                 <ScheduleModal
                   embedded
                   queue={queue}
@@ -892,13 +870,20 @@ export default function App() {
                   onRefresh={refreshBackendData}
                 />
               </div>
-            </section>
+            )}
           </div>
 
-          {/* Terminal Logs — fixed at bottom */}
-          <div className={`shrink-0 overflow-hidden ${terminalMinimized ? 'h-10' : 'h-48'}`} style={{ transition: 'height 200ms ease' }}>
+          {/* Terminal Logs — fixed at bottom; colapsable (5 líneas expandido / 2 líneas colapsado) */}
+          <div
+            className="shrink-0 overflow-hidden border-t"
+            style={{
+              height: terminalMinimized ? 60 : 130,
+              transition: 'height 220ms ease',
+              borderColor: 'var(--color-line)',
+            }}
+          >
             <TerminalLogs
-              logs={logs}
+              logs={terminalMinimized ? logs.slice(-2) : logs}
               onClearLogs={() => setLogs([])}
               isMinimized={terminalMinimized}
               onToggleMinimize={() => setTerminalMinimized(!terminalMinimized)}
