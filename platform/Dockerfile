@@ -1,4 +1,4 @@
-# Phone Farm Platform — imagen del controlador Flask + taktik-bot
+# Phone Farm Platform — imagen del controlador Flask
 # Paso 13: imagen base por digest (python 3.11.11 slim-bookworm, verificado
 # 2026-08-13), usuario no-root, sin capabilities y read-only en runtime.
 #
@@ -23,15 +23,15 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# taktik-bot (clonado en el build context por scripts/deploy.ps1)
-COPY third_party/taktik-bot /app/taktik-bot
-RUN pip install --no-cache-dir -r /app/taktik-bot/requirements.txt
+# (Fase A: taktik-bot eliminado — antes se copiaba third_party/taktik-bot
+# y se instalaban sus requirements. Sin engagement automation, el Dockerfile
+# ya no necesita esa capa.)
+COPY phonefarm/ /app/phonefarm/
 
-ENV PYTHONPATH=/app:/app/taktik-bot
+ENV PYTHONPATH=/app
 ENV IN_DOCKER=1
 
 COPY . .
-COPY phonefarm/ /app/phonefarm/
 RUN chmod +x /app/scripts/docker-entrypoint.sh
 
 # Directorios de runtime: se montan como volúmenes (data/templates) o tmpfs.

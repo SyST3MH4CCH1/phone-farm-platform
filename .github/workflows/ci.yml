@@ -159,7 +159,7 @@ jobs:
           python -c "
           import re, sys
           lock = open('platform/third_party.lock').read()
-          expected = {'MoneyPrinterTurbo': 'cf5a3ae', 'taktik-bot': 'c2b7489'}
+          expected = {'MoneyPrinterTurbo': 'cf5a3ae'}
           for comp, sha in expected.items():
               if not re.search(rf'^\[{comp}\].*?commit\s*=\s*[\"']?' + sha, lock, re.M | re.DOTALL):
                   print(f'LOCK MISMATCH: {comp} sha {sha} not found in platform/third_party.lock')
