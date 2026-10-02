@@ -413,7 +413,7 @@ app = Flask(__name__, template_folder=str(TEMPLATES_DIR), static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("PHONEFARM_MAX_CONTENT_LENGTH", str(1_000_000)))
 
 # Token interno compartido con el panel Express (server.ts). Flask NO es público:
-# aunque bindee a 127.0.1 (o 0.0.0.0 en Docker con loopback solo), exige este header
+# aunque bindee a 127.0.0.1 (o 0.0.0.0 en Docker con loopback solo), exige este header
 # en TODO /api/*, /engagement/*, /stream/*, /videos/*.
 # SIN fallback embebido (seguridad): debe venir de platform/.env (INTERNAL_TOKEN).
 INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "")
