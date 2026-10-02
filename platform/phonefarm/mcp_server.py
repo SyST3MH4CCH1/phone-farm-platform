@@ -415,7 +415,7 @@ def start_mcp_server(port: int = 5001) -> None:
     app = BearerAuthMiddleware(mcp.streamable_http_app())
     # En Docker escucha 0.0.0.0 (el loopback lo garantiza el bind del compose
     # "127.0.0.1:5001:5001"); local: solo 127.0.0.1.
-    bind_host = "0.0.0.0" if os.getenv("IN_DOCKER", "0") == "1" else "127.0.0.1"
+    bind_host = "0.0.0.0" if os.getenv("IN_DOCKER", "0") == "1" else "127.0.0.1"  # nosec B104 — gated by IN_DOCKER; docker-compose.yml publishes only 127.0.0.1
 
     def run() -> None:
         logger.info("MCP server (Streamable HTTP, Bearer auth) en http://%s:%d/mcp", bind_host, port)

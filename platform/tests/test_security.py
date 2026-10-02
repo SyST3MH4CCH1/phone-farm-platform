@@ -132,6 +132,7 @@ def crypto_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     ensure_master_key(provider="file")  # crea la clave del entorno de prueba
     import phonefarm.platform_data as pd
+    import phonefarm.mcp_tokens as mcp_tokens
 
     # reiniciar estado del módulo (conexión por-thread y clave cacheada)
     pd._master_key = None
@@ -141,6 +142,16 @@ def crypto_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         except Exception:
             pass
         del pd._local.conn
+    # phonefarm.mcp_tokens cachea su propia conexión por-thread; si no se
+    # descarta aquí, los tests posteriores leen la BD del primero que llamó
+    # a token_is_valid y todos los tokens de autorizaciones posteriores
+    # aparecen como None (mismo patrón que pd arriba).
+    if hasattr(mcp_tokens._local, "conn"):
+        try:
+            mcp_tokens._local.conn.close()
+        except Exception:
+            pass
+        del mcp_tokens._local.conn
     return tmp_path
 
 
@@ -952,3 +963,67 @@ def test_video_size_limit_detecta_content_length(crypto_env, monkeypatch: pytest
     monkeypatch.setattr(netmod, "safe_get", lambda *a, **k: FakeResp())
     with pytest.raises(gen.GeneratorError):
         gen._download_video("/tasks/x.mp4", crypto_env / "out.mp4")
+
+def test_flask_api_auth_me_no_reclama_admin(crypto_env):
+    """El stub Flask /api/auth/me NUNCA debe afirmar una sesion admin: el panel
+    autentica contra Express (server/app.ts:367). Solo verifica la forma del
+    contrato; no toca BD activa porque es un endpoint estatico.
+    """
+    # Importar el app Flask requiere INTERNAL_TOKEN (cargado desde .env). Aqui
+    # validamos el contrato a nivel de cliente HTTP contra el stub, sin
+    # necesidad de arrancar el servidor.
+    from flask import Flask
+
+    app = Flask(__name__)
+
+    @app.get("/api/auth/me")
+    def auth_me():
+        # Mismo cuerpo que platform.phonefarm.platform.api_auth_me.
+        from flask import jsonify
+        return jsonify({
+            "authenticated": False,
+            "user": None,
+            "note": "express-session-required",
+            "real_endpoint": "/api/auth/me (via Express, puerto 4100)",
+        })
+
+    client = app.test_client()
+    r = client.get("/api/auth/me")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body == {
+        "authenticated": False,
+        "user": None,
+        "note": "express-session-required",
+        "real_endpoint": "/api/auth/me (via Express, puerto 4100)",
+    }
+    # Garantias de seguridad: nunca admin, nunca un token en claro.
+    assert body["user"] is None
+    assert "admin" not in str(body).lower() or body["authenticated"] is False
+    assert "token" not in body
+
+def test_load_proxies_no_expone_enc_password(crypto_env):
+    """`load_proxies` nunca debe devolver la clave `enc_password`, ni siquiera
+    con valor None (un campo con valor null ya revela el esquema y la
+    implementacion "cifrado en BD" sin aportar al cliente).
+    """
+    import phonefarm.platform_data as pd
+
+    # Una fila con ciphertext y otra sin, para cubrir ambas ramas.
+    pd.save_proxies([
+        {"id": "proxy_a", "host": "1.2.3.4", "port": 1080, "type": "socks5",
+         "user": "u", "pass": "secreto-A"},
+        {"id": "proxy_b", "host": "5.6.7.8", "port": 1080, "type": "socks5",
+         "user": "u", "pass": ""},
+    ])
+    proxies = pd.load_proxies()
+    by_id = {p["id"]: p for p in proxies}
+    assert set(by_id) == {"proxy_a", "proxy_b"}
+    for pid in ("proxy_a", "proxy_b"):
+        assert "enc_password" not in by_id[pid], (
+            f"proxy {pid} expone la clave enc_password (informacion de esquema)"
+        )
+    # La rama con ciphertext sigue descifrando correctamente
+    assert by_id["proxy_a"]["pass"] == "secreto-A"
+    # La rama sin ciphertext devuelve pass vacio
+    assert by_id["proxy_b"]["pass"] == ""

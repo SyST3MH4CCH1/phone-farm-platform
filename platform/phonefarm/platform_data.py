@@ -93,7 +93,8 @@ def _account_to_row(acc: dict[str, Any]) -> dict[str, Any]:
 
 def _row_to_account(row: sqlite3.Row) -> dict[str, Any]:
     acc = dict(row)
-    acc["password"] = _dec("accounts", acc["id"], "password", acc.pop("enc_password")) if acc.get("enc_password") else ""
+    enc_pw = acc.pop("enc_password", None)
+    acc["password"] = _dec("accounts", acc["id"], "password", enc_pw) if enc_pw else ""
     acc.update(json.loads(acc.pop("meta") or "{}"))
     return acc
 
@@ -116,7 +117,8 @@ def _proxy_to_row(proxy: dict[str, Any]) -> dict[str, Any]:
 
 def _row_to_proxy(row: sqlite3.Row) -> dict[str, Any]:
     proxy = dict(row)
-    proxy["pass"] = _dec("proxies", proxy["id"], "password", proxy.pop("enc_password")) if proxy.get("enc_password") else ""
+    enc_pw = proxy.pop("enc_password", None)
+    proxy["pass"] = _dec("proxies", proxy["id"], "password", enc_pw) if enc_pw else ""
     proxy["user"] = proxy.pop("username")
     proxy["type"] = proxy.pop("protocol")
     proxy.update(json.loads(proxy.pop("meta") or "{}"))
