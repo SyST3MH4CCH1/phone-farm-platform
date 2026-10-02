@@ -55,7 +55,9 @@ export default function App() {
   const [showAdbModal, setShowAdbModal] = useState(false);
   const [showQueueModal, setShowQueueModal] = useState(false);
   const [showPandaModal, setShowPandaModal] = useState(false);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  // Pestaña activa del cuerpo principal (Cuentas | Cola | Calendario).
+  // El calendario ahora vive embebido en su pestaña; ya no hay modal flotante.
+  const [activeMainTab, setActiveMainTab] = useState<'cuentas' | 'cola' | 'calendario'>('cuentas');
   const [showMoneyPrinterModal, setShowMoneyPrinterModal] = useState(false);
   const [showVersionControlModal, setShowVersionControlModal] = useState(false);
   const [terminalMinimized, setTerminalMinimized] = useState(false);
@@ -725,7 +727,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => openTab('schedule', () => setShowScheduleModal(true))}
+            onClick={() => openTab('schedule', () => setActiveMainTab('calendario'))}
             title="Calendario"
             className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
             style={{
@@ -839,58 +841,83 @@ export default function App() {
           {/* Tab bar */}
           <div className="flex border-b px-3 pt-2 gap-0.5 text-[11px] font-mono" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
             <button
-              onClick={() => {}}
+              onClick={() => { setActiveMainTab('cuentas'); setActiveTab('dashboard'); }}
               className="px-4 py-2 rounded-t-md border-b-2 transition-colors"
-              style={{ borderColor: 'var(--color-brand)', color: 'var(--color-text)', background: 'var(--color-surface-2)' }}
+              style={activeMainTab === 'cuentas'
+                ? { borderColor: 'var(--color-brand)', color: 'var(--color-text)', background: 'var(--color-surface-2)' }
+                : { borderColor: 'transparent', color: 'var(--color-muted)' }
+              }
             >
               Cuentas <span className="ml-1 text-[10px]" style={{ color: 'var(--color-muted)' }}>{accounts.length}</span>
             </button>
             <button
-              onClick={() => {}}
+              onClick={() => { setActiveMainTab('cola'); setActiveTab('dashboard'); }}
               className="px-4 py-2 rounded-t-md border-b-2 transition-colors"
-              style={{ borderColor: 'transparent', color: 'var(--color-muted)' }}
+              style={activeMainTab === 'cola'
+                ? { borderColor: 'var(--color-brand)', color: 'var(--color-text)', background: 'var(--color-surface-2)' }
+                : { borderColor: 'transparent', color: 'var(--color-muted)' }
+              }
             >
               Cola <span className="ml-1 text-[10px]" style={{ color: 'var(--color-muted-2)' }}>{queue.length}</span>
             </button>
             <button
-              onClick={() => openTab('schedule', () => setShowScheduleModal(true))}
+              onClick={() => { setActiveMainTab('calendario'); setActiveTab('schedule'); }}
               className="px-4 py-2 rounded-t-md border-b-2 transition-colors"
-              style={{ borderColor: 'transparent', color: 'var(--color-muted)' }}
+              style={activeMainTab === 'calendario'
+                ? { borderColor: 'var(--color-brand)', color: 'var(--color-text)', background: 'var(--color-surface-2)' }
+                : { borderColor: 'transparent', color: 'var(--color-muted)' }
+              }
             >
               Calendario
             </button>
           </div>
 
-          {/* Tab content */}
+          {/* Tab content — render condicional basado en activeMainTab */}
           <div className="flex-1 flex overflow-hidden p-3 gap-3">
-            {/* Accounts Panel */}
-            <div className="flex-1 overflow-hidden">
-              <AccountsPanel
-                accounts={accounts}
-                proxies={proxies}
-                onToggleBot={handleToggleBot}
-                onAddAccount={handleAddAccount}
-                onDeleteAccount={handleDeleteAccount}
-                onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
-              />
-            </div>
+            {activeMainTab === 'cuentas' && (
+              <div className="flex-1 overflow-hidden">
+                <AccountsPanel
+                  accounts={accounts}
+                  proxies={proxies}
+                  onToggleBot={handleToggleBot}
+                  onAddAccount={handleAddAccount}
+                  onDeleteAccount={handleDeleteAccount}
+                  onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
+                />
+              </div>
+            )}
 
-            {/* Queue Panel */}
-            <div className="flex-1 overflow-hidden">
-              <QueuePanel
-                queue={queue}
-                accounts={accounts}
-                isProcessing={isProcessingJob}
-                onAddJob={handleAddJob}
-                onProcessNextJob={handleProcessNextJob}
-                onOpenPreview={handleOpenPreviewForJob}
-                onApproveJob={handleApproveJob}
-                onPublishJob={handlePublishJob}
-                onMarkReady={handleMarkReady}
-                onRejectJob={handleRejectJob}
-                onDeleteJob={handleDeleteJob}
-              />
-            </div>
+            {activeMainTab === 'cola' && (
+              <div className="flex-1 overflow-hidden">
+                <QueuePanel
+                  queue={queue}
+                  accounts={accounts}
+                  isProcessing={isProcessingJob}
+                  onAddJob={handleAddJob}
+                  onProcessNextJob={handleProcessNextJob}
+                  onOpenPreview={handleOpenPreviewForJob}
+                  onApproveJob={handleApproveJob}
+                  onPublishJob={handlePublishJob}
+                  onMarkReady={handleMarkReady}
+                  onRejectJob={handleRejectJob}
+                  onDeleteJob={handleDeleteJob}
+                />
+              </div>
+            )}
+
+            {activeMainTab === 'calendario' && (
+              <div className="flex-1 overflow-hidden">
+                <ScheduleModal
+                  embedded
+                  queue={queue}
+                  accounts={accounts}
+                  onClose={() => { /* no-op en modo embebido: el calendario vive en la pestaña */ }}
+                  onScheduleJob={handleScheduleJob}
+                  onRescheduleJob={handleRescheduleJob}
+                  onRefresh={refreshBackendData}
+                />
+              </div>
+            )}
           </div>
 
           {/* Terminal Logs — fixed at bottom */}
@@ -945,17 +972,6 @@ export default function App() {
       {showPandaModal && (
         <PandaGridModal
           onClose={() => setShowPandaModal(false)}
-        />
-      )}
-
-      {showScheduleModal && (
-        <ScheduleModal
-          queue={queue}
-          accounts={accounts}
-          onClose={() => setShowScheduleModal(false)}
-          onScheduleJob={handleScheduleJob}
-          onRescheduleJob={handleRescheduleJob}
-          onRefresh={refreshBackendData}
         />
       )}
 

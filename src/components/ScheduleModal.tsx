@@ -10,6 +10,13 @@ interface ScheduleModalProps {
   onScheduleJob: (keyword: string, targetAccount: string, scheduledTime: string) => Promise<void>;
   onRescheduleJob: (jobId: string, scheduledTime: string) => Promise<void>;
   onRefresh: () => void;
+  /**
+   * Si `true`, el calendario se monta como panel embebido (sin overlay ni
+   * shell modal): ocupa el área de contenido principal cuando la pestaña
+   * 'calendario' está seleccionada. Si `false` (default), se muestra como
+   * modal centrado con botón ✕ y click-outside-to-close.
+   */
+  embedded?: boolean;
 }
 
 type View = 'month' | 'week' | 'day' | 'agenda';
@@ -37,7 +44,7 @@ const fmtTime = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', mi
 /** Calendario de programación estilo Google Calendar — hecho a mano (sin librerías):
  *  vista mes (píldoras), semana y día (tramos de horas), agenda, filtros por cuenta/terminal.
  *  Drag & drop: arrastra píldoras entre días/horas para reprogramar. */
-export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, onClose, onScheduleJob, onRescheduleJob, onRefresh }) => {
+export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, onClose, onScheduleJob, onRescheduleJob, onRefresh, embedded = false }) => {
   const now = new Date();
   const [view, setView] = useState<View>('month');
   const [cursor, setCursor] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -222,30 +229,10 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
     </button>
   );
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <motion.div
-        ref={containerRef}
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ duration: 0.18 }}
-        role="dialog"
-        aria-modal="true"
-        className="modal-shell w-full max-w-5xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-widest font-mono">Calendario de Programación</h3>
-            <p className="text-[11px] text-[#6B7076] font-mono mt-0.5">
-              {scheduled.length} publicación{scheduled.length !== 1 ? 'es' : ''} · click en un slot para agendar · píldora = color de la cuenta
-            </p>
-          </div>
-          <button onClick={onClose} className="btn-close font-bold" title="Cerrar">✕</button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4">
+  // Cuerpo del calendario (toolbar + filtros + grid + form) — compartido entre
+  // el modo modal (con overlay) y el modo embebido (panel de pestaña).
+  const body = (
+    <div className="flex-1 overflow-y-auto p-4">
           {/* Toolbar estilo Google */}
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <button onClick={goToday} className="px-4 py-1.5 rounded-full text-[13px] bg-[#3c4043] text-[#E8EAED] border border-[#3c4043] hover:bg-[#4a4d51]">Hoy</button>
@@ -475,6 +462,55 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
             {msg && <p className={`mt-2 text-[11px] font-mono ${msg.ok ? 'text-[#6FBF73]' : 'text-[#E05B5B]'}`}>{msg.text}</p>}
           </div>
         </div>
+  );
+
+  if (embedded) {
+    // Modo panel: ocupa el área de contenido de la pestaña 'calendario'.
+    // Sin motion.div ni overlay, sin botón ✕ — la pestaña es persistente.
+    return (
+      <div
+        ref={containerRef}
+        className="h-full flex flex-col"
+        role="region"
+        aria-label="Calendario de programación"
+      >
+        <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--color-line)' }}>
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-widest font-mono">Calendario de Programación</h3>
+            <p className="text-[11px] font-mono mt-0.5" style={{ color: 'var(--color-muted-2)' }}>
+              {scheduled.length} publicación{scheduled.length !== 1 ? 'es' : ''} · click en un slot para agendar · píldora = color de la cuenta
+            </p>
+          </div>
+        </div>
+        {body}
+      </div>
+    );
+  }
+
+  // Modo modal: overlay + shell + botón ✕ + click-outside-to-close.
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.18 }}
+        role="dialog"
+        aria-modal="true"
+        className="modal-shell w-full max-w-5xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-widest font-mono">Calendario de Programación</h3>
+            <p className="text-[11px] text-[#6B7076] font-mono mt-0.5">
+              {scheduled.length} publicación{scheduled.length !== 1 ? 'es' : ''} · click en un slot para agendar · píldora = color de la cuenta
+            </p>
+          </div>
+          <button onClick={onClose} className="btn-close font-bold" title="Cerrar">✕</button>
+        </div>
+        {body}
       </motion.div>
     </div>
   );
