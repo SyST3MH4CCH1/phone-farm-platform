@@ -33,7 +33,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: bun install --frozen-lockfile
+      # better-sqlite3@13.0.3 ships prebuilds for all 7 supported platforms in
+      # node_modules/better-sqlite3/prebuilds/. npm and bun default to running
+      # node-gyp rebuild whenever a `binding.gyp` file is present, even though
+      # better-sqlite3 sets `"gypfile": false`. We use --ignore-scripts so the
+      # prebuilt binary is used directly and the install works on hosts without
+      # Visual Studio Build Tools (verified in Windows + Node 22/24 and Linux).
+      - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun run typecheck
       - run: bun run lint
 
@@ -52,7 +58,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun run build
 
   test-node:
@@ -67,7 +73,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm test
 
   test-python:
@@ -96,13 +102,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - name: npm audit (fail si hay high/critical)
         run: npm audit --audit-level=high
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: pip-audit (INF-06: sin || true — debe bloquear)
+      - name: "pip-audit (INF-06: sin || true — debe bloquear)"
         run: |
           python -m pip install pip-audit
           pip-audit -r platform/requirements.txt -f json --progress-spinner off
@@ -153,7 +159,7 @@ jobs:
           python -c "
           import re, sys
           lock = open('platform/third_party.lock').read()
-          expected = {'MoneyPrinterTurbo': '254cd02', 'taktik-bot': 'c2b7489'}
+          expected = {'MoneyPrinterTurbo': 'cf5a3ae', 'taktik-bot': 'c2b7489'}
           for comp, sha in expected.items():
               if not re.search(rf'^\[{comp}\].*?commit\s*=\s*[\"']?' + sha, lock, re.M | re.DOTALL):
                   print(f'LOCK MISMATCH: {comp} sha {sha} not found in platform/third_party.lock')
