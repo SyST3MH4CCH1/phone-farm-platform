@@ -495,14 +495,6 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
         role="region"
         aria-label="Calendario de programación"
       >
-        <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--color-line)' }}>
-          <div>
-            <h3 className="text-sm font-bold uppercase tracking-widest font-mono">Calendario de Programación</h3>
-            <p className="text-[11px] font-mono mt-0.5" style={{ color: 'var(--color-muted-2)' }}>
-              {scheduled.length} publicación{scheduled.length !== 1 ? 'es' : ''} · click en un slot para agendar · píldora = color de la cuenta
-            </p>
-          </div>
-        </div>
         {body}
       </div>
     );
@@ -522,13 +514,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
         className="modal-shell w-full max-w-5xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-header flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-widest font-mono">Calendario de Programación</h3>
-            <p className="text-[11px] text-[#6B7076] font-mono mt-0.5">
-              {scheduled.length} publicación{scheduled.length !== 1 ? 'es' : ''} · click en un slot para agendar · píldora = color de la cuenta
-            </p>
-          </div>
+        <div className="modal-header flex items-center justify-end px-2">
           <button onClick={onClose} className="btn-close font-bold" title="Cerrar">✕</button>
         </div>
         {body}
