@@ -55,9 +55,9 @@ export default function App() {
   const [showAdbModal, setShowAdbModal] = useState(false);
   const [showQueueModal, setShowQueueModal] = useState(false);
   const [showPandaModal, setShowPandaModal] = useState(false);
-  // Pestaña activa del cuerpo principal (Cuentas | Cola | Calendario).
-  // El calendario ahora vive embebido en su pestaña; ya no hay modal flotante.
-  const [activeMainTab, setActiveMainTab] = useState<'cuentas' | 'cola' | 'calendario'>('cuentas');
+  // (Fase A.4: activeMainTab eliminado — las 3 columnas se ven siempre, no
+  // hay tabs que conmuten. El icono Calendario del sidebar hace scrollIntoView
+  // sobre la columna correspondiente.)
   const [showMoneyPrinterModal, setShowMoneyPrinterModal] = useState(false);
   const [showVersionControlModal, setShowVersionControlModal] = useState(false);
   const [terminalMinimized, setTerminalMinimized] = useState(false);
@@ -682,7 +682,20 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => openTab('schedule', () => setActiveMainTab('calendario'))}
+            onClick={() => openTab('schedule', () => {
+              // Las 3 columnas viven siempre; el icono solo hace scroll + highlight
+              // de la columna de Calendario.
+              const el = document.getElementById('section-calendario');
+              el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              el?.animate(
+                [
+                  { boxShadow: '0 0 0 0 rgba(138,180,248,0.0)' },
+                  { boxShadow: '0 0 0 2px rgba(138,180,248,0.6)' },
+                  { boxShadow: '0 0 0 0 rgba(138,180,248,0.0)' },
+                ],
+                { duration: 800, easing: 'ease-out' }
+              );
+            })}
             title="Calendario"
             className="px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2"
             style={{
@@ -793,43 +806,41 @@ export default function App() {
 
         {/* Main — tabs layout: Cuentas | Cola | Calendario */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          {/* Tab bar */}
-          <div className="flex border-b px-3 pt-2 gap-0.5 text-[11px] font-mono" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
-            <button
-              onClick={() => { setActiveMainTab('cuentas'); setActiveTab('dashboard'); }}
-              className="px-4 py-2 rounded-t-md border-b-2 transition-colors"
-              style={activeMainTab === 'cuentas'
-                ? { borderColor: 'var(--color-brand)', color: 'var(--color-text)', background: 'var(--color-surface-2)' }
-                : { borderColor: 'transparent', color: 'var(--color-muted)' }
-              }
-            >
-              Cuentas <span className="ml-1 text-[10px]" style={{ color: 'var(--color-muted)' }}>{accounts.length}</span>
-            </button>
-            <button
-              onClick={() => { setActiveMainTab('cola'); setActiveTab('dashboard'); }}
-              className="px-4 py-2 rounded-t-md border-b-2 transition-colors"
-              style={activeMainTab === 'cola'
-                ? { borderColor: 'var(--color-brand)', color: 'var(--color-text)', background: 'var(--color-surface-2)' }
-                : { borderColor: 'transparent', color: 'var(--color-muted)' }
-              }
-            >
-              Cola <span className="ml-1 text-[10px]" style={{ color: 'var(--color-muted-2)' }}>{queue.length}</span>
-            </button>
-            <button
-              onClick={() => { setActiveMainTab('calendario'); setActiveTab('schedule'); }}
-              className="px-4 py-2 rounded-t-md border-b-2 transition-colors"
-              style={activeMainTab === 'calendario'
-                ? { borderColor: 'var(--color-brand)', color: 'var(--color-text)', background: 'var(--color-surface-2)' }
-                : { borderColor: 'transparent', color: 'var(--color-muted)' }
-              }
-            >
+          {/* Etiquetas de sección (NO son tabs: las 3 columnas se ven siempre) */}
+          <div className="flex border-b px-3 pt-2 gap-1 text-[11px] font-mono" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
+            <span className="px-3 py-1.5 rounded-t-md font-medium" style={{ color: 'var(--color-text)' }}>
+              Cuentas <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--color-surface-3)', color: 'var(--color-muted-2)' }}>{accounts.length}</span>
+            </span>
+            <span className="px-3 py-1.5 rounded-t-md font-medium" style={{ color: 'var(--color-text)' }}>
+              Cola <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--color-surface-3)', color: 'var(--color-muted-2)' }}>{queue.length}</span>
+            </span>
+            <span className="px-3 py-1.5 rounded-t-md font-medium" style={{ color: 'var(--color-text)' }}>
               Calendario
-            </button>
+            </span>
           </div>
 
-          {/* Tab content — render condicional basado en activeMainTab */}
-          <div className="flex-1 flex overflow-hidden p-3 gap-3">
-            {activeMainTab === 'cuentas' && (
+          {/*
+            * Cuerpo principal: 3 columnas visibles siempre.
+            *  - En pantallas >=1280px: 3 columnas iguales (Cuentas | Cola | Calendario).
+            *  - En 1024-1280px: Cuentas + Cola, Calendario debajo (2x1).
+            *  - En <1024px: stack vertical.
+            * El icono Calendario del sidebar hace scrollIntoView de la columna
+            * correspondiente (focus sin navegación).
+            */}
+          <div
+            className="flex-1 overflow-auto p-3 grid gap-3"
+            style={{
+              gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+              gridAutoRows: 'minmax(280px, 1fr)',
+              alignContent: 'stretch',
+            }}
+          >
+            {/* Columna 1 — Cuentas */}
+            <section
+              id="section-cuentas"
+              className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
+              style={{ borderColor: 'var(--color-line)' }}
+            >
               <div className="flex-1 overflow-hidden">
                 <AccountsPanel
                   accounts={accounts}
@@ -839,9 +850,14 @@ export default function App() {
                   onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
                 />
               </div>
-            )}
+            </section>
 
-            {activeMainTab === 'cola' && (
+            {/* Columna 2 — Cola */}
+            <section
+              id="section-cola"
+              className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
+              style={{ borderColor: 'var(--color-line)' }}
+            >
               <div className="flex-1 overflow-hidden">
                 <QueuePanel
                   queue={queue}
@@ -857,21 +873,26 @@ export default function App() {
                   onDeleteJob={handleDeleteJob}
                 />
               </div>
-            )}
+            </section>
 
-            {activeMainTab === 'calendario' && (
+            {/* Columna 3 — Calendario */}
+            <section
+              id="section-calendario"
+              className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
+              style={{ borderColor: 'var(--color-line)' }}
+            >
               <div className="flex-1 overflow-hidden">
                 <ScheduleModal
                   embedded
                   queue={queue}
                   accounts={accounts}
-                  onClose={() => { /* no-op en modo embebido: el calendario vive en la pestaña */ }}
+                  onClose={() => { /* no-op en modo embebido */ }}
                   onScheduleJob={handleScheduleJob}
                   onRescheduleJob={handleRescheduleJob}
                   onRefresh={refreshBackendData}
                 />
               </div>
-            )}
+            </section>
           </div>
 
           {/* Terminal Logs — fixed at bottom */}
