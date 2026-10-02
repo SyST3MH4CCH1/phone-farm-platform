@@ -8,7 +8,11 @@ interface AccountDetailModalProps {
   proxies: ProxyItem[];
   queue: QueueJob[];
   onClose: () => void;
-  onToggleBot: (accountId: string) => void;
+  /**
+   * @deprecated desde Fase A: sin engagement automation. Sera eliminado en
+   * Fase D. Botones que lo llaman ahora son inertes.
+   */
+  onToggleBot?: (accountId: string) => void;
   onOpenMoneyPrinterForAccount: (account: Account) => void;
 }
 
@@ -152,7 +156,7 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
                   </p>
                 </div>
                 <button
-                  onClick={() => onToggleBot(account.id)}
+                  onClick={() => onToggleBot?.(account.id)}
                   className={account.bot_active ? 'btn-danger px-5 py-2 text-[11px]' : 'btn-brand px-5 py-2 text-[11px]'}
                 >
                   {account.bot_active ? 'Detener Taktik Bot' : 'Iniciar Taktik Bot'}

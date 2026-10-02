@@ -375,7 +375,6 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
 
   // --- API protegida (requiere sesión del panel + CSRF en mutaciones) ---
   app.use("/api", requireAuth, csrfProtect);
-  app.use("/engagement", requireAuth, csrfProtect);
   app.use("/videos", requireAuth);
 
   // 1. Stats (real, desde Flask)
@@ -470,9 +469,8 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   // trae %2F/%23 decodificado por Express).
   app.delete("/api/accounts/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/accounts/${encodeURIComponent(req.params.id)}`));
 
-  // Engagement bots (real -> inicia/detiene taktik-bot en Flask) — SOLO admin
-  app.post("/engagement/start", requireRole("admin"), (req, res) => flask(req, res, "POST", "/engagement/start", req.body));
-  app.post("/engagement/stop", requireRole("admin"), (req, res) => flask(req, res, "POST", "/engagement/stop", req.body));
+  // Engagement bots ELIMINADOS en Fase A (taktik-bot fuera del alcance).
+  // Las rutas /engagement/* ya no existen ni en Flask ni aquí.
 
   // 3. Proxies (admin para mutaciones)
   app.get("/api/proxies", (req, res) => flask(req, res, "GET", "/api/proxies"));

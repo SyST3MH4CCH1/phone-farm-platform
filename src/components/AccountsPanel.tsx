@@ -5,7 +5,12 @@ import { UserCircle } from 'lucide-react';
 interface AccountsPanelProps {
   accounts: Account[];
   proxies: ProxyItem[];
-  onToggleBot: (accountId: string) => void;
+  /**
+   * @deprecated desde Fase A: sin engagement automation, el toggle de bot ya
+   * no tiene backend. Se conserva el botón en la UI por compat pero no
+   * llama a nada si no se pasa handler. Sera eliminado en Fase D.
+   */
+  onToggleBot?: (accountId: string) => void;
   onAddAccount: (acc: Partial<Account>) => void;
   onDeleteAccount: (accountId: string) => void;
   onSelectAccountForDetail?: (account: Account) => void;
@@ -106,9 +111,9 @@ export const AccountsPanel: React.FC<AccountsPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Bot toggle switch */}
+                {/* Bot toggle switch (Fase A: inerte, sin backend) */}
                 <button
-                  onClick={(e) => { e.stopPropagation(); onToggleBot(acc.id); }}
+                  onClick={(e) => { e.stopPropagation(); onToggleBot?.(acc.id); }}
                   className="shrink-0 w-10 h-5 rounded-full transition-colors relative"
                   style={{
                     background: acc.bot_active ? 'var(--color-ok)' : 'var(--color-surface-3)',

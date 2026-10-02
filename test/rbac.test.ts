@@ -103,7 +103,8 @@ describe("paso 5 — RBAC admin/operator", () => {
       "/api/accounts/acc_1/instagram/login",
       "/api/accounts/from-device",
       "/api/moneyprinter/generate",
-      "/engagement/start",
+      // Fase A: /engagement/start eliminado (taktik-bot fuera del alcance)
+      // "/engagement/start",
       "/api/proxies/credentials",
     ]) {
       const res = await mut(path, {}, operator);

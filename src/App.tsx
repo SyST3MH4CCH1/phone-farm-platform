@@ -79,37 +79,10 @@ export default function App() {
     open();
   };
 
-  // Master ON/OFF — real: arranca/detiene los bots taktik de las cuentas
-  // (engagement exige account_id por cuenta; el switch actúa sobre todas).
-  // Lee el estado FRESCO de /api/stats antes de decidir (el estado del
-  // componente puede ir con 5s de retraso y decidir al revés).
-  const handleToggleMaster = async () => {
-    let turningOn = (stats.active_bots || 0) === 0;
-    try {
-      const fresh = await apiFetch('/api/stats').then(r => r.ok ? r.json() : null);
-      if (fresh) turningOn = (fresh.active_bots || 0) === 0;
-    } catch { /* usar estado local */ }
-    const targetAccounts = accounts.filter(a => turningOn ? !a.bot_active : a.bot_active);
-    if (targetAccounts.length === 0) {
-      addLog('INFO', 'Master', turningOn ? 'Todos los bots ya están activos' : 'No hay bots activos que detener');
-      return;
-    }
-    let ok = 0, fail = 0;
-    for (const acc of targetAccounts) {
-      try {
-        const res = await apiFetch(turningOn ? '/engagement/start' : '/engagement/stop', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ account_id: acc.id })
-        });
-        if (res.ok) ok++; else fail++;
-      } catch {
-        fail++;
-      }
-    }
-    addLog('INFO', 'Master', `Master ${turningOn ? 'ON' : 'OFF'}: ${ok} bot(s) ${turningOn ? 'iniciado(s)' : 'detenido(s)'}${fail ? `, ${fail} con error` : ''}`);
-    refreshBackendData();
-  };
+  // Master ON/OFF eliminado en Fase A: ya no hay bots taktik que orquestar.
+  // El master switch del Header sigue existiendo visualmente pero queda
+  // inerte hasta que se decida qué representa en el modelo de rampas de
+  // publicación (Fase D del plan TikTok/Instagram).
 
   // New interactive modals
   const [selectedAccountForDetail, setSelectedAccountForDetail] = useState<Account | null>(null);
@@ -250,27 +223,9 @@ export default function App() {
   }, [currentUser]);
 
   // Account Operations
-  const handleToggleBot = async (accountId: string) => {
-    const acc = accounts.find(a => a.id === accountId);
-    if (!acc) return;
-
-    const endpoint = acc.bot_active ? '/engagement/stop' : '/engagement/start';
-    try {
-      const res = await apiFetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account_id: accountId })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        addLog('ERROR', 'Engagement', `No se pudo cambiar el bot de @${acc.username}: ${data?.error || res.status}`);
-        return;
-      }
-      refreshBackendData();
-    } catch (err) {
-      addLog('ERROR', 'Engagement', `Engagement no disponible para @${acc.username}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
+  // handleToggleBot ELIMINADO en Fase A: no hay bots de engagement. El botón
+  // "Toggle bot" en AccountsPanel queda visualmente pero sin efecto hasta
+  // que se decida qué acción representa en el modelo de rampas (Fase D).
 
   const handleAddAccount = async (newAcc: Partial<Account>) => {
     try {
@@ -635,7 +590,7 @@ export default function App() {
         onOpenCodeViewer={() => openTab('code', () => setShowCodeModal(true))}
         onOpenVersionControl={() => openTab('versions', () => setShowVersionControlModal(true))}
         onDownloadAllZip={() => { window.location.href = '/api/download-zip'; }}
-        onToggleMaster={handleToggleMaster}
+        onToggleMaster={() => { /* Fase A: master ON/OFF inerte. */ }}
         onLogout={handleLogout}
       />
 
@@ -879,7 +834,6 @@ export default function App() {
                 <AccountsPanel
                   accounts={accounts}
                   proxies={proxies}
-                  onToggleBot={handleToggleBot}
                   onAddAccount={handleAddAccount}
                   onDeleteAccount={handleDeleteAccount}
                   onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
@@ -996,7 +950,6 @@ export default function App() {
             proxies={proxies}
             queue={queue}
             onClose={() => setSelectedAccountForDetail(null)}
-            onToggleBot={handleToggleBot}
             onOpenMoneyPrinterForAccount={(acc) => {
               setMoneyPrinterAccount(acc);
               setSelectedAccountForDetail(null);
