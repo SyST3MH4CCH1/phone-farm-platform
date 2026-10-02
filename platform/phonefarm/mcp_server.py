@@ -3,7 +3,7 @@
 Seguridad (paso 7):
 - Autenticación Bearer obligatoria: `Authorization: Bearer <token>` (tokens de
   servicio en `service_tokens`, solo hash; ver phonefarm/mcp_tokens.py).
-- Scopes por tool (read | queue.write | engagement | approve | publish | admin).
+- Scopes por tool (read | queue.write | approve | publish | admin).
 - Rate limit por token (tabla rate_limits).
 - Auditoría de cada tool call (actor = mcp:<principal>, cadena HMAC).
 - MCP_ENABLED por defecto desactivado en platform.py.
@@ -23,7 +23,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from phonefarm import content, engagement, platform_data
+from phonefarm import content, platform_data
 from phonefarm.mcp_tokens import hash_token, token_is_valid
 
 logger = logging.getLogger(__name__)
@@ -44,8 +44,6 @@ TOOL_SCOPES: dict[str, str] = {
     # granja
     "get_stats": "read",
     "list_accounts": "read",
-    "start_bot": "engagement",
-    "stop_bot": "engagement",
     "list_proxies": "read",
     "get_logs": "read",
 }
@@ -330,7 +328,6 @@ def get_stats() -> dict[str, Any]:
             int(a.get("likes_today", 0)) + int(a.get("follows_today", 0)) + int(a.get("comments_today", 0))
             for a in accounts
         ),
-        "active_bots": engagement.active_bots_count(),
         "active_proxies": sum(1 for p in proxies if p.get("status") == "online"),
     }
 
@@ -339,18 +336,6 @@ def get_stats() -> dict[str, Any]:
 def list_accounts() -> list[dict[str, Any]]:
     """Lista las cuentas de la granja (sin contraseñas)."""
     return [{k: v for k, v in a.items() if k != "password"} for a in platform_data.load_accounts()]
-
-
-@mcp.tool()
-def start_bot(account_id: str) -> dict[str, Any]:
-    """Inicia el bot de engagement (taktik-bot) en la cuenta indicada (scope engagement)."""
-    return engagement.start_bot(account_id)
-
-
-@mcp.tool()
-def stop_bot(account_id: str) -> dict[str, Any]:
-    """Detiene el bot de engagement de la cuenta (scope engagement)."""
-    return engagement.stop_bot(account_id)
 
 
 @mcp.tool()

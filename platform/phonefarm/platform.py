@@ -11,9 +11,7 @@ Endpoints (11 obligatorios del plan maestro + extras de compatibilidad):
     GET  /api/queue             Lista cola de generación
     POST /api/queue             Agrega job {keyword,target_account}
     POST /api/queue/next        Procesa siguiente job (genera + publica, en background)
-    POST /engagement/start      Inicia taktik-bot {account_id}
-    POST /engagement/stop       Detiene taktik-bot {account_id}
-    GET  /api/stats             Métricas: videos_subidos, acciones_hoy, errores, cpu, ram
+    GET  /api/stats             Métricas: videos_subidos, errores, cpu, ram
     GET  /                      templates/dashboard.html
     GET  /stream/logs           SSE tail de logs/platform.log
     (extras) /api/adb/config, /api/auth/me  -> compatibilidad con dashboard React
@@ -376,7 +374,7 @@ def _reap_stale_jobs() -> None:
 def _reconcile_after_restart() -> None:
     """Al arrancar: reconcilia workers/bots que murieron con el proceso."""
     _reap_stale_jobs()
-    # bots de engagement huérfanos (bot_active quedó en true sin proceso)
+    # Limpia el flag bot_active de cuentas que dejaron de tener proceso
     accounts = load_accounts()
     for acc in accounts:
         if acc.get("bot_active"):
@@ -414,7 +412,7 @@ app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("PHONEFARM_MAX_CONTENT_LENGTH",
 
 # Token interno compartido con el panel Express (server.ts). Flask NO es público:
 # aunque bindee a 127.0.0.1 (o 0.0.0.0 en Docker con loopback solo), exige este header
-# en TODO /api/*, /engagement/*, /stream/*, /videos/*.
+# en TODO /api/*, /stream/*, /videos/*.
 # SIN fallback embebido (seguridad): debe venir de platform/.env (INTERNAL_TOKEN).
 INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "")
 
@@ -614,12 +612,7 @@ def api_accounts_create():
 @app.delete("/api/accounts/<account_id>")
 @require_role("admin")
 def api_accounts_delete(account_id: str):
-    from phonefarm import engagement
-
-    try:
-        engagement.stop_bot(account_id)
-    except ValueError:
-        pass  # sin bot corriendo: se elimina igual
+    pass
 
     accounts = load_accounts()
     remaining = [a for a in accounts if a.get("id") != account_id]
@@ -1039,39 +1032,9 @@ def api_content_preview():
 
 
 # --- Engagement --------------------------------------------------------------
-
-@app.post("/engagement/start")
-@require_role("admin")
-def api_engagement_start():
-    from phonefarm import engagement
-
-    body = request.get_json(silent=True) or {}
-    account_id = body.get("account_id")
-    if not account_id:
-        return jsonify({"error": "account_id requerido"}), 400
-    try:
-        result = engagement.start_bot(account_id)
-        _audit("engagement.start", account_id)
-        return jsonify(result)
-    except (ValueError, RuntimeError) as exc:
-        return jsonify({"error": str(exc)}), 409
-
-
-@app.post("/engagement/stop")
-@require_role("admin")
-def api_engagement_stop():
-    from phonefarm import engagement
-
-    body = request.get_json(silent=True) or {}
-    account_id = body.get("account_id")
-    if not account_id:
-        return jsonify({"error": "account_id requerido"}), 400
-    try:
-        result = engagement.stop_bot(account_id)
-        _audit("engagement.stop", account_id)
-        return jsonify(result)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 404
+# (Eliminado en Fase A: taktik-bot ya no se ejecuta desde Flask.
+# El sistema solo orquesta publicación de contenido vía APIs oficiales,
+# ver docs/TIKTOK-INSTAGRAM-OFFICIAL-API-PLAN.md)
 
 
 @app.post("/api/accounts/<account_id>/instagram/login")
@@ -1109,7 +1072,7 @@ def api_instagram_login(account_id: str):
 
 @app.get("/api/stats")
 def api_stats():
-    from phonefarm import engagement, proxy_manager
+    from phonefarm import proxy_manager
 
     queue = load_queue()
     accounts = load_accounts()
@@ -1125,7 +1088,6 @@ def api_stats():
         "errores": sum(1 for j in queue if j.get("status") == "failed"),
         "cpu_percent": cpu,
         "ram_percent": ram,
-        "active_bots": engagement.active_bots_count(),
         "active_proxies": sum(1 for p in proxies if p.get("status") == "online"),
         # Panda Grid = rejilla de dispositivos ADB REALES (antes era una env var
         # con default "Connected" sin verificar nada -> cero fake).
@@ -1184,7 +1146,7 @@ def api_source(filename: str):
     base = pathlib.Path(__file__).resolve().parent
     allowed = {
         "platform.py", "proxy_manager.py", "generator.py",
-        "publisher.py", "engagement.py", "content.py",
+        "publisher.py", "content.py",
         "platform_data.py", "mcp_server.py",
     }
     if safe not in allowed:
@@ -1206,7 +1168,7 @@ def api_source_index():
         return jsonify({"error": "EXPOSE_SOURCE desactivado"}), 404
     return jsonify({"files": [
         "platform.py", "proxy_manager.py", "generator.py",
-        "publisher.py", "engagement.py", "content.py",
+        "publisher.py", "content.py",
         "platform_data.py", "mcp_server.py",
     ]})
 
