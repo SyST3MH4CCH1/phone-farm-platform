@@ -1,6 +1,12 @@
 # Phone Farm Platform — imagen del controlador Flask + taktik-bot
 # Paso 13: imagen base por digest (python 3.11.11 slim-bookworm, verificado
 # 2026-08-13), usuario no-root, sin capabilities y read-only en runtime.
+#
+# Nota versión: tests locales y CI corren en Python 3.12 (ver
+# .github/workflows/ci.yml: env.PYTHON_VERSION=3.12). El código es
+# compatible con 3.11 y 3.12 (no usa utcnow() deprecado en 3.12 ni
+# datetime.UTC introducido en 3.11). Mantenemos 3.11.11 aquí por
+# estabilidad probada en producción; pytest pasa idéntico en ambos.
 FROM python:3.11.11-slim-bookworm@sha256:081075da77b2b55c23c088251026fb69a7b2bf92471e491ff5fd75c192fd38e5
 
 # ffmpeg: generación de vídeos (MPT) y demo mode; adb: control de dispositivos;
