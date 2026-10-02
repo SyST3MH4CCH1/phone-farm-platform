@@ -94,11 +94,10 @@ export default function App() {
   const [mainView, setMainView] = useState<'dashboard' | 'cuentas' | 'cola' | 'calendario'>('dashboard');
   // Sidebar izquierdo colapsado (reducido a iconos). Default expandido.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // Terminal logs colapsado (5 líneas expandido, 2 líneas colapsado).
+  // Consola: false = colapsado (2 líneas), true = expandido (5 líneas).
   const [terminalExpanded, setTerminalExpanded] = useState(false);
   const [showMoneyPrinterModal, setShowMoneyPrinterModal] = useState(false);
   const [showVersionControlModal, setShowVersionControlModal] = useState(false);
-  const [terminalMinimized, setTerminalMinimized] = useState(false);
 
   // Modo claro/oscuro — persistido en localStorage
   const [theme, setTheme] = useState<'dark' | 'light'>(
@@ -791,7 +790,7 @@ export default function App() {
 
           </aside>
 
-        {/* Main — vista única seleccionada por mainView */}
+        {/* Main — vista seleccionada por mainView */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Encabezado de página */}
           <div className="flex items-center justify-between border-b px-4 py-2.5" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
@@ -803,92 +802,192 @@ export default function App() {
             </h1>
             {mainView === 'dashboard' && (
               <span className="text-[10px] font-mono uppercase tracking-wide" style={{ color: 'var(--color-muted-2)' }}>
-                Solo vista · click en una tarea para abrir la sección Calendario
+                Click en una tarea del calendario para abrir la sección Calendario
               </span>
             )}
           </div>
 
           {/*
-            * Cuerpo: una sola vista a la vez, seleccionada por mainView.
-            *  - 'dashboard' → calendario visual (sin formulario de programación)
-            *  - 'cuentas' → AccountsPanel
-            *  - 'cola'     → QueuePanel
-            *  - 'calendario' → calendario completo con formulario
+            * Cuerpo:
+            *  - 'dashboard'   → 3 columnas visibles (Cuentas | Cola | Calendario-visual)
+            *  - 'cuentas'     → solo AccountsPanel
+            *  - 'cola'        → solo QueuePanel
+            *  - 'calendario'  → calendario editor completo
             */}
-          <div className="flex-1 overflow-hidden p-3">
+          <div className="flex-1 overflow-hidden">
             {mainView === 'dashboard' && (
-              <div className="h-full flex flex-col rounded-lg overflow-hidden border" style={{ borderColor: 'var(--color-line)' }}>
-                <ScheduleModal
-                  embedded
-                  hideForm
-                  queue={queue}
-                  accounts={accounts}
-                  onClose={() => { /* no-op en modo embebido */ }}
-                  onScheduleJob={handleScheduleJob}
-                  onRescheduleJob={handleRescheduleJob}
-                  onRefresh={refreshBackendData}
-                  onSelectScheduledJob={() => setMainView('calendario')}
-                />
+              <div
+                className="h-full overflow-auto p-3 grid gap-3"
+                style={{
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+                  gridAutoRows: 'minmax(280px, 1fr)',
+                  alignContent: 'stretch',
+                }}
+              >
+                {/* Columna Cuentas */}
+                <section
+                  className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
+                  style={{ borderColor: 'var(--color-line)' }}
+                >
+                  <div className="flex-1 overflow-hidden">
+                    <AccountsPanel
+                      accounts={accounts}
+                      proxies={proxies}
+                      onAddAccount={handleAddAccount}
+                      onDeleteAccount={handleDeleteAccount}
+                      onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
+                    />
+                  </div>
+                </section>
+
+                {/* Columna Cola */}
+                <section
+                  className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
+                  style={{ borderColor: 'var(--color-line)' }}
+                >
+                  <div className="flex-1 overflow-hidden">
+                    <QueuePanel
+                      queue={queue}
+                      accounts={accounts}
+                      isProcessing={isProcessingJob}
+                      onAddJob={handleAddJob}
+                      onProcessNextJob={handleProcessNextJob}
+                      onOpenPreview={handleOpenPreviewForJob}
+                      onApproveJob={handleApproveJob}
+                      onPublishJob={handlePublishJob}
+                      onMarkReady={handleMarkReady}
+                      onRejectJob={handleRejectJob}
+                      onDeleteJob={handleDeleteJob}
+                    />
+                  </div>
+                </section>
+
+                {/* Columna Calendario (visual puro) */}
+                <section
+                  className="flex flex-col rounded-lg overflow-hidden border min-h-[280px]"
+                  style={{ borderColor: 'var(--color-line)' }}
+                >
+                  <div className="flex-1 overflow-hidden">
+                    <ScheduleModal
+                      embedded
+                      hideForm
+                      queue={queue}
+                      accounts={accounts}
+                      onClose={() => { /* no-op en modo embebido */ }}
+                      onScheduleJob={handleScheduleJob}
+                      onRescheduleJob={handleRescheduleJob}
+                      onRefresh={refreshBackendData}
+                      onSelectScheduledJob={() => setMainView('calendario')}
+                    />
+                  </div>
+                </section>
               </div>
             )}
 
             {mainView === 'cuentas' && (
-              <AccountsPanel
-                accounts={accounts}
-                proxies={proxies}
-                onAddAccount={handleAddAccount}
-                onDeleteAccount={handleDeleteAccount}
-                onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
-              />
+              <div className="h-full p-3">
+                <AccountsPanel
+                  accounts={accounts}
+                  proxies={proxies}
+                  onAddAccount={handleAddAccount}
+                  onDeleteAccount={handleDeleteAccount}
+                  onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
+                />
+              </div>
             )}
 
             {mainView === 'cola' && (
-              <QueuePanel
-                queue={queue}
-                accounts={accounts}
-                isProcessing={isProcessingJob}
-                onAddJob={handleAddJob}
-                onProcessNextJob={handleProcessNextJob}
-                onOpenPreview={handleOpenPreviewForJob}
-                onApproveJob={handleApproveJob}
-                onPublishJob={handlePublishJob}
-                onMarkReady={handleMarkReady}
-                onRejectJob={handleRejectJob}
-                onDeleteJob={handleDeleteJob}
-              />
+              <div className="h-full p-3">
+                <QueuePanel
+                  queue={queue}
+                  accounts={accounts}
+                  isProcessing={isProcessingJob}
+                  onAddJob={handleAddJob}
+                  onProcessNextJob={handleProcessNextJob}
+                  onOpenPreview={handleOpenPreviewForJob}
+                  onApproveJob={handleApproveJob}
+                  onPublishJob={handlePublishJob}
+                  onMarkReady={handleMarkReady}
+                  onRejectJob={handleRejectJob}
+                  onDeleteJob={handleDeleteJob}
+                />
+              </div>
             )}
 
             {mainView === 'calendario' && (
-              <div className="h-full flex flex-col rounded-lg overflow-hidden border" style={{ borderColor: 'var(--color-line)' }}>
-                <ScheduleModal
-                  embedded
-                  queue={queue}
-                  accounts={accounts}
-                  onClose={() => { /* no-op en modo embebido */ }}
-                  onScheduleJob={handleScheduleJob}
-                  onRescheduleJob={handleRescheduleJob}
-                  onRefresh={refreshBackendData}
-                />
+              <div className="h-full p-3">
+                <div className="h-full flex flex-col rounded-lg overflow-hidden border" style={{ borderColor: 'var(--color-line)' }}>
+                  <ScheduleModal
+                    embedded
+                    queue={queue}
+                    accounts={accounts}
+                    onClose={() => { /* no-op en modo embebido */ }}
+                    onScheduleJob={handleScheduleJob}
+                    onRescheduleJob={handleRescheduleJob}
+                    onRefresh={refreshBackendData}
+                  />
+                </div>
               </div>
             )}
           </div>
 
-          {/* Terminal Logs — fixed at bottom; colapsable (5 líneas expandido / 2 líneas colapsado) */}
+          {/*
+            * Terminal Logs — fixed al fondo, colapsable con flecha discreta.
+            *  - Expandido: altura 130px, muestra los últimos 5 logs (slice(-5))
+            *  - Colapsado: altura 60px, muestra los últimos 2 logs (slice(-2))
+            * Toggle con flecha arriba/abajo en la cabecera del bloque.
+            */}
           <div
             className="shrink-0 overflow-hidden border-t"
             style={{
-              height: terminalMinimized ? 60 : 130,
+              height: terminalExpanded ? 130 : 60,
               transition: 'height 220ms ease',
               borderColor: 'var(--color-line)',
             }}
           >
-            <TerminalLogs
-              logs={terminalMinimized ? logs.slice(-2) : logs}
-              onClearLogs={() => setLogs([])}
-              isMinimized={terminalMinimized}
-              onToggleMinimize={() => setTerminalMinimized(!terminalMinimized)}
-              sseConnected={sseConnected}
-            />
+            <div className="flex flex-col h-full" style={{ background: 'var(--color-surface)' }}>
+              {/* Cabecera del bloque consola con flecha toggle */}
+              <div
+                className="px-3 py-1.5 flex items-center justify-between border-b shrink-0"
+                style={{ borderColor: 'var(--color-line)' }}
+              >
+                <div className="flex items-center gap-3 text-[10px] font-mono uppercase tracking-wide" style={{ color: 'var(--color-muted-2)' }}>
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className="w-1.5 h-1.5 rounded-full inline-block"
+                      style={{ background: sseConnected ? 'var(--color-ok)' : 'var(--color-muted)' }}
+                    />
+                    Consola {sseConnected ? '· SSE conectado' : '· SSE desconectado'}
+                  </span>
+                  <button
+                    onClick={() => setLogs([])}
+                    className="px-1.5 py-0.5 rounded text-[10px] uppercase hover:opacity-80"
+                    style={{ background: 'var(--color-surface-3)', color: 'var(--color-muted)' }}
+                  >
+                    Limpiar
+                  </button>
+                </div>
+                <button
+                  onClick={() => setTerminalExpanded(!terminalExpanded)}
+                  title={terminalExpanded ? 'Colapsar consola' : 'Expandir consola'}
+                  aria-label={terminalExpanded ? 'Colapsar consola' : 'Expandir consola'}
+                  className="px-1.5 py-0.5 rounded transition-colors hover:opacity-80"
+                  style={{ background: 'var(--color-surface-3)', color: 'var(--color-muted)' }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    {terminalExpanded ? <polyline points="6 9 12 15 18 9" /> : <polyline points="6 15 12 9 18 15" />}
+                  </svg>
+                </button>
+              </div>
+              {/* Cuerpo: 5 líneas expandido / 2 colapsado */}
+              <div className="flex-1 overflow-hidden">
+                <TerminalLogs
+                  logs={terminalExpanded ? logs.slice(-5) : logs.slice(-2)}
+                  onClearLogs={() => setLogs([])}
+                  sseConnected={sseConnected}
+                />
+              </div>
+            </div>
           </div>
         </main>
 
