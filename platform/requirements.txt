@@ -7,12 +7,12 @@ instagrapi==2.18.12
 uiautomator2==3.7.0
 requests[socks]==2.34.2
 pysocks==1.7.1
-python-dotenv==1.2.2
+python-dotenv==1.2.4
 psutil==7.2.2
 # MCP server (Streamable HTTP) para agentes — FastMCP 1.x (2.x cambió la API)
 mcp==1.29.0
 # Paso 9/13: esquemas de validación
-pydantic==2.13.4
+pydantic==2.13.5
 uvicorn==0.52.1
 # taktik-bot (engagement): se instala desde el repo git (pin del commit probado)
 taktik-bot @ git+https://github.com/masterFuf/taktik-bot.git@c2b748967622c26cc478aa48ebbd2493ab2d1086

@@ -1212,7 +1212,7 @@ def api_source_index():
 
 
 # En Flask, arrancarée lsa sub de MCP si estaenabled
-bind_host = "0.0.0.0" if os.getenv("IN_DOCKER") == "1" else "127.0.0.1"
+bind_host = "0.0.0.0" if os.getenv("IN_DOCKER") == "1" else "127.0.0.1"  # nosec B104 — gated by IN_DOCKER; docker-compose.yml publishes only 127.0.0.1
 
 # Endpoint adb: lista real de dispositivos conectados (nativo)
 from phonefarm import proxy_manager
@@ -1374,7 +1374,7 @@ if __name__ == "__main__":
 
     # En Docker, Flask escucha en 0.0.0.0 (el loopback lo garantiza el bind
     # "127.0.0.1:5000:5000" del compose). Local: solo 127.0.0.1.
-    bind_host = "0.0.0.0" if os.getenv("IN_DOCKER") == "1" else "127.0.0.1"
+    bind_host = "0.0.0.0" if os.getenv("IN_DOCKER") == "1" else "127.0.0.1"  # nosec B104 — gated by IN_DOCKER; docker-compose.yml publishes only 127.0.0.1
 
     start_scheduler()
     if os.getenv("MCP_ENABLED", "0") == "1":
