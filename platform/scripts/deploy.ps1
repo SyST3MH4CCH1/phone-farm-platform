@@ -1,7 +1,7 @@
 # deploy.ps1 — Despliega la Phone Farm Platform en un directorio destino con Docker.
 #
 #   1. Verifica Docker Desktop
-#   2. Clona taktik-bot y MoneyPrinterTurbo (si faltan)
+#   2. Clona MoneyPrinterTurbo (si falta) — taktik-bot eliminado en Fase A
 #   3. Crea .env (desde .env.example) y mpt-config.toml
 #   4. Copia la plataforma al destino (junction para third_party)
 #   5. docker compose up -d --build
@@ -32,8 +32,8 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 $thirdParty = Join-Path $RepoPlatform "third_party"
 New-Item -ItemType Directory -Force -Path $thirdParty | Out-Null
 $repos = @(
-    @{ Name = "taktik-bot";         Url = "https://github.com/masterFuf/taktik-bot.git";        Commit = "c2b7489" },
-    @{ Name = "MoneyPrinterTurbo";  Url = "https://github.com/harry0703/MoneyPrinterTurbo.git"; Commit = "254cd02" }
+    # Fase A: taktik-bot eliminado; queda solo MPT.
+    @{ Name = "MoneyPrinterTurbo";  Url = "https://github.com/harry0703/MoneyPrinterTurbo.git"; Commit = "cf5a3ae" }
 )
 foreach ($repo in $repos) {
     $dest = Join-Path $thirdParty $repo.Name

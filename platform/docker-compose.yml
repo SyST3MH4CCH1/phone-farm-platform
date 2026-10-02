@@ -1,6 +1,6 @@
 # Phone Farm Platform — orquestación Docker (paso 13: endurecido)
 #
-#   platform     -> Flask API + dashboard + taktik-bot (ADB vía host)
+#   platform     -> Flask API + dashboard (ADB vía host; sin taktik-bot, Fase A)
 #   moneyprinter -> MoneyPrinterTurbo API (SOLO loopback en el host)
 #
 # Endurecimiento: usuario no-root (imagen), read_only, cap_drop ALL,

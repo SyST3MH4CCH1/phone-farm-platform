@@ -246,14 +246,10 @@ async function refreshAccounts() {
       const d4 = document.createElement('span');
       d4.textContent = `❤️ ${a.likes_today || 0}`;
       row3.appendChild(d3); row3.appendChild(d4);
-      const actions = document.createElement('div');
-      actions.className = 'actions';
-      const btn = document.createElement('button');
-      btn.className = a.bot_active ? 'btn stop' : 'btn start';
-      btn.textContent = a.bot_active ? '⏹ Stop' : '▶ Start';
-      btn.onclick = () => toggleBot(a.id, !a.bot_active);
-      actions.appendChild(btn);
-      card.appendChild(row1); card.appendChild(row2); card.appendChild(row3); card.appendChild(actions);
+      // Fase A: engagement automation eliminada (sin taktik-bot). El boton
+      // Start/Stop se quitaria por completo del dashboard; el template legacy
+      // sigue renderizando metricas (likes_today etc.) pero sin accion.
+      card.appendChild(row1); card.appendChild(row2); card.appendChild(row3);
       grid.appendChild(card);
     });
   } catch (e) { console.warn(e.message); }
@@ -346,15 +342,9 @@ async function refreshNiches() {
 }
 
 // --- Acciones ---
-async function toggleBot(accountId, start) {
-  try {
-    await api(start ? '/engagement/start' : '/engagement/stop', {
-      method: 'POST', body: JSON.stringify({ account_id: accountId })
-    });
-    toast(start ? `Bot iniciado: ${accountId}` : `Bot detenido: ${accountId}`);
-    refreshAccounts();
-  } catch (e) { toast(e.message, true); }
-}
+// toggleBot() eliminado: engagement automation fuera del alcance (Fase A).
+// El template legacy dashboard.html sigue renderizando cuentas pero sin
+// accion Start/Stop de bots.
 
 async function addJob() {
   const keyword = $('kwInput').value.trim();

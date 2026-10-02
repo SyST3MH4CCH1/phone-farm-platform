@@ -129,7 +129,7 @@ if (Test-Path $genCfg) {
     Copy-Item (Join-Path $MptRoot "config.example.toml") (Join-Path $MptRoot "config.toml")
 }
 
-# 2) Plataforma (Flask :5000 + MCP :5001 + taktik-bot)
+# 2) Plataforma (Flask :5000 + MCP :5001)
 # ponytail: MCP_ENABLED=1 siempre — platform.py solo abre :5001 con este flag
 # y el banner de este script lo promete; antes nunca se fijaba y el puerto
 # quedaba muerto.
