@@ -13,6 +13,7 @@ export { HealthIndicator } from './HealthIndicator';
 export { AlertRow } from './AlertRow';
 export { FilterBar } from './FilterBar';
 export type { FilterOption } from './FilterBar';
+export { CollapsibleSection } from './CollapsibleSection';
 
 // Mappers / classifiers / formatters (TASK §11, §6).
 export { redactSecrets } from './_redact';

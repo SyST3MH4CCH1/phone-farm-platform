@@ -1633,6 +1633,7 @@ export default function App() {
             key="moneyprinter-modal"
             accounts={accounts}
             initialAccount={moneyPrinterAccount || undefined}
+            stack={stack}
             onClose={() => { setShowMoneyPrinterModal(false); setMoneyPrinterAccount(null); }}
             onRefreshData={refreshBackendData}
           />
