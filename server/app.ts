@@ -18,6 +18,7 @@ import { verifyPassword, hashPassword, needsRehash } from "./passwords";
 import { LoginRateLimiter, CostLimiter } from "./rate-limit";
 import { safeFetchInternal, guardInternalUrl, EgressError, INTERNAL_HOSTS } from "./net";
 import { validate, loginSchema, queueCreateSchema, accountCreateSchema, proxyCreateSchema, mptSettingsSchema, adbTouchSchema, adbMirrorSchema, proxyVerifySchema, accountPatchSchema } from "./schemas";
+import { buildOpenApiDocument, appGuarded, tag } from "./openapi";
 
 // --- Dependencias inyectables (tests) ---
 export interface AppDeps {
@@ -42,6 +43,16 @@ export const CSRF_COOKIE = "pf_csrf";
 // EXP-06: hash scrypt de referencia para normalizar el timing del login cuando
 // el usuario no existe (se calcula UNA vez, no por request).
 const DUMMY_LOGIN_HASH = hashPassword("dummy-timing-normalizer-0000");
+
+/** Versión real del panel leída de package.json (TASK §18/§16). Sin inventar. */
+function readPackageVersion(): string | null {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "package.json"), "utf8")) as { version?: string };
+    return pkg.version ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   if (!deps.db) {
@@ -177,18 +188,23 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
     res.status(401).json({ error: "No autorizado. Inicia sesión primero." });
   }
 
+  // TASK §16: la introspección de /api/openapi.json lee estos tags del stack
+  // real. No cambia el comportamiento; solo hace la seguridad observable.
+  tag(requireAuth, { __chRequiresAuth: true });
+
   /** RBAC: solo admin. Requiere requireAuth previo. */
   function requireRole(role: "admin") {
-    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const fn = (req: express.Request, res: express.Response, next: express.NextFunction) => {
       const user = (req as any).user as SessionUser | undefined;
       if (user && user.role === role) return next();
       res.status(403).json({ error: `Requiere rol ${role}.` });
     };
+    return tag(fn, { __chRequiresRole: role });
   }
 
   /** Throttling de coste por usuario+IP (EXP-05): 429 si se excede. */
   function costLimit(limiter: CostLimiter) {
-    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const fn = (req: express.Request, res: express.Response, next: express.NextFunction) => {
       const user = (req as any).user as SessionUser | undefined;
       const ip = req.ip || req.socket.remoteAddress || "unknown";
       const key = `${user?.username ?? "anon"}:${ip}`;
@@ -197,6 +213,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
       }
       next();
     };
+    return tag(fn, { __chRateLimited: true });
   }
 
   // Limpieza periódica de sesiones y rate limits expirados (cada 10 min).
@@ -374,8 +391,19 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   });
 
   // --- API protegida (requiere sesión del panel + CSRF en mutaciones) ---
-  app.use("/api", requireAuth, csrfProtect);
-  app.use("/videos", requireAuth);
+  appGuarded(app, "/api", requireAuth, tag(csrfProtect, { __chRequiresCsrf: true }));
+  appGuarded(app, "/videos", requireAuth);
+
+  // TASK §16: contrato OpenAPI generado del router real. El explorador cURL del
+  // panel lo consume; no existe una lista de endpoints escrita a mano.
+  app.get("/api/openapi.json", (req, res) => {
+    const doc = buildOpenApiDocument(app, {
+      publicBaseUrl: config.publicBaseUrl,
+      version: readPackageVersion() ?? "0.0.0",
+    });
+    res.setHeader("Cache-Control", "no-store");
+    res.json(doc);
+  });
 
   // 1. Stats (real, desde Flask)
   app.get("/api/stats", (req, res) => flask(req, res, "GET", "/api/stats"));
@@ -457,13 +485,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
       git_sha = out.trim() || null;
     } catch { /* git no disponible o no es un repo */ }
 
-    let package_version: string | null = null;
-    try {
-      const fs = require("fs") as typeof import("fs");
-      const path = require("path") as typeof import("path");
-      const pkg = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "package.json"), "utf8")) as { version?: string };
-      package_version = pkg.version ?? null;
-    } catch { /* package.json no accesible */ }
+    let package_version: string | null = readPackageVersion();
 
     const body = {
       mode: containers.length > 0 ? "docker" : "native",

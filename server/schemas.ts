@@ -82,9 +82,12 @@ export const accountPatchSchema = z.object({
   message: "PATCH vacío: al menos uno de {status, enabled} requerido",
 });
 
-/** Middleware: valida req.body; 400 con detalle si falla. */
+/** Middleware: valida req.body; 400 con detalle si falla.
+ *  El esquema se etiqueta en el handler para que la introspección de
+ *  /api/openapi.json (TASK §16) derive el requestBody del Zod real.
+ */
 export function validate(schema: z.ZodTypeAny) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  const fn = (req: Request, res: Response, next: NextFunction) => {
     const parsed = schema.safeParse(req.body ?? {});
     if (!parsed.success) {
       const detail = parsed.error.issues.slice(0, 8).map((i) => `${i.path.join(".")}: ${i.message}`);
@@ -93,4 +96,6 @@ export function validate(schema: z.ZodTypeAny) {
     req.body = parsed.data;
     next();
   };
+  (fn as unknown as { __chBodySchema: z.ZodTypeAny }).__chBodySchema = schema;
+  return fn;
 }
