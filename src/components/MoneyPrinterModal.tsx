@@ -6,7 +6,7 @@ import { apiFetch } from '../api';
 import {
   Sparkles, Settings, Subtitles, Music, Film, Type, Mic, Image as ImageIcon, Wrench,
 } from 'lucide-react';
-import { CollapsibleSection, HealthIndicator, StatusBadge } from './design';
+import { CollapsibleSection, HealthIndicator, StatusBadge, capabilitiesByDecision } from './design';
 
 interface MoneyPrinterModalProps {
   accounts: Account[];
@@ -600,6 +600,21 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({
                 <li>Cross-post: OFF (flag)</li>
                 <li>Coste USD: — (sin pricing table)</li>
               </ul>
+            </div>
+
+            <div>
+              <h4 className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--color-muted)' }}>
+                Cobertura upstream
+              </h4>
+              <ul className="space-y-0.5 font-mono text-[10px]">
+                <li style={{ color: 'var(--color-ok)' }}>NOW · {capabilitiesByDecision('NOW').length}</li>
+                <li style={{ color: 'var(--color-warn)' }}>LATER · {capabilitiesByDecision('LATER').length}</li>
+                <li style={{ color: 'var(--color-muted-2)' }}>REJECT · {capabilitiesByDecision('REJECT').length}</li>
+              </ul>
+              <p className="mt-2 text-[9px]" style={{ color: 'var(--color-muted-2)' }}>
+                v1.3.7 pinneado; v1.3.8 evaluada sin bumpear.
+                Ver <code>docs/integrations/MONEYPRINTERTURBO_UPSTREAM_INSPECTION.md</code>.
+              </p>
             </div>
           </aside>
         </div>

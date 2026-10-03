@@ -14,6 +14,7 @@ import {
   formatTimestamp,
 } from '../src/components/design/_formatters';
 import { classifyMetric, MetricClass } from '../src/components/design/_metricClass';
+import { MPT_CAPABILITIES, MPT_PIN_SHA, MPT_PIN_VERSION, MPT_LICENSE, capabilitiesByDecision, crossPostEnabled } from '../src/components/design/_mptCapabilities';
 
 describe('design system — TASK §22 mappers', () => {
   describe('JobProgress mapping (QueueJobStatus → bucket + meta)', () => {
@@ -178,5 +179,38 @@ describe('design system — TASK §6 metric classifier', () => {
   });
   it('proxy.health_check_success_rate sigue UNAVAILABLE (sin histórico)', () => {
     expect(classifyMetric('proxy.health_check_success_rate')).toBe<MetricClass>('UNAVAILABLE');
+  });
+});
+
+describe('MPT capability map (TASK §13)', () => {
+  it('el pin local es v1.3.7 con SHA conocido', () => {
+    expect(MPT_PIN_VERSION).toBe('1.3.7');
+    expect(MPT_PIN_SHA).toBe('cf5a3aedad1741d012152d355aa909d224fc4557');
+    expect(MPT_LICENSE).toBe('MIT');
+  });
+  it('toda capacidad tiene key, label, decision, since y note', () => {
+    for (const c of MPT_CAPABILITIES) {
+      expect(c.key).toBeTruthy();
+      expect(c.label).toBeTruthy();
+      expect(['NOW', 'LATER', 'REJECT']).toContain(c.decision);
+      expect(['1.3.7', '1.3.8']).toContain(c.since);
+      expect(c.note.length).toBeGreaterThan(0);
+    }
+  });
+  it('las capacidades del pin local (1.3.7) son todas NOW', () => {
+    const v137 = MPT_CAPABILITIES.filter((c) => c.since === '1.3.7');
+    expect(v137.length).toBeGreaterThan(0);
+    for (const c of v137) expect(c.decision).toBe('NOW');
+  });
+  it('AI Agent Skill y video_projects están REJECT (fuera de alcance)', () => {
+    expect(MPT_CAPABILITIES.find((c) => c.key === 'ai_agent_skill')?.decision).toBe('REJECT');
+    expect(MPT_CAPABILITIES.find((c) => c.key === 'video_projects')?.decision).toBe('REJECT');
+  });
+  it('el cross-post NUNCA está activo por defecto', () => {
+    expect(crossPostEnabled()).toBe(false);
+  });
+  it('capabilitiesByDecision filtra correctamente', () => {
+    expect(capabilitiesByDecision('REJECT').length).toBe(2);
+    expect(capabilitiesByDecision('NOW').length).toBeGreaterThan(5);
   });
 });

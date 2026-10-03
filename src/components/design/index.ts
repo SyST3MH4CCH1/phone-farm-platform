@@ -27,3 +27,8 @@ export {
 } from './_formatters';
 export { classifyMetric } from './_metricClass';
 export type { MetricClass } from './_metricClass';
+export {
+  MPT_CAPABILITIES, MPT_PIN_SHA, MPT_PIN_VERSION, MPT_LICENSE,
+  capabilitiesByDecision, crossPostEnabled,
+} from './_mptCapabilities';
+export type { MptDecision, MptCapability } from './_mptCapabilities';
