@@ -450,6 +450,21 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
       }
     } catch { /* Flask apagado */ }
 
+    // Build info real (TASK §18). Sin inventar.
+    let git_sha: string | null = null;
+    try {
+      const out = await run("git rev-parse --short HEAD", 2000);
+      git_sha = out.trim() || null;
+    } catch { /* git no disponible o no es un repo */ }
+
+    let package_version: string | null = null;
+    try {
+      const fs = require("fs") as typeof import("fs");
+      const path = require("path") as typeof import("path");
+      const pkg = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "package.json"), "utf8")) as { version?: string };
+      package_version = pkg.version ?? null;
+    } catch { /* package.json no accesible */ }
+
     const body = {
       mode: containers.length > 0 ? "docker" : "native",
       containers,
@@ -457,6 +472,10 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
       mpt_online: mptOnline,
       flask_online: flaskOnline,
       drafts,
+      git_sha,
+      package_version,
+      mpt_pinned_sha: "cf5a3aedad1741d012152d355aa909d224fc4557",
+      mpt_pinned_version: "1.3.7",
     };
     stackCache = { at: Date.now(), body };
     res.json(body);

@@ -1574,6 +1574,7 @@ export default function App() {
           accounts={accounts}
           proxies={proxies}
           queue={queue}
+          stack={stack}
           onClose={() => setShowVersionControlModal(false)}
           onDownloadZip={handleDownloadAllZip}
         />

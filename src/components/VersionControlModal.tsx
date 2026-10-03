@@ -1,71 +1,40 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { useFocusTrap } from '../a11y';
-import { Account, ProxyItem, QueueJob } from '../types';
+import { Account, ProxyItem, QueueJob, StackInfo } from '../types';
 import { apiFetch } from '../api';
 
 interface VersionControlModalProps {
   accounts: Account[];
   proxies: ProxyItem[];
   queue: QueueJob[];
+  /** Stack info real del panel (TASK §18). Opcional. */
+  stack?: StackInfo | null;
   onClose: () => void;
   onDownloadZip: () => void;
 }
 
+/**
+ * VersionControlModal — TASK §18.
+ *
+ * Antes: hardcoded `versions` array con v2.4/v2.3/v2.2, autores ficticios
+ * ("Antigravity Core", "PhoneFarm Devs"), branding "TH3F4Rm3R", badge
+ * "ACTIVA EN PRODUCCIÓN". Eso viola TASK §30 (no inventar / no Staging /
+ * Production / Rollback ficticios).
+ *
+ * Ahora: muestra datos reales del repo + MPT pin + git SHA. Sin historial
+ * ficticio. Si no hay datos reales, se muestra `—`.
+ */
 export const VersionControlModal: React.FC<VersionControlModalProps> = ({
-  accounts,
-  proxies,
-  queue,
-  onClose,
-  onDownloadZip
+  accounts, proxies: _, queue, stack, onClose, onDownloadZip,
 }) => {
-  const [selectedVersion, setSelectedVersion] = useState<'v2.4' | 'v2.3' | 'v2.2'>('v2.4');
-
   const containerRef = useRef<HTMLDivElement>(null);
   useFocusTrap(containerRef, onClose);
 
-  const versions = [
-    {
-      version: 'v2.4 REAL (Actual)',
-      id: 'v2.4',
-      date: '2026-07-31',
-      author: 'Antigravity Core',
-      changes: [
-        'Motor MoneyPrinterTurbo 9:16 integrado con previsualización en tiempo real.',
-        'Antigravity UI Theme Teal/Navy (#17181A, #8A8F98).',
-        'Consola de logs SSE en vivo desplegable/minimizable.',
-        'Sincronización multi-dispositivo ADB Bridge con proxies SOCKS5.'
-      ]
-    },
-    {
-      version: 'v2.3 Stable',
-      id: 'v2.3',
-      date: '2026-07-20',
-      author: 'PhoneFarm Devs',
-      changes: [
-        'Soporte inicial para taktik-bot en Windows Mini PC.',
-        'Tabla de cola de tareas básica.',
-        'Conexión Express 127.0.0.1:3000.'
-      ]
-    },
-    {
-      version: 'v2.2 Legacy',
-      id: 'v2.2',
-      date: '2026-07-05',
-      author: 'PhoneFarm Devs',
-      changes: [
-        'Script de warm-up automatizado de 30 días.',
-        'Soporte básico para proxies DataImpulse.'
-      ]
-    }
-  ];
-
-  // Paso 10: NO se exporta JSON en claro desde el cliente. El backup sale
-  // SIEMPRE cifrado (.pfbackup) con passphrase + reautenticación admin.
-  const handleExportVersion = (verId: 'v2.4' | 'v2.3' | 'v2.2') => {
-    setSelectedVersion(verId);
-    handleExportEncrypted();
-  };
+  // §0 / §30 — sin generar resetas para un "Rollback" ficticio. Solo existe
+  // la rama actual en git; el operador puede usar git checkout / git reset
+  // por su cuenta, pero NO exponemos botones que simulen esa operación.
+  const [selectedVersion, setSelectedVersion] = useState<'current' | 'export'>('current');
 
   const handleExportEncrypted = async () => {
     const passphrase = window.prompt('Passphrase del backup (>=12 chars, se pedirá al restaurar):');
@@ -79,7 +48,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
       const res = await apiFetch('/api/backups/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passphrase, password })
+        body: JSON.stringify({ passphrase, password }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -101,6 +70,11 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
     }
   };
 
+  const git_sha = stack?.git_sha ?? null;
+  const package_version = stack?.package_version ?? null;
+  const mpt_pinned_sha = stack?.mpt_pinned_sha ?? null;
+  const mpt_pinned_version = stack?.mpt_pinned_version ?? null;
+
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 font-mono">
       <motion.div
@@ -111,19 +85,20 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
         transition={{ duration: 0.18 }}
         role="dialog"
         aria-modal="true"
-        className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
       >
-        {/* Header */}
+        {/* Header — sin "TH3F4Rm3R" fake */}
         <div className="bg-[#232528] px-6 py-4 border-b border-[#2A2C30] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#8A8F98]/10 border border-[#8A8F98]/30 flex items-center justify-center text-[#8A8F98]">
+            <div className="w-8 h-8 rounded-lg bg-[#00FF88]/10 border border-[#00FF88]/30 flex items-center justify-center text-[#00FF88] font-bold">
+              ⎇
             </div>
             <div>
               <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-wider flex items-center gap-2">
-                Control de Versiones & Backups — TH3F4Rm3R
+                Control de Versiones &amp; Backups
               </h3>
               <p className="text-[11px] text-[#9CA1A8] font-sans">
-                Gestiona despliegues, versiones de código Python/ADB y exporta backups
+                Datos reales del repo y del pin MPT. Sin staging/rollback ficticios.
               </p>
             </div>
           </div>
@@ -131,6 +106,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
             onClick={onClose}
             className="text-[#9CA1A8] hover:text-[#E5E5E5] p-1.5 rounded-lg hover:bg-white/5 transition-colors"
             title="Cerrar"
+            aria-label="Cerrar"
           >
             ✕
           </button>
@@ -139,74 +115,141 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
         {/* Content */}
         <div className="p-6 overflow-y-auto space-y-6 text-xs flex-1">
 
-          {/* Export Quick Bar */}
+          {/* Stack real del repo (TASK §18). */}
+          <section
+            aria-label="Stack real del repositorio"
+            className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4"
+          >
+            <header className="flex items-center justify-between mb-3">
+              <h4 className="text-xs font-bold text-[#9CA1A8] uppercase tracking-wider">
+                Stack real del repositorio
+              </h4>
+              {stack?.mode && (
+                <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded"
+                  style={{ background: 'rgba(0,255,136,0.10)', color: 'var(--color-brand)', border: '1px solid rgba(0,255,136,0.30)' }}
+                  aria-label={`Modo ${stack.mode}`}
+                >
+                  {stack.mode}
+                </span>
+              )}
+            </header>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] font-mono">
+              <div>
+                <dt className="text-[#6B7076]">Versión del panel</dt>
+                <dd className="text-[#E5E5E5]">{package_version ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-[#6B7076]">git SHA (corto)</dt>
+                <dd className="text-[#E5E5E5]">{git_sha ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-[#6B7076]">Modo runtime</dt>
+                <dd className="text-[#E5E5E5]">{stack?.mode ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-[#6B7076]">Contenedores</dt>
+                <dd className="text-[#E5E5E5]">{stack?.containers?.length ?? 0}</dd>
+              </div>
+              <div className="col-span-2 mt-2 pt-2 border-t border-[#2A2C30]">
+                <dt className="text-[#6B7076]">MoneyPrinterTurbo upstream pin</dt>
+                <dd className="text-[#E5E5E5]">
+                  {mpt_pinned_version ?? '—'} · <span className="text-[10px] text-[#7E8590]">{mpt_pinned_sha ?? '—'}</span>
+                </dd>
+              </div>
+            </dl>
+            {stack?.containers && stack.containers.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[10px] text-[#6B7076] mb-1">Contenedores activos</div>
+                <ul className="space-y-0.5 text-[11px] font-mono">
+                  {stack.containers.map((c) => (
+                    <li key={c.name}>
+                      <span className="text-[#00FF88]">●</span> {c.name} <span className="text-[#7E8590]">{c.status}</span> <span className="text-[#6B7076]">{c.ports}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {stack?.native && stack.native.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[10px] text-[#6B7076] mb-1">Procesos nativos</div>
+                <ul className="space-y-0.5 text-[11px] font-mono">
+                  {stack.native.map((line, i) => (
+                    <li key={i}><span className="text-[#00FF88]">●</span> {line}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+
+          {/* Export Quick Bar — botón real de backup cifrado */}
           <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-0.5">
               <span className="font-bold text-[#E5E5E5] text-xs block">Exportación Completa del Sistema</span>
-              <span className="text-[11px] text-[#9CA1A8] font-sans">Descarga el código fuente (.ZIP) o snapshot de estado (.JSON)</span>
+              <span className="text-[11px] text-[#9CA1A8] font-sans">
+                Backup cifrado (.pfbackup) — la passphrase es necesaria para restaurar.
+              </span>
             </div>
-
             <div className="flex items-center gap-2">
               <button
                 onClick={handleExportEncrypted}
                 className="px-3 py-1.5 bg-[#33363A] hover:bg-[#3A3D42] border border-[#A1A6AE]/30 text-[#A1A6AE] rounded-lg font-bold flex items-center gap-1.5"
                 title="Exporta un backup CIFRADO (.pfbackup) con passphrase — nunca JSON en claro"
-              > Backup cifrado (.pfbackup)
+              >
+                Backup cifrado (.pfbackup)
               </button>
               <button
                 onClick={onDownloadZip}
-                className="px-3.5 py-1.5 bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold rounded-lg flex items-center gap-1.5"
-              > Descargar ZIP Full
+                className="px-3.5 py-1.5 bg-[#00FF88] hover:bg-[#00FF88]/90 text-[#0A0A0B] font-bold rounded-lg flex items-center gap-1.5"
+              >
+                Descargar ZIP Full
               </button>
             </div>
           </div>
 
-          {/* Version History List */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold text-[#9CA1A8] uppercase tracking-wider flex items-center gap-1.5"> Historial de Reversiones & Builds
+          {/* Sin historial ficticio (TASK §30). */}
+          <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4">
+            <h4 className="text-xs font-bold text-[#9CA1A8] uppercase tracking-wider mb-2">
+              Gestión de versiones
             </h4>
-
-            <div className="space-y-3">
-              {versions.map((ver) => (
-                <div
-                  key={ver.id}
-                  className={`bg-[#1A1C1E] border rounded-xl p-4 transition-all ${
-                    selectedVersion === ver.id
-                      ? 'border-[#8A8F98] bg-[#8A8F98]/5'
-                      : 'border-[#2A2C30] hover:border-[#A1A6AE]/40'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-[#E5E5E5] text-sm">{ver.version}</span>
-                      {selectedVersion === ver.id && (
-                        <span className="text-[10px] bg-[#8A8F98]/10 text-[#8A8F98] border border-[#8A8F98]/30 px-2 py-0.5 rounded-full font-bold">
-                          ACTIVA EN PRODUCCIÓN
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[11px] text-[#6B7076]">{ver.date} • {ver.author}</span>
-                  </div>
-
-                  <ul className="space-y-1 mb-3 text-[11px] text-[#9CA1A8] font-sans">
-                    {ver.changes.map((c, i) => (
-                      <li key={i} className="flex items-start gap-1.5">
-                        <span className="text-[#8A8F98] font-bold">•</span> {c}
-                      </li>
-                    ))}
-                  </ul>
-
-                  {selectedVersion !== ver.id && (
-                    <button
-                      onClick={() => handleExportVersion(ver.id as any)}
-                      className="px-3 py-1 bg-[#33363A] hover:bg-[#3A3D42] text-[#E5E5E5] border border-[#2A2C30] rounded-lg text-xs font-bold transition-colors"
-                      title="Descarga un snapshot JSON real del estado actual con esta versión etiquetada"
-                    >
-                      Exportar snapshot
-                    </button>
-                  )}
-                </div>
-              ))}
+            <p className="text-[11px] text-[#9CA1A8] font-sans mb-3">
+              Esta UI <strong>NO</strong> simula un historial de versiones ni
+              expone un rollback ficticio. Para revertir o comparar, usa{' '}
+              <code className="text-[#00FF88]">git log</code>,{' '}
+              <code className="text-[#00FF88]">git checkout &lt;sha&gt;</code> o{' '}
+              <code className="text-[#00FF88]">git diff</code> directamente en
+              el repositorio. Ver{' '}
+              <a className="text-[#00FF88] underline" href="https://github.com/SyST3MH4CCH1/phone-farm-platform" target="_blank" rel="noreferrer">
+                repo en GitHub
+              </a>{' '}
+              para el historial real.
+            </p>
+            <div className="flex items-center gap-2 text-[11px] font-mono">
+              <button
+                type="button"
+                onClick={() => setSelectedVersion('current')}
+                className="px-2.5 py-1 rounded border"
+                style={{
+                  background: selectedVersion === 'current' ? 'var(--color-surface-3)' : 'transparent',
+                  borderColor: selectedVersion === 'current' ? 'var(--color-line)' : 'transparent',
+                  color: selectedVersion === 'current' ? 'var(--color-text)' : 'var(--color-muted-2)',
+                }}
+                aria-pressed={selectedVersion === 'current'}
+              >
+                HEAD actual
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedVersion('export')}
+                className="px-2.5 py-1 rounded border"
+                style={{
+                  background: selectedVersion === 'export' ? 'var(--color-surface-3)' : 'transparent',
+                  borderColor: selectedVersion === 'export' ? 'var(--color-line)' : 'transparent',
+                  color: selectedVersion === 'export' ? 'var(--color-text)' : 'var(--color-muted-2)',
+                }}
+                aria-pressed={selectedVersion === 'export'}
+              >
+                Backup exportable (.pfbackup)
+              </button>
             </div>
           </div>
         </div>

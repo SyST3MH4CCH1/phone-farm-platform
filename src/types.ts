@@ -119,6 +119,14 @@ export interface StackInfo {
   mpt_online: boolean;
   flask_online: boolean;
   drafts: number;
+  /** SHA corto del HEAD de git (TASK §18). */
+  git_sha?: string | null;
+  /** Versión del package.json (TASK §18). */
+  package_version?: string | null;
+  /** SHA pin del upstream MoneyPrinterTurbo (TASK §13). */
+  mpt_pinned_sha?: string | null;
+  /** Versión pin del upstream MoneyPrinterTurbo (TASK §13). */
+  mpt_pinned_version?: string | null;
   error?: string;
 }
 
