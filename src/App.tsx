@@ -4,7 +4,7 @@ import type { Account, ProxyItem, QueueJob, LogEntry, SystemStats, AuthUser, Sta
 import { Header, ActiveTab } from './components/Header';
 import { AccountsPanel } from './components/AccountsPanel';
 import { QueuePanel } from './components/QueuePanel';
-import { AlertRow, StatusBadge } from './components/design';
+import { AlertRow, StatusBadge, BarChart, HeatMap, ChartCard, formatPercent } from './components/design';
 import { PandaGridModal } from './components/PandaGridModal';
 import { TerminalLogs } from './components/TerminalLogs';
 import { ProxyModal } from './components/ProxyModal';
@@ -369,6 +369,16 @@ const DashboardView: React.FC<{
         onOpenJob={(jobId) => onOpenPreview?.(queue.find((q) => q.id === jobId)!)}
       />
 
+      {/* Fila 2.8 — Fila analítica (TASK §9.3) */}
+      <AnalyticsRow
+        queue={queue}
+        accounts={accounts}
+        cpuPercent={stats.cpu_percent}
+        ramPercent={stats.ram_percent}
+        diskPercent={(stats as any).disk_percent ?? null}
+        deviceCount={deviceCount}
+      />
+
       {/* Fila 3: Cuentas | Cola | mini Calendario */}
       <div
         className="grid gap-3"
@@ -431,6 +441,184 @@ const DashboardView: React.FC<{
         </section>
       </div>
     </div>
+  );
+};
+
+/**
+ * AnalyticsRow — TASK §9.3 "fila analítica inferior".
+ *
+ * Contiene 3 charts SVG inline (sin Recharts/Chart.js):
+ *  1. BarChart — publicaciones por día de los últimos 7 días
+ *     (derivado de queue[].scheduled_ts; `—` si no hay histórico).
+ *  2. BarChart — jobs por bucket del pipeline (§11.1 mapping).
+ *  3. HeatMap — actividad de publications por día (últimas 13 semanas).
+ *
+ * Cada ChartCard declara su `source` (TASK §6). Si no hay serie
+ * temporal, se muestra el motivo en vez de un chart vacío (§7).
+ */
+const AnalyticsRow: React.FC<{
+  queue: QueueJob[];
+  accounts: Account[];
+  cpuPercent: number;
+  ramPercent: number;
+  diskPercent: number | null;
+  deviceCount: number;
+}> = ({ queue, accounts, cpuPercent, ramPercent, diskPercent, deviceCount }) => {
+  const activeAccounts = accounts.filter((a) => a.status === 'active').length;
+
+  // Serie temporal: publicaciones por día (últimos 7 días calendario).
+  // Solo cuenta jobs con scheduled_ts real — no inventa fechas.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dayKeys: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    dayKeys.push(d.toISOString().slice(0, 10));
+  }
+  const perDay = dayKeys.map((k) => {
+    const start = Date.parse(k + 'T00:00:00');
+    const end = start + 86_400_000;
+    return queue.filter((j) => {
+      if (j.scheduled_ts == null) return false;
+      const ts = Date.parse(String(j.scheduled_ts));
+      return Number.isFinite(ts) && ts >= start && ts < end;
+    }).length;
+  });
+  const hasTimeline = perDay.some((v) => v > 0);
+
+  // Buckets del pipeline para el segundo chart.
+  const bucketCount = (pred: (s: QueueJob['status']) => boolean) => queue.filter((j) => pred(j.status)).length;
+  const pipelineData = [
+    { label: 'Queued', value: bucketCount((s) => s === 'pending') },
+    { label: 'Gen', value: bucketCount((s) => s === 'scripting' || s === 'generating' || s === 'awaiting_approval' || s === 'awaiting_preview') },
+    { label: 'Ready', value: bucketCount((s) => s === 'ready_for_publish') },
+    { label: 'Pub', value: bucketCount((s) => s === 'publishing') },
+    { label: 'Done', value: bucketCount((s) => s === 'published') },
+    { label: 'Fail', value: bucketCount((s) => s === 'failed' || s === 'rejected' || s === 'awaiting_manual_upload') },
+  ];
+
+  // Heatmap: actividad por día en una ventana de 13 semanas.
+  const heatCells = dayKeys.length > 0
+    ? (() => {
+        const cells: Array<{ date: string; value: number }> = [];
+        const end = new Date(today);
+        for (let i = 90; i >= 0; i--) {
+          const d = new Date(end);
+          d.setDate(d.getDate() - i);
+          const k = d.toISOString().slice(0, 10);
+          const start = Date.parse(k + 'T00:00:00');
+          const end2 = start + 86_400_000;
+          const v = queue.filter((j) => {
+            if (j.scheduled_ts == null) return false;
+            const ts = Date.parse(String(j.scheduled_ts));
+            return Number.isFinite(ts) && ts >= start && ts < end2;
+          }).length;
+          cells.push({ date: k, value: v });
+        }
+        return cells;
+      })()
+    : [];
+  const hasHeat = heatCells.some((c) => c.value > 0);
+
+  return (
+    <section aria-label="Fila analítica" className="space-y-2">
+      <header className="flex items-center justify-between">
+        <h2 className="text-[11px] font-mono uppercase tracking-wider font-semibold" style={{ color: 'var(--color-text)' }}>
+          Analítica
+        </h2>
+        <span className="text-[10px] font-mono" style={{ color: 'var(--color-muted-2)' }}>
+          {activeAccounts} cuenta(s) activa(s) · {deviceCount} dispositivo(s)
+        </span>
+      </header>
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}
+      >
+        <ChartCard
+          title="Actividad por día (7d)"
+          source="queue[].scheduled_ts"
+          emptyReason={hasTimeline ? undefined : 'Sin jobs programados en los últimos 7 días'}
+        >
+          {hasTimeline && (
+            <BarChart
+              data={perDay.map((v, i) => ({
+                label: dayKeys[i].slice(8),
+                value: v,
+              }))}
+              title="Jobs programados por día (últimos 7 días)"
+            />
+          )}
+        </ChartCard>
+
+        <ChartCard
+          title="Pipeline de jobs"
+          source="queue[].status (11 estados → 6 buckets)"
+          emptyReason={queue.length === 0 ? 'Cola vacía — no hay jobs que analizar' : undefined}
+        >
+          {queue.length > 0 && (
+            <BarChart
+              data={pipelineData}
+              title="Distribución de jobs por bucket del pipeline"
+              height={140}
+            />
+          )}
+        </ChartCard>
+
+        <ChartCard
+          title="Actividad 13 semanas"
+          source="queue[].scheduled_ts"
+          emptyReason={hasHeat ? undefined : 'Sin actividad registrada'}
+        >
+          {hasHeat && <HeatMap cells={heatCells} weeks={13} title="Actividad de jobs programados" />}
+        </ChartCard>
+
+        <ChartCard
+          title="Estado del host"
+          source="Flask /api/stats (psutil)"
+          emptyReason={typeof cpuPercent !== 'number' ? 'Métricas del host no disponibles' : undefined}
+        >
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <span style={{ color: 'var(--color-muted)' }}>CPU</span>
+              <span className="font-mono" style={{ color: 'var(--color-text)' }}>
+                {typeof cpuPercent === 'number' ? formatPercent(cpuPercent) : '—'}
+              </span>
+            </div>
+            <div className="progress-bar" aria-hidden="true">
+              <div
+                className="progress-bar-fill"
+                style={{
+                  width: `${Math.max(0, Math.min(100, typeof cpuPercent === 'number' ? cpuPercent : 0))}%`,
+                  background: (cpuPercent ?? 0) > 85 ? 'var(--color-danger)' : (cpuPercent ?? 0) > 65 ? 'var(--color-warn)' : 'var(--color-ok)',
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span style={{ color: 'var(--color-muted)' }}>RAM</span>
+              <span className="font-mono" style={{ color: 'var(--color-text)' }}>
+                {typeof ramPercent === 'number' ? formatPercent(ramPercent) : '—'}
+              </span>
+            </div>
+            <div className="progress-bar" aria-hidden="true">
+              <div
+                className="progress-bar-fill"
+                style={{
+                  width: `${Math.max(0, Math.min(100, typeof ramPercent === 'number' ? ramPercent : 0))}%`,
+                  background: (ramPercent ?? 0) > 85 ? 'var(--color-danger)' : (ramPercent ?? 0) > 65 ? 'var(--color-warn)' : 'var(--color-ok)',
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span style={{ color: 'var(--color-muted)' }}>Disco</span>
+              <span className="font-mono" style={{ color: 'var(--color-text)' }}>
+                {formatPercent(diskPercent)}
+              </span>
+            </div>
+          </div>
+        </ChartCard>
+      </div>
+    </section>
   );
 };
 

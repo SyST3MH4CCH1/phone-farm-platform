@@ -15,6 +15,10 @@ export { FilterBar } from './FilterBar';
 export type { FilterOption } from './FilterBar';
 export { CollapsibleSection } from './CollapsibleSection';
 
+// Charts SVG inline (TASK §7, §9.3).
+export { LineChart, BarChart, HeatMap, ChartCard, CHART_PALETTE } from './Charts';
+export type { LineSeries, BarDatum, HeatCell } from './Charts';
+
 // Mappers / classifiers / formatters (TASK §11, §6).
 export { redactSecrets } from './_redact';
 export {
