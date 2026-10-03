@@ -1267,6 +1267,26 @@ export default function App() {
             />
             <SidebarItem
               collapsed={sidebarCollapsed}
+              onClick={() => openTab('proxies', () => setShowProxyModal(true))}
+              title="Proxies"
+              label="Proxies"
+              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>}
+            />
+          </div>
+
+          {/* Dev group — separador visible + etiqueta (TASK §8.1). */}
+          {!sidebarCollapsed && (
+            <div
+              className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest border-t"
+              style={{ color: 'var(--color-muted-2)', borderColor: 'var(--color-line)' }}
+              aria-label="Sección dev"
+            >
+              Dev
+            </div>
+          )}
+          <div className="py-1">
+            <SidebarItem
+              collapsed={sidebarCollapsed}
               onClick={() => openTab('curl', () => setShowCurlModal(true))}
               title="cURL API"
               label="cURL API"
@@ -1285,14 +1305,6 @@ export default function App() {
               title="Versiones"
               label="Versiones"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
-            />
-            <SidebarItem
-              collapsed={sidebarCollapsed}
-              onClick={() => openTab('proxies', () => setShowProxyModal(true))}
-              title="Proxies"
-              label="Proxies"
-              badge={proxies.length}
-              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>}
             />
           </div>
 
