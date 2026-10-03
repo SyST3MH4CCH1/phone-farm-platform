@@ -9,11 +9,13 @@ interface AdbBridgeModalProps {
 }
 
 export const AdbBridgeModal: React.FC<AdbBridgeModalProps> = ({ onClose, onRefreshData }) => {
-  const [miniPcIp, setMiniPcIp] = useState('127.0.0.1');
-  const [miniPcPort, setMiniPcPort] = useState(5000);
-  const [adbHost, setAdbHost] = useState('127.0.0.1');
-  const [adbPort, setAdbPort] = useState(5037);
-  const [wifiAdbAddress, setWifiAdbAddress] = useState('192.168.1.105:5555');
+  // TASK §0 / §30: sin valores inventados. El operador debe escribir lo real.
+  // El backend ignora host/puerto (anti-SSRF) — el formulario es solo informativo.
+  const [miniPcIp, setMiniPcIp] = useState('');
+  const [miniPcPort, setMiniPcPort] = useState<number | ''>('');
+  const [adbHost, setAdbHost] = useState('');
+  const [adbPort, setAdbPort] = useState<number | ''>('');
+  const [wifiAdbAddress, setWifiAdbAddress] = useState('');
   
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
@@ -159,7 +161,8 @@ export const AdbBridgeModal: React.FC<AdbBridgeModalProps> = ({ onClose, onRefre
                     <input
                       type="number"
                       value={miniPcPort}
-                      onChange={(e) => setMiniPcPort(Number(e.target.value))}
+                      onChange={(e) => setMiniPcPort(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="5000"
                       className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-1.5 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
                     />
                   </div>
@@ -185,7 +188,8 @@ export const AdbBridgeModal: React.FC<AdbBridgeModalProps> = ({ onClose, onRefre
                     <input
                       type="number"
                       value={adbPort}
-                      onChange={(e) => setAdbPort(Number(e.target.value))}
+                      onChange={(e) => setAdbPort(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="5037"
                       className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-1.5 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98]"
                     />
                   </div>

@@ -18,11 +18,12 @@ export const ProxyModal: React.FC<ProxyModalProps> = ({
   onAddProxy,
   onVerifyProxy
 }) => {
-  const [host, setHost] = useState('gw.dataimpulse.com');
-  const [port, setPort] = useState(10003);
+  // TASK §0 / §30: sin valores inventados. El operador escribe los reales.
+  const [host, setHost] = useState('');
+  const [port, setPort] = useState<number | ''>('');
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
-  const [provider, setProvider] = useState('DataImpulse');
+  const [provider, setProvider] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   useFocusTrap(containerRef, onClose);
 
@@ -32,7 +33,7 @@ export const ProxyModal: React.FC<ProxyModalProps> = ({
       provider,
       type: 'socks5',
       host,
-      port: Number(port),
+      port: port === '' ? 0 : Number(port),
       user,
       pass,
       status: 'online'
@@ -54,7 +55,7 @@ export const ProxyModal: React.FC<ProxyModalProps> = ({
         {/* Header */}
         <div className="modal-header px-5 py-3 flex items-center justify-between">
           <h3 className="text-sm font-bold uppercase tracking-wider font-mono" style={{ color: 'var(--color-text)' }}>
-            Gestión de Proxies SOCKS5 — DataImpulse
+            Gestión de Proxies
           </h3>
           <button onClick={onClose} aria-label="Cerrar" className="btn-close">✕</button>
         </div>
@@ -118,6 +119,7 @@ export const ProxyModal: React.FC<ProxyModalProps> = ({
                 required
                 value={host}
                 onChange={(e) => setHost(e.target.value)}
+                placeholder="gw.example.com"
                 className="input w-full px-2.5 py-1.5"
               />
             </div>
@@ -128,7 +130,8 @@ export const ProxyModal: React.FC<ProxyModalProps> = ({
                 type="number"
                 required
                 value={port}
-                onChange={(e) => setPort(Number(e.target.value))}
+                onChange={(e) => setPort(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="1080"
                 className="input w-full px-2.5 py-1.5"
               />
             </div>
