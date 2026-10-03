@@ -437,6 +437,73 @@ body, #root {
 }
 
 /* ============================================================
+   11b. RESPONSIVE (TASK §20)
+   Prioridad: dashboard operacional de escritorio. Los viewports mínimos
+   (1366×768, 1440×900, 1920×1080, 2560×1440) no cambian de layout: el
+   grid del dashboard ya es auto-fit. Estas reglas cubren la capa
+   complementaria (tablet/móvil) sin tocar el shell de escritorio.
+   ============================================================ */
+
+/* Rejillas del dashboard: `min(Npx, 100%)` impide que una columna de 360px
+   desborde un viewport de 390px (auto-fit solo no lo garantiza). */
+.ch-grid-dashboard { grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); }
+.ch-grid-kpi      { grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); }
+.ch-grid-wide     { grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); }
+.ch-grid-analytics{ grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); }
+
+/* Tablas operativas: scroll horizontal en lugar de aplastar columnas.
+   Las columnas prioritarias siguen visibles; el resto se alcanza deslizando. */
+.ch-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* Detail drawer y modales a pantalla completa en móvil (TASK §20). */
+@media (max-width: 767px) {
+  .ch-modal,
+  .ch-drawer {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  /* KPIs: scroll horizontal con snap, no una columna de 6 tarjetas. */
+  .ch-grid-kpi {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 0.75rem;
+    padding-bottom: 0.25rem;
+  }
+  .ch-grid-kpi > * {
+    flex: 0 0 78%;
+    scroll-snap-align: start;
+  }
+  /* El body del dashboard deja de intentar meter 3 columnas de 360px. */
+  .ch-grid-dashboard,
+  .ch-grid-analytics,
+  .ch-grid-wide {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Tablet: la navegación lateral colapsa a iconos antes que robar ancho. */
+@media (max-width: 1279px) and (min-width: 768px) {
+  .ch-grid-dashboard { grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
+}
+
+/* Pantallas muy anchas: se limita el ancho de lectura para que una fila de
+   KPIs no se estire a 2560px con números ilegibles. */
+@media (min-width: 1920px) {
+  .ch-content-max {
+    max-width: 2100px;
+    margin-inline: auto;
+  }
+}
+
+/* ============================================================
    12. FOCUS VISIBLE — Accesibilidad con accent azul
    ============================================================ */
 :focus-visible {

@@ -45,3 +45,10 @@ ui*.xml
 huawei_screen.png
 *.screen.png
 
+
+# Playwright (TASK §27.4/§27.5): se versionan los specs y las capturas, no los
+# artefactos de ejecución (traces, screencasts, report.json), que son efímeros.
+e2e/.artifacts/
+e2e/test-results/
+playwright-report/
+test-results/

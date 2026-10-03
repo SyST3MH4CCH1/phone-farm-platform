@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'motion/react';
 import type { Account, ProxyItem, QueueJob, LogEntry, SystemStats, AuthUser, StackInfo, DraftPost } from './types';
 import { Header, ActiveTab } from './components/Header';
@@ -244,8 +244,7 @@ const DashboardView: React.FC<{
     <div className="p-3 space-y-3">
       {/* Fila 1: 5 stat cards principales */}
       <div
-        className="grid gap-3"
-        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}
+        className="grid gap-3 ch-grid-kpi"
       >
         <StatCard
           title="Dispositivos"
@@ -308,8 +307,7 @@ const DashboardView: React.FC<{
 
       {/* Fila 2: 4 stat cards de infraestructura */}
       <div
-        className="grid gap-3"
-        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}
+        className="grid gap-3 ch-grid-wide"
       >
         {/* Estadísticas de publicación */}
         <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
@@ -386,11 +384,8 @@ const DashboardView: React.FC<{
 
       {/* Fila 3: Cuentas | Cola | mini Calendario */}
       <div
-        className="grid gap-3"
-        style={{
-          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-          gridAutoRows: 'minmax(320px, auto)',
-        }}
+        className="grid gap-3 ch-grid-dashboard"
+        style={{ gridAutoRows: 'minmax(320px, auto)' }}
       >
         <section
           className="flex flex-col rounded-lg overflow-hidden border min-h-[320px]"
@@ -537,8 +532,7 @@ const AnalyticsRow: React.FC<{
         </span>
       </header>
       <div
-        className="grid gap-3"
-        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}
+        className="grid gap-3 ch-grid-analytics"
       >
         <ChartCard
           title="Actividad por día (7d)"
@@ -910,6 +904,18 @@ export default function App() {
   const [mainView, setMainView] = useState<'dashboard' | 'cuentas' | 'cola' | 'calendario'>('dashboard');
   // Sidebar izquierdo colapsado (reducido a iconos). Default expandido.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // TASK §20: por debajo de 1024px el sidebar deja de ser un dock fijo y pasa
+  // a overlay, para no robarle ancho a un dashboard operativo. Se deriva del
+  // viewport REAL (matchMedia), no de un ancho supuesto.
+  const [narrowLayout, setNarrowLayout] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const apply = () => { setNarrowLayout(mq.matches); if (!mq.matches) setNavOpen(false); };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
   // Consola: false = colapsado (2 líneas), true = expandido (5 líneas).
   const [terminalExpanded, setTerminalExpanded] = useState(false);
   const [showMoneyPrinterModal, setShowMoneyPrinterModal] = useState(false);
@@ -1429,6 +1435,24 @@ export default function App() {
 
   return (
     <div className={`flex flex-col h-screen overflow-hidden font-sans ${theme === 'dark' ? 'theme-dark bg-[#17181A] text-[#E5E5E5]' : 'theme-light bg-[#F8FAFC] text-[#1E293B]'}`}>
+      {/* TASK §20: en layout estrecho no hay dock, así que la navegación se
+          abre desde aquí. En escritorio el botón no se renderiza. */}
+      {narrowLayout && (
+        <button
+          type="button"
+          onClick={() => setNavOpen((v) => !v)}
+          aria-expanded={navOpen}
+          aria-controls="ch-sidebar"
+          aria-label={navOpen ? 'Cerrar navegación' : 'Abrir navegación'}
+          className="flex items-center justify-center px-3 py-2 border-b"
+          style={{ background: 'var(--color-header-bg)', borderColor: 'var(--color-header-border)', color: 'var(--color-header-text)' }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            {navOpen ? <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></> : <><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></>}
+          </svg>
+        </button>
+      )}
+
       {/* Barra superior — texto plano */}
       <Header
         stats={stats}
@@ -1469,11 +1493,25 @@ export default function App() {
         <span className="text-[#6B7076]">drafts: {stack.drafts}</span>
       </div>
 
-      {/* Layout principal: sidebar dock + contenido con tabs */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Layout principal: sidebar dock + contenido con tabs.
+        TASK §20: en layout estrecho el sidebar pasa a overlay (no roba ancho
+        al dashboard) y se cierra al navegar. */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {narrowLayout && navOpen && (
+          <button
+            type="button"
+            aria-label="Cerrar navegación"
+            onClick={() => setNavOpen(false)}
+            className="absolute inset-0 z-30 bg-black/50"
+          />
+        )}
         {/* Sidebar dock — colapsado (56px iconos) / expandido (200px). Toggle con flecha abajo. */}
         <aside
-          className={`${sidebarCollapsed ? 'w-14' : 'w-52'} shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200`}
+          className={
+            narrowLayout
+              ? `absolute inset-y-0 left-0 z-40 ${navOpen ? 'w-56' : 'w-0'} shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200`
+              : `${sidebarCollapsed ? 'w-14' : 'w-52'} shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200`
+          }
           style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
         >
           {/* Status footer (siempre visible) */}
@@ -1488,11 +1526,11 @@ export default function App() {
           </div>
 
           {/* Navegación principal: Dashboard, Cuentas, Cola, Calendario */}
-          <nav className="flex-1 py-2">
+          <nav id="ch-sidebar" aria-label="Navegación principal" className="flex-1 py-2">
             <SidebarItem
               collapsed={sidebarCollapsed}
               active={mainView === 'dashboard'}
-              onClick={() => setMainView('dashboard')}
+              onClick={() => { setMainView('dashboard'); if (narrowLayout) setNavOpen(false); }}
               title="Dashboard"
               label="Dashboard"
               icon={
@@ -1502,7 +1540,7 @@ export default function App() {
             <SidebarItem
               collapsed={sidebarCollapsed}
               active={mainView === 'cuentas'}
-              onClick={() => setMainView('cuentas')}
+              onClick={() => { setMainView('cuentas'); if (narrowLayout) setNavOpen(false); }}
               title="Cuentas"
               label="Cuentas"
               badge={accounts.length}
@@ -1513,7 +1551,7 @@ export default function App() {
             <SidebarItem
               collapsed={sidebarCollapsed}
               active={mainView === 'cola'}
-              onClick={() => setMainView('cola')}
+              onClick={() => { setMainView('cola'); if (narrowLayout) setNavOpen(false); }}
               title="Cola"
               label="Cola"
               badge={queue.length}
@@ -1524,7 +1562,7 @@ export default function App() {
             <SidebarItem
               collapsed={sidebarCollapsed}
               active={mainView === 'calendario'}
-              onClick={() => setMainView('calendario')}
+              onClick={() => { setMainView('calendario'); if (narrowLayout) setNavOpen(false); }}
               title="Calendario"
               label="Calendario"
               badge={queue.filter(j => j.scheduled_ts).length}
@@ -1534,7 +1572,10 @@ export default function App() {
             />
           </nav>
 
-          {/* Separador + items secundarios (modales del header original) */}
+          <nav aria-label="Navegación técnica">
+          {/* Separador + items secundarios (modales del header original).
+              Segundo landmark: las superficies técnicas son navegacion, no
+              parte del flujo operativo principal (TASK §8.1). */}
           <div className="border-t py-1" style={{ borderColor: 'var(--color-line)' }}>
             <SidebarItem
               collapsed={sidebarCollapsed}
@@ -1599,6 +1640,7 @@ export default function App() {
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
             />
           </div>
+          </nav>
 
           {/* Toggle colapsar/expandir (flecha discreta abajo) */}
           <button
@@ -1726,7 +1768,9 @@ export default function App() {
           <div
             className="shrink-0 overflow-hidden border-t"
             style={{
-              height: terminalExpanded ? 130 : 60,
+              // TASK §20: en móvil (<768px) la consola arranca a 0 px —el header
+              // del panel es lo que importa— y el operador la abre con el toggle.
+              height: terminalExpanded ? (narrowLayout ? 180 : 130) : (narrowLayout ? 0 : 60),
               transition: 'height 220ms ease',
               borderColor: 'var(--color-line)',
             }}
