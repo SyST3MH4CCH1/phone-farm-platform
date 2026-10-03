@@ -105,17 +105,16 @@ Componente React: `src/components/design/StatusBadge.tsx`. Respeta
 | Componente | Propósito | Tests |
 |---|---|---|
 | `StatusBadge` | Badge semántico con dot, pulse (gated por reduced motion). | — |
-| `EmptyState` | Estado vacío con icono + descripción + acción opcional. | — |
-| `ErrorState` | Estado de error con reintento opcional. | — |
-| `Skeleton` | Loading skeleton accesible (aria-busy). | — |
-| `MetricSparkline` | Sparkline SVG inline (sin librerías externas). | — |
-| `JobProgress` | Pipeline visual (mapea 11 estados a 6 buckets + barra). | — |
-| `HealthIndicator` | Salud servicio (online/offline + latencia). | — |
-| `AlertRow` | Alerta accionable (severidad + acciones). | — |
-| `FilterBar<T>` | Búsqueda + chips de filtro. | — |
+| `CollapsibleSection` | Sección plegable accesible (`aria-expanded` + `aria-controls`, header `<button>`). | — |
+| `LineChart` | Serie temporal 1–4 series, crosshair, tooltip, empty state. | `chart-logic.test.ts` (lógica) |
+| `BarChart` | Comparación con labels y valores. | `chart-logic.test.ts` (lógica) |
+| `HeatMap` | Actividad por día, 4 pasos de intensidad. | `chart-logic.test.ts` (lógica) |
+| `ChartCard` | Contenedor con `title` + `source` + `emptyReason`. | — |
 | `JobProgress._mapping` | Tabla central 11 estados + helpers. | `design-system.test.ts` |
 | `_formatters` | formatPercent/Bytes/Latency/RelativeTime/Timestamp. | `design-system.test.ts` |
 | `_metricClass` | Clasificador REAL/DERIVED/UNAVAILABLE por metric_key. | `design-system.test.ts` |
+| `_chartLogic` | Paleta, segmentos sin interpolar, yRange, heatIntensity. | `chart-logic.test.ts` |
+| `_mptCapabilities` | 24 capacidades MPT con decisión NOW/LATER/REJECT. | `design-system.test.ts` |
 | `_redact` | Redacción de secretos en consola. | `redact-secrets.test.ts` |
 
 Cada componente tiene como mínimo `role=` apropiado, `aria-label` cuando es
@@ -125,16 +124,48 @@ botón-only-icono, y clases CSS que respetan `prefers-reduced-motion`.
 
 ## 3. Charts (TASK §7)
 
-**No se introducen Recharts/Chart.js**. Implementación propia:
+**No se introducen Recharts/Chart.js**. Implementación propia, SVG inline,
+cero dependencias. La lógica vive en `src/components/design/_chartLogic.ts`
+(pura y testeada); el render en `src/components/design/Charts.tsx`.
 
-- **SVG inline** (sparkline, ring, mini-bar) — cumple §7.1 sin dependencia.
-- **Sparkline** — `MetricSparkline.tsx` (`src/components/design/`).
-- **Ring progress** — `RingProgress` (inline en `App.tsx`).
-- **Mini bar** — `MiniBar` (inline en `App.tsx`).
+| Componente | Uso | Estado vacío |
+|---|---|---|
+| `LineChart` | Series temporales (CPU/RAM a lo largo del tiempo). 1–4 series. | "Sin datos suficientes para el periodo" si ninguna serie tiene ≥2 puntos válidos. |
+| `BarChart` | Comparación (publicaciones por día, jobs por bucket). | "Sin datos para el periodo" si `data` está vacío. |
+| `HeatMap` | Actividad por día (calendario, 13 semanas por defecto). | "Sin actividad registrada" si `cells` está vacío. |
+| `ChartCard` | Contenedor con título, `source` (origen del dato) y `emptyReason`. | Renderiza `emptyReason` en vez del chart. |
 
-Para los charts de la fila analítica del dashboard (futuro): se proponen
-`LineChart` (serie temporal), `BarChart` (comparación), `Heatmap` (calendario)
-en SVG inline. Sin librerías externas hasta tener justificación.
+### 3.1 Reglas aplicadas (TASK §7)
+
+- **Sin 3D**, sin relleno degradado, sin animación de entrada.
+- **Paleta de 4 colores**, determinista y cíclica (`colorForSeries`):
+  `info` (azul) → `brand` (verde) → `warn` (ámbar) → `danger` (rojo).
+- **Unidades explícitas** en el eje Y (`formatPercent` → `%`, latencia → `ms`).
+- **Tooltip** al hover **y** al focus. Cada punto/barra/celda es
+  `tabIndex={0}` + `role="button"` + `aria-label` con el valor exacto, para
+  que un lector de pantalla o teclado obtenga el dato.
+- **`role="img"` + `aria-label`** en el `<svg>` con un resumen legible de
+  todas las series.
+- **Loading / empty / error explícitos**: nunca un chart vacío fingiendo datos.
+
+### 3.2 Invariante crítica: no interpolar huecos
+
+`toSegmentIndices(points)` parte una serie temporal en segmentos continuos.
+Un hueco (`null` / `NaN`) **abre la línea**: no se dibuja el puente entre el
+último punto válido y el siguiente. Esto convierte en invariante testeada la
+regla del TASK §0 de no fabricar datos.
+
+```ts
+toSegments([1, 2, null, 4, 5])   // → [[1, 2], [4, 5]]  (2 segmentos, NO conecta 2 con 4)
+toSegments([1, null, 3, 4])      // → [[3, 4]]          (segmentos de 1 punto no se emiten)
+isLineDrawable([5])              // → false             (no se puede dibujar una línea)
+```
+
+### 3.3 Escala del heatmap
+
+`heatIntensity(value, max)` devuelve 0–4. El nivel 0 es `var(--color-surface-2)`
+(celda vacía); los niveles 1–4 son `rgba(0,255,136, 0.25|0.45|0.70|0.95)`.
+El valor `max` siempre cae en nivel 4.
 
 ---
 
@@ -178,12 +209,11 @@ en SVG inline. Sin librerías externas hasta tener justificación.
 
 | Estado | Item |
 |---|---|
+| **NOW** | Este diseño. |
 | **LATER** | Tokens TASK §4.3 explícitos (`--bg-0/1`, `--surface-1/2/3`, `--text-1/2/3`) sin destruir los actuales. |
-| **LATER** | `LineChart`, `BarChart`, `Heatmap` SVG inline. |
 | **LATER** | `DataTable` y `DetailDrawer` extraídos como compartidos (hoy inline en `AccountsPanel`/`QueuePanel`). |
 | **LATER** | `CodeViewer` como `design/CodeViewer.tsx` (hoy `components/CodeViewerModal.tsx`). |
 | **LATER** | Tokens para alturas (`--control-sm/md/lg`), table density (`--row-tight/regular/loose`), chart palette. |
-| **NOW** | Este diseño. |
 
 ---
 
