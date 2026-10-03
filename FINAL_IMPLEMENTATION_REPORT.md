@@ -23,7 +23,7 @@ secretos filtrados**.
 
 | Métrica | Antes | Después | Δ |
 |---|---|---|---|
-| Commits | 0 | 10 | +10 |
+| Commits | 0 | 16 | +16 |
 | Tests vitest | 76/76 | **118/118** | +42 nuevos (mapping, formatters, classifier, redact) |
 | Tests pytest | 64/64 | 64/64 | 0 |
 | Build exit | 0 | 0 | 0 |
@@ -31,9 +31,10 @@ secretos filtrados**.
 | CSS warnings | 1 | 0 | -1 (prefers-reduced-motion corregido) |
 | Bundle CSS | 41.22 kB | 78.45 kB | +37 kB (fonts @font-face) |
 | Bundle JS | 857.87 kB | 857.97 kB | +0.10 kB (~0 gz) |
-| Fakes hardcoded | 4 | 0 | -4 (|| 4, + 4, +12% vs ayer, RFCW80 random) |
+| Fakes hardcoded | 4 | 0 | -4 (|| 4, + 4, +12% vs ayer, RFCW80 random); -8 más en AccountDetailModal/VersionControlModal/AdbBridgeModal/ProxyModal |
 | Documentación | 0 docs | 11 docs | +11 (audit, ADR, research, catalog, adapter, MPT-INSPECT, coverage, DESIGN_SYSTEM, rollout, verification, security) |
 | Componentes compartidos | 0 | 9 + 4 mappers | nuevo design system |
+| /api/stack enriquecido | 6 campos | 11 campos | +git_sha, +package_version, +mpt_pinned_sha, +mpt_pinned_version |
 
 ---
 
@@ -54,20 +55,27 @@ secretos filtrados**.
 
 ---
 
-## 2. Commits (10)
+## 2. Commits (15)
 
 ```
+0a8e2e1 feat(dashboard): add Upcoming Publications 24h section (TASK §12)
+313f834 feat(calendario): add platform and status filters (TASK §12)
+b3c015a feat(versiones): replace fake history with real stack info (TASK §18)
+5c8c956 fix(cuentas): remove 4 fake defaults in AccountDetailModal overview
+75606ce docs: FINAL_IMPLEMENTATION_REPORT + coverage matrix final state
 18f7c2b feat(sidebar): reorganizar items en grupos Operational + Dev
 5d3a529 feat(dashboard): actionable alerts section (TASK §9.4)
 433bd22 feat(cola): pipeline summary + JobProgress + EmptyState + FilterBar
 76b5ce4 feat(console): level filter + search + auto-scroll toggle + redactSecrets
 9cf68af feat(typography): install Inter Variable + JetBrains Mono via @fontsource
-1d3d2c2 feat(design): extract shared design system components + unit tests
+e8bf7b0 feat(design): extract shared design system components + unit tests
 10ed3bc docs(audit): TASK coverage matrix + MPT upstream inspection (v1.3.8)
 1dcf84a feat(dashboard): remove fake KPI literals in stat cards
 0116eec feat(ui): correct prefers-reduced-motion CSS + bump muted-2 contrast
 bad2e77 docs(ui): audit + ADR-007 + typography + metrics catalog + MPT adapter
 ```
+
+(Actual branch tip actual: añade `6a32201 fix(adb/proxies): remove 5 fake defaults` para totalizar 16 commits.)
 
 ---
 
