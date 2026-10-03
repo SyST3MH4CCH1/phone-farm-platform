@@ -198,6 +198,7 @@ const DashboardView: React.FC<{
   proxies: ProxyItem[];
   stats: SystemStats;
   deviceCount: number;
+  stack: StackInfo | null;
   onAddAccount: (acc: Partial<Account>) => void;
   onDeleteAccount: (accountId: string) => void;
   onSelectAccountForDetail: (acc: Account) => void;
@@ -216,13 +217,15 @@ const DashboardView: React.FC<{
   onSelectScheduledJob: () => void;
 }> = (props) => {
   const {
-    accounts, queue, proxies, stats, deviceCount,
+    accounts, queue, proxies, stats, deviceCount, stack,
     onAddAccount, onDeleteAccount, onSelectAccountForDetail,
     onAddJob, onProcessNextJob, onOpenPreview, onApproveJob,
     onPublishJob, onMarkReady, onRejectJob, onDeleteJob, isProcessingJob,
     onScheduleJob, onRescheduleJob, refreshBackendData, onSelectScheduledJob,
   } = props;
-  const onlineCount = accounts.filter(a => a.status === 'active').length || accounts.length;
+  // Cuenta SOLO las cuentas realmente activas; cuando no hay cuentas o ninguna
+  // está activa, onlineCount === 0 (no se simula con un fallback a accounts.length).
+  const onlineCount = accounts.filter(a => a.status === 'active').length;
   const jobsRunning = queue.filter(j => j.status === 'generating' || j.status === 'publishing' || j.status === 'scripting').length;
   const publishedToday = queue.filter(j => j.status === 'published').length;
   const successRate = stats.errores === 0 ? 100 : Math.max(0, Math.round(100 - (stats.errores / Math.max(1, queue.length)) * 100));
@@ -240,31 +243,42 @@ const DashboardView: React.FC<{
       >
         <StatCard
           title="Dispositivos"
-          value={`${deviceCount} / ${deviceCount || 4}`}
-          subtitle="Online"
-          tone="ok"
+          value={`${deviceCount}`}
+          subtitle={deviceCount > 0 ? "Online" : "Sin dispositivos ADB"}
+          tone={deviceCount > 0 ? "ok" : "warn"}
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>}
-          bar={deviceCount > 0 ? Math.min(100, (deviceCount / Math.max(1, deviceCount)) * 100) : 100}
         />
         <StatCard
           title="Cuentas activas"
           value={`${onlineCount}`}
-          subtitle={`de ${onlineCount + 4} totales`}
-          tone="brand"
+          subtitle={
+            accounts.length > 0
+              ? `de ${accounts.length} registradas`
+              : "Sin cuentas registradas"
+          }
+          tone={onlineCount > 0 ? "brand" : "warn"}
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>}
-          bar={onlineCount > 0 ? Math.min(100, Math.round((onlineCount / (onlineCount + 4)) * 100)) : 0}
+          bar={
+            accounts.length > 0
+              ? Math.min(100, Math.round((onlineCount / accounts.length) * 100))
+              : 0
+          }
         />
         <StatCard
           title="Jobs en ejecución"
           value={`${jobsRunning}`}
-          subtitle={`en cola: ${queue.length - jobsRunning}`}
+          subtitle={`en cola: ${Math.max(0, queue.length - jobsRunning)}`}
           tone="brand"
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>}
         />
         <StatCard
-          title="Publicaciones hoy"
+          title="Publicaciones"
           value={`${publishedToday}`}
-          hint="+12% vs ayer"
+          subtitle={
+            stack
+              ? `MPT: ${stack.mpt_online ? "online" : "offline"} · drafts: ${stack.drafts}`
+              : "Fuente: /api/queue"
+          }
           tone="ok"
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>}
           ring={queue.length > 0 ? Math.round((publishedToday / queue.length) * 100) : 0}
@@ -1203,6 +1217,7 @@ export default function App() {
                 proxies={proxies}
                 stats={stats}
                 deviceCount={deviceCount}
+                stack={stack}
                 onAddAccount={handleAddAccount}
                 onDeleteAccount={handleDeleteAccount}
                 onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}

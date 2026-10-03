@@ -27,8 +27,10 @@ export const AccountsPanel: React.FC<AccountsPanelProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newSerial, setNewSerial] = useState('RFCW80' + Math.floor(10000 + Math.random() * 90000));
-  const [newProxyId, setNewProxyId] = useState(proxies[0]?.id || 'proxy_01');
+  // ADR-007 / TASK §0: no inventar datos. El usuario debe teclear el serial
+  // real (adb devices → "List of devices attached" muestra el id del equipo).
+  const [newSerial, setNewSerial] = useState('');
+  const [newProxyId, setNewProxyId] = useState(proxies[0]?.id || '');
   const [newWarmupDay, setNewWarmupDay] = useState(1);
 
   const handleSubmit = (e: React.FormEvent) => {
