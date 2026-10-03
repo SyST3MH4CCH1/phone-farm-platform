@@ -23,17 +23,17 @@ secretos filtrados**.
 
 | Métrica | Antes | Después | Δ |
 |---|---|---|---|
-| Commits | 0 | 16 | +16 |
-| Tests vitest | 76/76 | **118/118** | +42 nuevos (mapping, formatters, classifier, redact) |
+| Commits | 0 | 19 | +19 |
+| Tests vitest | 76/76 | **124/124** | +48 nuevos (mapping, formatters, classifier, redact, MPT capabilities) |
 | Tests pytest | 64/64 | 64/64 | 0 |
 | Build exit | 0 | 0 | 0 |
 | Typecheck | OK | OK | 0 |
 | CSS warnings | 1 | 0 | -1 (prefers-reduced-motion corregido) |
-| Bundle CSS | 41.22 kB | 78.45 kB | +37 kB (fonts @font-face) |
-| Bundle JS | 857.87 kB | 857.97 kB | +0.10 kB (~0 gz) |
-| Fakes hardcoded | 4 | 0 | -4 (|| 4, + 4, +12% vs ayer, RFCW80 random); -8 más en AccountDetailModal/VersionControlModal/AdbBridgeModal/ProxyModal |
-| Documentación | 0 docs | 11 docs | +11 (audit, ADR, research, catalog, adapter, MPT-INSPECT, coverage, DESIGN_SYSTEM, rollout, verification, security) |
-| Componentes compartidos | 0 | 9 + 4 mappers | nuevo design system |
+| Bundle CSS | 41.22 kB | 79.16 kB | +38 kB (fonts @font-face) |
+| Bundle JS | 857.87 kB | 911.88 kB | +54 kB (design system + lucide icons) |
+| Fakes hardcoded | 4 | 0 | -4 (|| 4, + 4, +12% vs ayer, RFCW80 random); -12 en total incluyendo AccountDetailModal, VersionControlModal, AdbBridgeModal, ProxyModal |
+| Documentación | 0 docs | 11 docs | +11 |
+| Componentes compartidos | 0 | 10 + 5 mappers | nuevo design system |
 | /api/stack enriquecido | 6 campos | 11 campos | +git_sha, +package_version, +mpt_pinned_sha, +mpt_pinned_version |
 
 ---
@@ -55,9 +55,13 @@ secretos filtrados**.
 
 ---
 
-## 2. Commits (15)
+## 2. Commits (19)
 
 ```
+3a451d8 feat(mpt): capability map as code + 6 unit tests (TASK §13)
+7c54236 feat(moneyprinter): 8 collapsible sections + real MPT status panel (TASK §13.5)
+4ff5fb3 docs: update FINAL_IMPLEMENTATION_REPORT with extended commit log
+6a32201 fix(adb/proxies): remove 5 fake defaults (TASK §0 / §30)
 0a8e2e1 feat(dashboard): add Upcoming Publications 24h section (TASK §12)
 313f834 feat(calendario): add platform and status filters (TASK §12)
 b3c015a feat(versiones): replace fake history with real stack info (TASK §18)
@@ -74,8 +78,6 @@ e8bf7b0 feat(design): extract shared design system components + unit tests
 0116eec feat(ui): correct prefers-reduced-motion CSS + bump muted-2 contrast
 bad2e77 docs(ui): audit + ADR-007 + typography + metrics catalog + MPT adapter
 ```
-
-(Actual branch tip actual: añade `6a32201 fix(adb/proxies): remove 5 fake defaults` para totalizar 16 commits.)
 
 ---
 
@@ -94,7 +96,7 @@ bad2e77 docs(ui): audit + ADR-007 + typography + metrics catalog + MPT adapter
 - **§8.3 Consola** — Filtros por ERROR/WARN/INFO/DEBUG con counter, search input, auto-scroll toggle, redacción de secretos con `redactSecrets` (10 tests).
 - **§9.4 Alertas dashboard** — `AlertsRow` derivando alertas reales (awaiting-approval, failed-jobs, mpt-offline, no-devices) con acciones reales.
 - **§11 Cola** — Pipeline summary (6 buckets) + JobProgress por job + FilterBar (status chips) + EmptyState (sin resultados) + select de cuenta con opción vacía.
-- **§13 MPT** — Pin `cf5a3aedad1741d012152d355aa909d224fc4557` v1.3.7 MIT en `MONEYPRINTERTURBO_ADAPTER.md`. UPSTREAM inspection de v1.3.8 con NOW/LATER/REJECT por capacidad.
+- **§13.5 UI MoneyPrinter** — **DONE**: 8 secciones plegables (Idea/Guion/Material/Voz/Subtítulos/BGM/Formato/Avanzado) + panel derecho con estado real MPT (HealthIndicator, pin upstream, modo runtime, contenedores, cobertura NOW/LATER/REJECT). `MoneyPrinterModal.tsx` reescrito; `CollapsibleSection.tsx` nuevo componente de design system.
 - **§14 ADB** — Allowlist confirmado, sin shell arbitrario. Documentado en `DEVTOOLS-SURFACE-AND-FLAGS.md`.
 - **§15 Panda Live** — No finge "live" si solo hay screenshot (verificado en `PandaGridModal`).
 - **§17 Python** — Read-only por defecto; flag `ENABLE_DEV_CODE_EDITOR` documentado.
