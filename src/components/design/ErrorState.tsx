@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 /**
  * ErrorState — TASK §22.2.
@@ -21,8 +21,8 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   <div
     className="flex items-start gap-3 p-4 rounded border"
     style={{
-      background: 'rgba(255, 59, 92, 0.06)',
-      border: '1px solid rgba(255, 59, 92, 0.30)',
+      background: 'rgba(239, 68, 68, 0.06)',
+      border: '1px solid rgba(239, 68, 68, 0.30)',
       color: 'var(--color-text)',
     }}
     role="alert"

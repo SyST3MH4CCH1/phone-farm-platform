@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 /**
  * MetricSparkline — TASK §22.2.
@@ -59,7 +59,7 @@ export const MetricSparkline: React.FC<MetricSparklineProps> = ({
     .join(' ');
 
   const stroke = brand ? 'var(--color-brand)' : 'var(--color-info)';
-  const fill = brand ? 'rgba(0, 255, 136, 0.10)' : 'rgba(56, 189, 248, 0.10)';
+  const fill = brand ? 'rgba(34, 197, 94, 0.10)' : 'rgba(56, 189, 248, 0.10)';
 
   return (
     <svg

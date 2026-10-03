@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+﻿import React, { useState, useRef } from 'react';
 import { motion } from 'motion/react';
 import { useFocusTrap } from '../a11y';
 import { Account, ProxyItem, QueueJob } from '../types';
@@ -77,8 +77,8 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
                   className="text-[10px] px-2 py-0.5 rounded-full uppercase font-bold"
                   style={{
                     color: account.status === 'active' ? 'var(--color-ok)' : 'var(--color-muted)',
-                    background: account.status === 'active' ? 'rgba(0,255,136,0.1)' : 'rgba(139,139,149,0.1)',
-                    border: `1px solid ${account.status === 'active' ? 'rgba(0,255,136,0.2)' : 'rgba(139,139,149,0.2)'}`,
+                    background: account.status === 'active' ? 'rgba(34, 197, 94,0.1)' : 'rgba(139,139,149,0.1)',
+                    border: `1px solid ${account.status === 'active' ? 'rgba(34, 197, 94,0.2)' : 'rgba(139,139,149,0.2)'}`,
                   }}
                 >
                   {account.status}
@@ -235,8 +235,8 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
                         className="text-[10px] px-2 py-0.5 rounded-full uppercase font-bold"
                         style={{
                           color: j.status === 'published' ? 'var(--color-ok)' : 'var(--color-muted)',
-                          background: j.status === 'published' ? 'rgba(0,255,136,0.1)' : 'rgba(139,139,149,0.1)',
-                          border: `1px solid ${j.status === 'published' ? 'rgba(0,255,136,0.2)' : 'rgba(139,139,149,0.2)'}`,
+                          background: j.status === 'published' ? 'rgba(34, 197, 94,0.1)' : 'rgba(139,139,149,0.1)',
+                          border: `1px solid ${j.status === 'published' ? 'rgba(34, 197, 94,0.2)' : 'rgba(139,139,149,0.2)'}`,
                         }}
                       >
                         {j.status}

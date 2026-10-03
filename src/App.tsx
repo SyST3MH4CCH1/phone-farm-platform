@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
 import type { Account, ProxyItem, QueueJob, LogEntry, SystemStats, AuthUser, StackInfo, DraftPost } from './types';
 import { Header, ActiveTab } from './components/Header';
@@ -47,9 +47,9 @@ const StatCard: React.FC<{
   bar?: number;  // 0-100; si está presente muestra barra horizontal
   extra?: React.ReactNode;
 }> = ({ title, value, subtitle, hint, tone = 'brand', icon, ring, bar, extra }) => {
-  const accent = tone === 'ok' ? '#00FF88'
-    : tone === 'warn' ? '#FFB800'
-    : tone === 'danger' ? '#FF3B5C'
+  const accent = tone === 'ok' ? '#22C55E'
+    : tone === 'warn' ? '#F59E0B'
+    : tone === 'danger' ? '#EF4444'
     : '#8ab4f8';
   return (
     <div
@@ -129,7 +129,7 @@ const DevicesCard: React.FC<{ deviceCount: number }> = ({ deviceCount }) => (
       Dispositivos
     </h3>
     <div className="flex items-baseline gap-2 mb-2">
-      <span className="text-[28px] font-bold font-mono leading-none" style={{ color: '#00FF88' }}>{deviceCount}</span>
+      <span className="text-[28px] font-bold font-mono leading-none" style={{ color: '#22C55E' }}>{deviceCount}</span>
       <span className="text-[11px] font-mono" style={{ color: 'var(--color-muted)' }}>conectados</span>
     </div>
     <div className="text-[10px] font-mono" style={{ color: 'var(--color-muted-2)' }}>
@@ -175,7 +175,7 @@ const ProxiesCard: React.FC<{ proxies: ProxyItem[] }> = ({ proxies }) => (
               <span
                 className="shrink-0 tabular-nums"
                 style={{
-                  color: tone === 'ok' ? '#00FF88' : tone === 'warn' ? '#FFB800' : '#FF3B5C',
+                  color: tone === 'ok' ? '#22C55E' : tone === 'warn' ? '#F59E0B' : '#EF4444',
                 }}
               >
                 {hasLatency ? `${Math.round(latency)} ms` : '—'}
@@ -335,7 +335,7 @@ const DashboardView: React.FC<{
               <div className="text-[12px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>{stats.ram_percent}%</div>
             </div>
             <div className="text-center">
-              <RingProgress percent={typeof diskPercent === 'number' ? diskPercent : 0} color="#00FF88" size={48} />
+              <RingProgress percent={typeof diskPercent === 'number' ? diskPercent : 0} color="#22C55E" size={48} />
               <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--color-muted)' }}>Disco</div>
               <div className="text-[12px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>
                 {typeof diskPercent === 'number' ? `${diskPercent}%` : '—'}
@@ -700,7 +700,7 @@ const UpcomingPublications: React.FC<{
                     type="button"
                     onClick={() => onOpenJob(j.id)}
                     className="text-[10px] px-2 py-0.5 rounded uppercase tracking-wider"
-                    style={{ color: 'var(--color-brand)', border: '1px solid rgba(0,255,136,0.30)' }}
+                    style={{ color: 'var(--color-brand)', border: '1px solid rgba(34, 197, 94,0.30)' }}
                   >
                     Ver
                   </button>
@@ -833,7 +833,7 @@ const AlertsRow: React.FC<{
 
 /** Mini stat para grids internos. */
 const MiniStat: React.FC<{ label: string; value: string; tone?: 'brand' | 'ok' | 'warn' | 'danger' }> = ({ label, value, tone = 'brand' }) => {
-  const c = tone === 'ok' ? '#00FF88' : tone === 'warn' ? '#FFB800' : tone === 'danger' ? '#FF3B5C' : '#8ab4f8';
+  const c = tone === 'ok' ? '#22C55E' : tone === 'warn' ? '#F59E0B' : tone === 'danger' ? '#EF4444' : '#8ab4f8';
   return (
     <div className="text-center">
       <div className="text-[18px] font-bold font-mono" style={{ color: c }}>{value}</div>

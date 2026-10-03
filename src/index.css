@@ -1,13 +1,23 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
 /* ============================================================
    DESIGN-SYSTEM v2 — TERMINAL INDUSTRIAL
-   Phone Farm Platform · Matrix Green + Dark-Only Surface Ladder
+   Phone Farm Platform · Dark-Only Surface Ladder
+   Semantica TASK §9: AZUL accent · VERDE ok · AMARILLO warn
+                      ROJO error · PURPURA AI/procesamiento
    Inspirado en: Linear, REKKI, Mission Control, Cordum, Hermes HUD
    ============================================================ */
 
 /* ============================================================
    1. TAILWIND v4 @theme — Design Tokens
+   TASK §9 — semantica de color EXACTA:
+     accent funcional  -> AZUL
+     exito             -> VERDE
+     warning           -> AMARILLO
+     error             -> ROJO
+     procesamiento/IA  -> PURPURA
+   El verde Matrix deja de ser "brand" y pasa a ser "ok"
+   (antes coincidian y no se distinguian).
    ============================================================ */
 @theme {
   /* --- Surface Ladder (4 pasos, Linear-inspired, sin sombras) --- */
@@ -20,16 +30,23 @@
   /* --- Línea/bordes universal --- */
   --color-line: #2A2C30;
 
-  /* --- Marca única: Matrix Green (#00FF88) — verde terminal --- */
-  --color-brand: #00FF88;
-  --color-brand-dim: #00CC6E;    /* hover/active */
-  --color-brand-glow: rgba(0, 255, 136, 0.15);
+  /* --- ACCENT FUNCIONAL: AZUL (TASK §9) --- */
+  --color-brand: #3B82F6;           /* azul 500 — accent de acciones/links */
+  --color-brand-dim: #2563EB;      /* hover/active */
+  --color-brand-glow: rgba(59, 130, 246, 0.15);
+  --color-brand-soft: rgba(59, 130, 246, 0.10);
 
-  /* --- Estados semánticos hermes-hud-inspired --- */
-  --color-ok: #00FF88;           /* mismo que brand — coherente */
-  --color-warn: #FFB800;        /* amber — NO amarillo chillón */
-  --color-danger: #FF3B5C;      /* rosa-rojo — NO rojo plano */
-  --color-info: #8B8B95;        /* gris para info pasiva */
+  /* --- Estados semanticos (TASK §4.4 + §9) --- */
+  --color-ok: #22C55E;              /* VERDE — exito / healthy / published */
+  --color-warn: #F59E0B;            /* AMARILLO — warning / awaiting */
+  --color-danger: #EF4444;          /* ROJO — error / failed / offline */
+  --color-info: #38BDF8;            /* cyan — informativo pasivo */
+
+  /* --- PURPURA: procesamiento / IA / MPT (TASK §9) --- */
+  --color-ai: #A855F7;
+  --color-ai-dim: #9333EA;
+  --color-ai-glow: rgba(168, 85, 247, 0.15);
+  --color-ai-soft: rgba(168, 85, 247, 0.10);
 
   /* --- Tipografía --- */
   --color-text: #E5E5E5;
@@ -51,7 +68,7 @@
   --color-header-border: #2A2C30;
   --color-header-text: #E5E5E5;
   --color-header-muted: #9CA1A8;
-  --color-header-muted-2: #6B7076;
+  --color-header-muted-2: #7E8590;
   --color-header-hover: #1C1C1F;
   --color-sidebar-bg: #111113;
   --color-sidebar-border: #2A2C30;
@@ -88,36 +105,36 @@ body, #root {
 
   /* ============================================================
      4. BOTONES — Variantes de acción
-     .btn-brand: Matrix Green, texto negro (acción primaria)
+     .btn-brand: azul accent, texto casi negro (acción primaria)
      .btn-ghost: sin fondo, hover surface-3
      .btn-danger: rosa-rojo
      .btn-icon: cuadrado 32px, icono centrado
      Preservados: .btn-primary, .btn-secondary, .btn-close
      ============================================================ */
   .btn-brand {
-    background-color: #00FF88;
+    background-color: #3B82F6;
     color: #0A0A0B;
     font-weight: 700;
     border-radius: 6px;
     transition: background-color 80ms ease;
   }
   .btn-brand:hover {
-    background-color: #00CC6E;
+    background-color: #2563EB;
   }
   .btn-brand:active {
-    background-color: #00AA5A;
+    background-color: #1D4ED8;
   }
 
   .btn-primary {
-    /* redefinido: antes usaba #8A8F98, ahora brand */
-    background-color: #00FF88;
+    /* TASK §9: accent funcional = AZUL */
+    background-color: #3B82F6;
     color: #0A0A0B;
     font-weight: 700;
     border-radius: 6px;
     transition: background-color 80ms ease;
   }
   .btn-primary:hover {
-    background-color: #00CC6E;
+    background-color: #2563EB;
   }
 
   .btn-secondary {
@@ -144,18 +161,18 @@ body, #root {
   }
 
   .btn-danger {
-    background-color: #FF3B5C;
+    background-color: #EF4444;
     color: #0A0A0B;
     font-weight: 700;
     border-radius: 6px;
     transition: background-color 80ms ease;
   }
   .btn-danger:hover {
-    background-color: #E03050;
+    background-color: #DC2626;
   }
 
   .btn-close {
-    color: #6B7076;
+  color: #7E8590;
     border-radius: 6px;
     padding: 4px;
     transition: color 80ms ease, background-color 80ms ease;
@@ -211,11 +228,11 @@ body, #root {
     transition: border-color 80ms ease;
   }
   .input::placeholder {
-    color: #6B7076;
+    color: #7E8590;
   }
   .input:focus {
     outline: none;
-    border-color: #00FF88;
+    border-color: #3B82F6;
   }
 
   /* ============================================================
@@ -244,9 +261,9 @@ body, #root {
      8. ESTADOS DE TEXTO — Sin badges de color
      Preservados: .state-ok, .state-warn, .state-err
      ============================================================ */
-  .state-ok   { color: #00FF88; }
-  .state-warn { color: #FFB800; }
-  .state-err  { color: #FF3B5C; }
+  .state-ok   { color: #22C55E; }
+  .state-warn { color: #F59E0B; }
+  .state-err  { color: #EF4444; }
 
   /* ============================================================
      9. STATUS PILLS — Pills con pulso semántico
@@ -273,42 +290,53 @@ body, #root {
   }
 
   .status-pill.ok {
-    color: #00FF88;
-    background-color: rgba(0, 255, 136, 0.1);
-    border: 1px solid rgba(0, 255, 136, 0.2);
+    color: #22C55E;
+    background-color: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.2);
   }
   .status-pill.ok .dot {
-    background-color: #00FF88;
+    background-color: #22C55E;
     animation: pulse-ok 2s ease-in-out infinite;
   }
 
   .status-pill.warn {
-    color: #FFB800;
-    background-color: rgba(255, 184, 0, 0.1);
-    border: 1px solid rgba(255, 184, 0, 0.2);
+    color: #F59E0B;
+    background-color: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.2);
   }
   .status-pill.warn .dot {
-    background-color: #FFB800;
+    background-color: #F59E0B;
     animation: pulse-warn 1.5s ease-in-out infinite;
   }
 
   .status-pill.danger {
-    color: #FF3B5C;
-    background-color: rgba(255, 59, 92, 0.1);
-    border: 1px solid rgba(255, 59, 92, 0.2);
+    color: #EF4444;
+    background-color: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
   }
   .status-pill.danger .dot {
-    background-color: #FF3B5C;
+    background-color: #EF4444;
     animation: pulse-danger 1s ease-in-out infinite;
   }
 
   .status-pill.info {
-    color: #8B8B95;
-    background-color: rgba(139, 139, 149, 0.1);
-    border: 1px solid rgba(139, 139, 149, 0.2);
+    color: #38BDF8;
+    background-color: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.2);
   }
   .status-pill.info .dot {
-    background-color: #8B8B95;
+    background-color: #38BDF8;
+  }
+
+  /* PURPURA: procesamiento / IA (TASK §9) */
+  .status-pill.ai {
+    color: #A855F7;
+    background-color: rgba(168, 85, 247, 0.1);
+    border: 1px solid rgba(168, 85, 247, 0.2);
+  }
+  .status-pill.ai .dot {
+    background-color: #A855F7;
+    animation: pulse-ai 1.8s ease-in-out infinite;
   }
 
   /* Keyframes para pulso semántico */
@@ -323,6 +351,10 @@ body, #root {
   @keyframes pulse-danger {
     0%, 100% { opacity: 1; transform: scale(1); }
     50%       { opacity: 0.3; transform: scale(0.8); }
+  }
+  @keyframes pulse-ai {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.45; transform: scale(0.88); }
   }
 
   /* ============================================================
@@ -349,10 +381,10 @@ body, #root {
     border-radius: 2px;
     transition: width 300ms ease, background-color 200ms ease;
   }
-  .progress-bar-fill.ok      { background-color: #00FF88; }
-  .progress-bar-fill.warn     { background-color: #FFB800; }
-  .progress-bar-fill.danger   { background-color: #FF3B5C; }
-  .progress-bar-fill.info     { background-color: #8B8B95; }
+  .progress-bar-fill.ok      { background-color: #22C55E; }
+  .progress-bar-fill.warn     { background-color: #F59E0B; }
+  .progress-bar-fill.danger   { background-color: #EF4444; }
+  .progress-bar-fill.info     { background-color: #38BDF8; }
 
   /* ============================================================
      TASK §22 — Skeleton bar + Status pulse (shimmer + blink)
@@ -394,10 +426,10 @@ body, #root {
 }
 
 /* ============================================================
-   12. FOCUS VISIBLE — Accesibilidad con marca Matrix Green
+   12. FOCUS VISIBLE — Accesibilidad con accent azul
    ============================================================ */
 :focus-visible {
-  outline: 2px solid #00FF88;
+  outline: 2px solid #3B82F6;
   outline-offset: 2px;
 }
 
@@ -420,7 +452,7 @@ body, #root {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #00FF88;
+  background: #3B82F6;
 }
 
 /* ============================================================
@@ -658,10 +690,10 @@ body, #root {
      --color-accent-2:  #A1A6AE;
      --color-on-accent: #17181A;
      --color-muted:     #9CA1A8;
-     --color-muted-2:   #6B7076;
-     --color-danger:    #E05B5B;
-     --color-ok:        #6FBF73;
-     --color-warn:      #D4A84B;
+     --color-muted-2:   #7E8590;
+     --color-danger:    #EF4444;
+     --color-ok:        #22C55E;
+    --color-warn:      #F59E0B;
    }
 
    .theme-light old {

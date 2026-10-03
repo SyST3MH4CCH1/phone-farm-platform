@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+﻿import React, { useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { useFocusTrap } from '../a11y';
 import { Account, ProxyItem, QueueJob, StackInfo } from '../types';
@@ -90,7 +90,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
         {/* Header — sin "TH3F4Rm3R" fake */}
         <div className="bg-[#232528] px-6 py-4 border-b border-[#2A2C30] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#00FF88]/10 border border-[#00FF88]/30 flex items-center justify-center text-[#00FF88] font-bold">
+            <div className="w-8 h-8 rounded-lg bg-[#22C55E]/10 border border-[#22C55E]/30 flex items-center justify-center text-[#22C55E] font-bold">
               ⎇
             </div>
             <div>
@@ -126,7 +126,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
               </h4>
               {stack?.mode && (
                 <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded"
-                  style={{ background: 'rgba(0,255,136,0.10)', color: 'var(--color-brand)', border: '1px solid rgba(0,255,136,0.30)' }}
+                  style={{ background: 'rgba(34, 197, 94,0.10)', color: 'var(--color-brand)', border: '1px solid rgba(34, 197, 94,0.30)' }}
                   aria-label={`Modo ${stack.mode}`}
                 >
                   {stack.mode}
@@ -163,7 +163,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
                 <ul className="space-y-0.5 text-[11px] font-mono">
                   {stack.containers.map((c) => (
                     <li key={c.name}>
-                      <span className="text-[#00FF88]">●</span> {c.name} <span className="text-[#7E8590]">{c.status}</span> <span className="text-[#6B7076]">{c.ports}</span>
+                      <span className="text-[#22C55E]">●</span> {c.name} <span className="text-[#7E8590]">{c.status}</span> <span className="text-[#6B7076]">{c.ports}</span>
                     </li>
                   ))}
                 </ul>
@@ -174,7 +174,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
                 <div className="text-[10px] text-[#6B7076] mb-1">Procesos nativos</div>
                 <ul className="space-y-0.5 text-[11px] font-mono">
                   {stack.native.map((line, i) => (
-                    <li key={i}><span className="text-[#00FF88]">●</span> {line}</li>
+                    <li key={i}><span className="text-[#22C55E]">●</span> {line}</li>
                   ))}
                 </ul>
               </div>
@@ -199,7 +199,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
               </button>
               <button
                 onClick={onDownloadZip}
-                className="px-3.5 py-1.5 bg-[#00FF88] hover:bg-[#00FF88]/90 text-[#0A0A0B] font-bold rounded-lg flex items-center gap-1.5"
+                className="px-3.5 py-1.5 bg-[#22C55E] hover:bg-[#22C55E]/90 text-[#0A0A0B] font-bold rounded-lg flex items-center gap-1.5"
               >
                 Descargar ZIP Full
               </button>
@@ -214,11 +214,11 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
             <p className="text-[11px] text-[#9CA1A8] font-sans mb-3">
               Esta UI <strong>NO</strong> simula un historial de versiones ni
               expone un rollback ficticio. Para revertir o comparar, usa{' '}
-              <code className="text-[#00FF88]">git log</code>,{' '}
-              <code className="text-[#00FF88]">git checkout &lt;sha&gt;</code> o{' '}
-              <code className="text-[#00FF88]">git diff</code> directamente en
+              <code className="text-[#22C55E]">git log</code>,{' '}
+              <code className="text-[#22C55E]">git checkout &lt;sha&gt;</code> o{' '}
+              <code className="text-[#22C55E]">git diff</code> directamente en
               el repositorio. Ver{' '}
-              <a className="text-[#00FF88] underline" href="https://github.com/SyST3MH4CCH1/phone-farm-platform" target="_blank" rel="noreferrer">
+              <a className="text-[#22C55E] underline" href="https://github.com/SyST3MH4CCH1/phone-farm-platform" target="_blank" rel="noreferrer">
                 repo en GitHub
               </a>{' '}
               para el historial real.

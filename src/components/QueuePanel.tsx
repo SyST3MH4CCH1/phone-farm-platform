@@ -67,9 +67,9 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
     });
   }, [queue, query, statusFilter]);
 
-  const BUCKET_LABEL: Record<string, { label: string; kind: 'ok' | 'warn' | 'danger' | 'info' | 'paused' | 'running' | 'neutral' }> = {
+  const BUCKET_LABEL: Record<string, { label: string; kind: 'ok' | 'warn' | 'danger' | 'info' | 'paused' | 'running' | 'neutral' | 'ai' }> = {
     queued: { label: 'Queued', kind: 'paused' },
-    generating: { label: 'Generating', kind: 'running' },
+    generating: { label: 'Generating', kind: 'ai' },
     ready: { label: 'Ready', kind: 'ok' },
     publishing: { label: 'Publishing', kind: 'info' },
     completed: { label: 'Completed', kind: 'ok' },

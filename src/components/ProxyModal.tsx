@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+﻿import React, { useState, useRef } from 'react';
 import { motion } from 'motion/react';
 import { useFocusTrap } from '../a11y';
 import { ProxyItem } from '../types';
@@ -87,8 +87,8 @@ export const ProxyModal: React.FC<ProxyModalProps> = ({
                   className="status-pill"
                   style={{
                     color: p.status === 'online' ? 'var(--color-ok)' : 'var(--color-danger)',
-                    background: p.status === 'online' ? 'rgba(0,255,136,0.1)' : 'rgba(255,59,92,0.1)',
-                    border: `1px solid ${p.status === 'online' ? 'rgba(0,255,136,0.2)' : 'rgba(255,59,92,0.2)'}`,
+                    background: p.status === 'online' ? 'rgba(34, 197, 94,0.1)' : 'rgba(239, 68, 68,0.1)',
+                    border: `1px solid ${p.status === 'online' ? 'rgba(34, 197, 94,0.2)' : 'rgba(239, 68, 68,0.2)'}`,
                   }}
                 >
                   <span

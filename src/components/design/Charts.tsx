@@ -427,10 +427,10 @@ export const HeatMap: React.FC<HeatMapProps> = ({ cells, weeks = 13, title, unit
   // Escala de intensidad: 0 → vacío; 1..4 → pasos.
   const INTENSITY_VAR = [
     'var(--color-surface-2)',
-    'rgba(0,255,136,0.25)',
-    'rgba(0,255,136,0.45)',
-    'rgba(0,255,136,0.70)',
-    'rgba(0,255,136,0.95)',
+    'rgba(34, 197, 94,0.25)',
+    'rgba(34, 197, 94,0.45)',
+    'rgba(34, 197, 94,0.70)',
+    'rgba(34, 197, 94,0.95)',
   ];
   const intensityColor = (v: number) => INTENSITY_VAR[heatIntensity(v, max)];
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { Account, ProxyItem } from '../types';
 import { UserCircle } from 'lucide-react';
 
@@ -49,9 +49,9 @@ export const AccountsPanel: React.FC<AccountsPanelProps> = ({
   };
 
   const getWarmupColor = (day: number) => {
-    if (day <= 7) return { color: 'var(--color-warn)', bg: 'rgba(255,184,0,0.1)' };
+    if (day <= 7) return { color: 'var(--color-warn)', bg: 'rgba(245, 158, 11,0.1)' };
     if (day <= 14) return { color: 'var(--color-info)', bg: 'rgba(139,139,149,0.1)' };
-    return { color: 'var(--color-ok)', bg: 'rgba(0,255,136,0.1)' };
+    return { color: 'var(--color-ok)', bg: 'rgba(34, 197, 94,0.1)' };
   };
 
   return (
@@ -79,7 +79,7 @@ export const AccountsPanel: React.FC<AccountsPanelProps> = ({
             <div
               key={acc.id}
               className="px-4 py-3 border-b transition-colors cursor-pointer"
-              style={{ borderColor: 'var(--color-line)', background: acc.bot_active ? 'rgba(0,255,136,0.03)' : undefined }}
+              style={{ borderColor: 'var(--color-line)', background: acc.bot_active ? 'rgba(34, 197, 94,0.03)' : undefined }}
               onClick={() => onSelectAccountForDetail && onSelectAccountForDetail(acc)}
               role="button"
               tabIndex={0}

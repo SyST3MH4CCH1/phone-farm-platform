@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { StatusBadge, StatusBadgeKind } from './StatusBadge';
 
 /**
@@ -34,8 +34,8 @@ interface StageMeta {
 
 const STAGE_META: Record<QueueJobStatus, StageMeta> = {
   pending: { kind: 'paused', label: 'Queued', bucket: 'queued', bucketLabel: 'Queued', bar: 5, color: 'var(--color-muted-2)' },
-  scripting: { kind: 'running', label: 'Scripting', bucket: 'generating', bucketLabel: 'Generating', bar: 30, color: 'var(--color-brand)' },
-  generating: { kind: 'running', label: 'Generating', bucket: 'generating', bucketLabel: 'Generating', bar: 60, color: 'var(--color-brand)' },
+  scripting: { kind: 'ai', label: 'Scripting', bucket: 'generating', bucketLabel: 'Generating', bar: 30, color: 'var(--color-ai)' },
+  generating: { kind: 'ai', label: 'Generating', bucket: 'generating', bucketLabel: 'Generating', bar: 60, color: 'var(--color-ai)' },
   awaiting_approval: { kind: 'warn', label: 'Awaiting approval', bucket: 'generating', bucketLabel: 'Generating (awaiting review)', bar: 80, color: 'var(--color-warn)' },
   awaiting_preview: { kind: 'warn', label: 'Awaiting preview', bucket: 'generating', bucketLabel: 'Generating (awaiting preview)', bar: 80, color: 'var(--color-warn)' },
   ready_for_publish: { kind: 'ok', label: 'Ready to publish', bucket: 'ready', bucketLabel: 'Ready', bar: 90, color: 'var(--color-ok)' },

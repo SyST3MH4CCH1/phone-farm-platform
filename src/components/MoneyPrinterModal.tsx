@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { useFocusTrap } from '../a11y';
 import { MoneyPrinterConfig, Account, StackInfo } from '../types';
@@ -289,7 +289,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({
                   className="p-2.5 border text-[11px]"
                   style={{
                     borderColor: pexelsResult.valid ? 'var(--color-ok)' : 'var(--color-danger)',
-                    background: pexelsResult.valid ? 'rgba(34,197,94,0.10)' : 'rgba(255,59,92,0.10)',
+                    background: pexelsResult.valid ? 'rgba(34,197,94,0.10)' : 'rgba(239, 68, 68,0.10)',
                     color: pexelsResult.valid ? 'var(--color-ok)' : 'var(--color-danger)',
                     borderRadius: '6px',
                   }}
@@ -507,7 +507,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({
             {genResult && genResult.error && (
               <div
                 className="p-4 border text-[11px]"
-                style={{ borderColor: 'var(--color-danger)', background: 'rgba(255,59,92,0.10)', color: 'var(--color-danger)', borderRadius: '6px' }}
+                style={{ borderColor: 'var(--color-danger)', background: 'rgba(239, 68, 68,0.10)', color: 'var(--color-danger)', borderRadius: '6px' }}
                 role="alert"
               >
                 <div className="font-bold">⚠ Fallo al generar el vídeo</div>
