@@ -362,6 +362,13 @@ const DashboardView: React.FC<{
         onRetryJob={onProcessNextJob}
       />
 
+      {/* Fila 2.7 — Próximas publicaciones 24h (TASK §12) */}
+      <UpcomingPublications
+        queue={queue}
+        accounts={accounts}
+        onOpenJob={(jobId) => onOpenPreview?.(queue.find((q) => q.id === jobId)!)}
+      />
+
       {/* Fila 3: Cuentas | Cola | mini Calendario */}
       <div
         className="grid gap-3"
@@ -424,6 +431,98 @@ const DashboardView: React.FC<{
         </section>
       </div>
     </div>
+  );
+};
+
+/**
+ * UpcomingPublications — TASK §12.
+ * Lista los próximos jobs programados en las siguientes 24 h.
+ * Si no hay jobs en las próximas 24 h, muestra empty state.
+ */
+const UpcomingPublications: React.FC<{
+  queue: QueueJob[];
+  accounts: Account[];
+  onOpenJob?: (jobId: string) => void;
+  onSelectCalendar?: () => void;
+}> = ({ queue, accounts, onOpenJob, onSelectCalendar }) => {
+  const now = Date.now();
+  const horizon24h = now + 24 * 3600 * 1000;
+  const upcoming = queue
+    .filter((j) => {
+      if (j.scheduled_ts == null) return false;
+      const ts = Date.parse(String(j.scheduled_ts));
+      if (Number.isNaN(ts)) return false;
+      return ts >= now && ts <= horizon24h;
+    })
+    .sort((a, b) => Date.parse(String(a.scheduled_ts)) - Date.parse(String(b.scheduled_ts)))
+    .slice(0, 5);
+
+  return (
+    <section
+      aria-label="Próximas publicaciones 24h"
+      className="rounded-lg border p-3"
+      style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
+    >
+      <header className="flex items-center justify-between mb-2">
+        <h2 className="text-[11px] font-mono uppercase tracking-wider font-semibold" style={{ color: 'var(--color-text)' }}>
+          Próximas publicaciones (24h)
+        </h2>
+        <span className="text-[10px] font-mono" style={{ color: 'var(--color-muted-2)' }}>
+          {upcoming.length} programada(s)
+        </span>
+      </header>
+      {upcoming.length === 0 ? (
+        <div className="text-[11px] py-3 text-center" style={{ color: 'var(--color-muted-2)' }}>
+          No hay publicaciones programadas en las próximas 24 horas.{' '}
+          {onSelectCalendar && (
+            <button
+              type="button"
+              onClick={onSelectCalendar}
+              className="underline"
+              style={{ color: 'var(--color-brand)' }}
+            >
+              Abrir calendario
+            </button>
+          )}
+        </div>
+      ) : (
+        <ul className="space-y-1.5" role="list">
+          {upcoming.map((j) => {
+            const ts = new Date(String(j.scheduled_ts));
+            const acc = accounts.find((a) => a.id === j.target_account);
+            return (
+              <li
+                key={j.id}
+                className="flex items-center justify-between gap-3 text-[12px] px-2 py-1.5 rounded"
+                style={{ background: 'var(--color-surface-1)' }}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="font-mono tabular-nums" style={{ color: 'var(--color-muted-2)' }}>
+                    {ts.toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                  </span>
+                  <span className="truncate" style={{ color: 'var(--color-text)' }}>
+                    {j.keyword || j.id}
+                  </span>
+                  <span className="text-[10px] font-mono" style={{ color: 'var(--color-muted-2)' }}>
+                    @{acc ? acc.username : j.target_account}
+                  </span>
+                </div>
+                {onOpenJob && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenJob(j.id)}
+                    className="text-[10px] px-2 py-0.5 rounded uppercase tracking-wider"
+                    style={{ color: 'var(--color-brand)', border: '1px solid rgba(0,255,136,0.30)' }}
+                  >
+                    Ver
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 };
 
