@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { QueueJob, Account } from '../types';
 import { MoreHorizontal } from 'lucide-react';
+import {
+  JobProgress, BUCKET_ORDER, bucketForStatus, isActiveState,
+  FilterBar, EmptyState, StatusBadge, type QueueJobStatus,
+} from './design';
 
 interface QueuePanelProps {
   queue: QueueJob[];
@@ -16,55 +20,60 @@ interface QueuePanelProps {
   onDeleteJob?: (jobId: string) => void;
 }
 
+type StatusFilter = QueueJobStatus | 'all' | 'active';
+
+const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
+  { value: 'all', label: 'Todos' },
+  { value: 'active', label: 'Activos' },
+  { value: 'failed', label: 'Fallidos' },
+  { value: 'published', label: 'Publicados' },
+];
+
 export const QueuePanel: React.FC<QueuePanelProps> = ({
-  queue,
-  accounts,
-  onAddJob,
-  onProcessNextJob,
-  isProcessing,
-  onOpenPreview,
-  onApproveJob,
-  onPublishJob,
-  onMarkReady,
-  onRejectJob,
-  onDeleteJob
+  queue, accounts, onAddJob, onProcessNextJob, isProcessing,
+  onOpenPreview, onApproveJob, onPublishJob, onMarkReady, onRejectJob, onDeleteJob,
 }) => {
   const [keywordInput, setKeywordInput] = useState('');
-  const [targetAccount, setTargetAccount] = useState(accounts[0]?.id || 'acc_01');
+  const [targetAccount, setTargetAccount] = useState(accounts[0]?.id || '');
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!keywordInput.trim()) return;
+    if (!keywordInput.trim() || !targetAccount) return;
     onAddJob(keywordInput.trim(), targetAccount);
     setKeywordInput('');
   };
 
-  const getStatusPill = (status: QueueJob['status']) => {
-    switch (status) {
-      case 'published':
-        return <span className="status-pill ok"><span className="dot" />publicado</span>;
-      case 'generating':
-        return <span className="status-pill info"><span className="dot" />generando</span>;
-      case 'awaiting_manual_upload':
-        return <span className="status-pill warn"><span className="dot" />fallback ADB</span>;
-      case 'failed':
-        return <span className="status-pill danger"><span className="dot" />error</span>;
-      case 'awaiting_approval':
-        return <span className="status-pill warn"><span className="dot" />revisión</span>;
-      case 'rejected':
-        return <span className="status-pill danger"><span className="dot" />rechazado</span>;
-      case 'awaiting_preview':
-        return <span className="status-pill ok"><span className="dot" />preview</span>;
-      case 'ready_for_publish':
-        return <span className="status-pill ok"><span className="dot" />listo</span>;
-      case 'publishing':
-        return <span className="status-pill info"><span className="dot" />publicando</span>;
-      case 'scripting':
-        return <span className="status-pill info"><span className="dot" />guión</span>;
-      default:
-        return <span className="status-pill info"><span className="dot" />pendiente</span>;
-    }
+  // Buckets para el header pipeline.
+  const bucketCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const b of BUCKET_ORDER) c[b] = 0;
+    for (const job of queue) c[bucketForStatus(job.status)]++;
+    return c;
+  }, [queue]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return queue.filter((j) => {
+      if (statusFilter === 'active' && !isActiveState(j.status)) return false;
+      if (statusFilter !== 'all' && statusFilter !== 'active' && j.status !== statusFilter) return false;
+      if (q) {
+        const blob = `${j.id} ${j.target_account} ${j.keyword ?? ''}`.toLowerCase();
+        if (!blob.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [queue, query, statusFilter]);
+
+  const BUCKET_LABEL: Record<string, { label: string; kind: 'ok' | 'warn' | 'danger' | 'info' | 'paused' | 'running' | 'neutral' }> = {
+    queued: { label: 'Queued', kind: 'paused' },
+    generating: { label: 'Generating', kind: 'running' },
+    ready: { label: 'Ready', kind: 'ok' },
+    publishing: { label: 'Publishing', kind: 'info' },
+    completed: { label: 'Completed', kind: 'ok' },
+    failed: { label: 'Failed', kind: 'danger' },
   };
 
   return (
@@ -76,14 +85,38 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
         </h2>
         <button
           onClick={onProcessNextJob}
-          disabled={isProcessing || queue.filter(j => j.status === 'pending').length === 0}
+          disabled={isProcessing || bucketCounts['queued'] === 0}
           className="btn-brand text-xs px-3 py-1 disabled:opacity-40"
         >
           {isProcessing ? 'Generando...' : 'Generar Siguiente'}
         </button>
       </div>
 
-      {/* Add Keyword Form — single line */}
+      {/* Pipeline summary */}
+      <div
+        className="px-4 py-2 flex items-center gap-2 flex-wrap"
+        style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-line)' }}
+        aria-label="Pipeline summary"
+      >
+        <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: 'var(--color-muted-2)' }}>Pipeline:</span>
+        {BUCKET_ORDER.map((b: string) => (
+          <StatusBadge key={b} kind={BUCKET_LABEL[b].kind} label={`${BUCKET_LABEL[b].label} ${bucketCounts[b]}`} dot quiet={bucketCounts[b] === 0} />
+        ))}
+      </div>
+
+      {/* Filter bar */}
+      <div className="px-4 py-2" style={{ borderBottom: '1px solid var(--color-line)', background: 'var(--color-surface-2)' }}>
+        <FilterBar<StatusFilter>
+          query={query}
+          onQueryChange={setQuery}
+          options={STATUS_FILTERS}
+          activeOption={statusFilter}
+          onActiveOptionChange={setStatusFilter}
+          placeholder="Buscar por id, cuenta o keyword…"
+        />
+      </div>
+
+      {/* Add Keyword Form */}
       <div className="px-4 py-2" style={{ borderBottom: '1px solid var(--color-line)', background: 'var(--color-surface-2)' }}>
         <form onSubmit={handleSubmit} className="flex items-center gap-2 font-mono">
           <input
@@ -100,36 +133,44 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
             className="input w-36 px-2 py-1.5 text-[11px]"
             aria-label="Cuenta destino"
           >
+            {accounts.length === 0 && <option value="">Sin cuentas</option>}
             {accounts.map((acc) => (
               <option key={acc.id} value={acc.id}>@{acc.username}</option>
             ))}
           </select>
-          <button type="submit" className="btn-secondary text-[11px] px-3 py-1.5">Encolar</button>
+          <button type="submit" className="btn-secondary text-[11px] px-3 py-1.5" disabled={!targetAccount}>
+            Encolar
+          </button>
         </form>
       </div>
 
       {/* Queue Table */}
       <div className="flex-1 overflow-y-auto">
         {queue.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-            <p className="text-lg font-mono font-bold" style={{ color: 'var(--color-muted)' }}>
-              &gt; Cola vacía — Encolar primer job ↓
-            </p>
-          </div>
+          <EmptyState
+            title="Cola vacía"
+            description="No hay jobs. Encola el primero usando el formulario de arriba."
+          />
         )}
-        {queue.length > 0 && (
+        {queue.length > 0 && filtered.length === 0 && (
+          <EmptyState
+            title="Sin resultados"
+            description={`No hay jobs que coincidan con el filtro "${query || statusFilter}".`}
+          />
+        )}
+        {filtered.length > 0 && (
           <table className="w-full text-left text-[11px] border-collapse font-mono">
             <thead className="sticky top-0 z-10" style={{ background: 'var(--color-surface-3)' }}>
               <tr className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-muted-2)' }}>
                 <th className="px-3 py-2 font-bold">Job</th>
                 <th className="px-3 py-2 font-bold">Keyword</th>
                 <th className="px-3 py-2 font-bold">Cuenta</th>
-                <th className="px-3 py-2 font-bold">Estado</th>
+                <th className="px-3 py-2 font-bold" style={{ minWidth: 220 }}>Estado</th>
                 <th className="px-3 py-2 font-bold text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {queue.map((job) => {
+              {filtered.map((job) => {
                 const acc = accounts.find(a => a.id === job.target_account);
                 return (
                   <tr
@@ -154,9 +195,10 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                     >
                       @{acc ? acc.username : job.target_account}
                     </td>
-                    <td className="px-3 py-2">{getStatusPill(job.status)}</td>
+                    <td className="px-3 py-2">
+                      <JobProgress status={job.status} />
+                    </td>
                     <td className="px-3 py-2 text-right">
-                      {/* Dropdown menu ⋯ */}
                       <div className="relative inline-block">
                         <button
                           onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === job.id ? null : job.id); }}
@@ -202,6 +244,16 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                                 role="menuitem"
                               >
                                 Rechazar
+                              </button>
+                            )}
+                            {job.status === 'ready_for_publish' && onMarkReady && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onMarkReady(job.id); setOpenMenu(null); }}
+                                className="w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--color-surface-4)] transition-colors"
+                                style={{ color: 'var(--color-info)' }}
+                                role="menuitem"
+                              >
+                                Marcar listo
                               </button>
                             )}
                             {job.status === 'ready_for_publish' && onPublishJob && (
