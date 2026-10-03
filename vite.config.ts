@@ -29,5 +29,19 @@ server: {
       // Solo escuchar en loopback; el proxy reverso es Tailscale Serve (HTTPS 443 → 127.0.0.1:4100).
       host: '127.0.0.1',
     },
+    // TASK §28 — separar vendors pesados del código de la app: el chunk vendor se
+    // cachea entre despliegues y el código de la SPA se invalida al iterar.
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            react: ['react', 'react-dom'],
+            motion: ['motion/react'],
+            icons: ['lucide-react'],
+          },
+        },
+      },
+      chunkSizeWarningLimit: 700,
+    },
   };
 });

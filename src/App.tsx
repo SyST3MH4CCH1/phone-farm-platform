@@ -1,23 +1,28 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'motion/react';
 import type { Account, ProxyItem, QueueJob, LogEntry, SystemStats, AuthUser, StackInfo, DraftPost } from './types';
 import { Header, ActiveTab } from './components/Header';
 import { AccountsPanel } from './components/AccountsPanel';
 import { QueuePanel } from './components/QueuePanel';
-import { AlertRow, StatusBadge, BarChart, HeatMap, ChartCard, formatPercent } from './components/design';
-import { PandaGridModal } from './components/PandaGridModal';
+import { AlertRow, StatusBadge, BarChart, HeatMap, ChartCard, formatPercent, Skeleton } from './components/design';
 import { TerminalLogs } from './components/TerminalLogs';
-import { ProxyModal } from './components/ProxyModal';
-import { CodeViewerModal } from './components/CodeViewerModal';
-import { CurlTesterModal } from './components/CurlTesterModal';
-import { AdbBridgeModal } from './components/AdbBridgeModal';
-import { ScheduleModal } from './components/ScheduleModal';
 import { LoginScreen } from './components/LoginScreen';
-import { MoneyPrinterModal } from './components/MoneyPrinterModal';
-import { PostPreviewModal } from './components/PostPreviewModal';
-import { AccountDetailModal } from './components/AccountDetailModal';
-import { VersionControlModal } from './components/VersionControlModal';
+import { ScheduleModal } from './components/ScheduleModal';
 import { apiFetch } from './api';
+
+// TASK §28 — lazy-load de las superficies pesadas. El bundle inicial bajó de
+// ~948 kB a los que se necesitan para pintar el shell + dashboard; los modales
+// (device mirrors, MPT, código, ADB, proxy, calendario, versiones, API) se
+// descargan la primera vez que el operador los abre.
+const PandaGridModal = lazy(() => import('./components/PandaGridModal').then((m) => ({ default: m.PandaGridModal })));
+const ProxyModal = lazy(() => import('./components/ProxyModal').then((m) => ({ default: m.ProxyModal })));
+const CodeViewerModal = lazy(() => import('./components/CodeViewerModal').then((m) => ({ default: m.CodeViewerModal })));
+const CurlTesterModal = lazy(() => import('./components/CurlTesterModal').then((m) => ({ default: m.CurlTesterModal })));
+const AdbBridgeModal = lazy(() => import('./components/AdbBridgeModal').then((m) => ({ default: m.AdbBridgeModal })));
+const MoneyPrinterModal = lazy(() => import('./components/MoneyPrinterModal').then((m) => ({ default: m.MoneyPrinterModal })));
+const PostPreviewModal = lazy(() => import('./components/PostPreviewModal').then((m) => ({ default: m.PostPreviewModal })));
+const AccountDetailModal = lazy(() => import('./components/AccountDetailModal').then((m) => ({ default: m.AccountDetailModal })));
+const VersionControlModal = lazy(() => import('./components/VersionControlModal').then((m) => ({ default: m.VersionControlModal })));
 
 // Estado inicial VACÍO — los datos REALES se cargan desde el backend Flask.
 // CERO datos de ejemplo: la UI refleja exclusivamente el estado del servidor.
@@ -1773,6 +1778,20 @@ export default function App() {
         </main>
 
       {/* Modals */}
+      <Suspense
+        fallback={
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          >
+            <div className="flex flex-col items-center gap-3">
+              <Skeleton className="h-8 w-48" />
+              <span className="text-xs text-[var(--color-muted-2)]">Cargando superficie…</span>
+            </div>
+          </div>
+        }
+      >
       <AnimatePresence>
         {showProxyModal && (
           <ProxyModal
@@ -1867,6 +1886,7 @@ export default function App() {
           onDownloadZip={handleDownloadAllZip}
         />
       )}
+      </Suspense>
       </div>
     </div>
   );
