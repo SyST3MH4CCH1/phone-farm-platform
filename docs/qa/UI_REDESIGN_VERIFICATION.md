@@ -32,6 +32,7 @@ Evidencia en disco de la última ejecución (13:51–13:56):
 
 ```
 e2e/.artifacts/.last-run.json  {"status":"passed","failedTests":[]}
+e2e/.artifacts/report.json    expected 61 · unexpected 0 · flaky 0 · skipped 39
 npx playwright test            61 passed · 39 skipped · 0 failed
 docs/evidence/ui/*.png         12 capturas regeneradas
 ```

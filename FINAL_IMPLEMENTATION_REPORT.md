@@ -311,7 +311,8 @@ npm run e2e:visual      # -> docs/evidence/ui/
 | `npx vitest run --no-cache` | **15 files · 199/199 passed** |
 | `pytest platform/tests -q -p no:cacheprovider` | **64 passed**, exit 0, 3 warnings |
 | `npx playwright test` | **61 passed · 39 skipped · 0 failed** |
-| `e2e/.artifacts/.last-run.json` | `{"status":"passed","failedTests":[]}` |
+| `e2e/.artifacts/.last-run.json` | `{"status":"passed","failedTests":[]}` — 14:07:27 |
+| `e2e/.artifacts/report.json` | expected 61 · unexpected 0 · flaky 0 · skipped 39 — 14:07:27 |
 | `docs/evidence/ui/*.png` | **12 capturas**, regeneradas 13:51–13:56 |
 | `git rev-list --count b6995e5..HEAD` | **33** (incluye el commit de esta documentación) |
 | `git rev-list --count main..HEAD` | **59** (26 previos + 33 de este TASK) |
