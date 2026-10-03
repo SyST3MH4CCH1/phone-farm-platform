@@ -28,6 +28,22 @@ sembrada y un stub de Flask que devuelve `[]`/`503` explícito. El stub no
 falsea respuestas: los tests ejercitan los estados de vacío y error de verdad.
 Ver `e2e/README.md`.
 
+Evidencia en disco de la última ejecución (13:51–13:56):
+
+```
+e2e/.artifacts/.last-run.json  {"status":"passed","failedTests":[]}
+npx playwright test            61 passed · 39 skipped · 0 failed
+docs/evidence/ui/*.png         12 capturas regeneradas
+```
+
+Comprobación de tokens (el defecto del §4):
+
+```
+tokens var(--*) usados en src/** ......... 20
+tokens definidos en src/index.css ....... 46
+tokens indefinidos ...................... 0
+```
+
 ---
 
 ## 2. Evidencia por requisito

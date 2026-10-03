@@ -1,7 +1,7 @@
 # FINAL IMPLEMENTATION REPORT — TASK_UI_UX_REAL_CONTROL_HUB_V1
 
 **Repositorio:** `C:\Users\haxth3\Documents\phone-farm-platform`
-**Branch:** `feat/ui-ops-control-hub-v2` (30 commits de este TASK)
+**Branch:** `feat/ui-ops-control-hub-v2` (31 commits de este TASK)
 **Baseline del TASK:** `b6995e5` (`chore/update-third-party`, 2026-10-03 09:51)
 **`main`:** `ccf432e` — **sin modificar** (último commit 2026-09-15, anterior al TASK)
 **Fecha:** 2026-10-03
@@ -47,7 +47,7 @@ Todo lo anterior está reproducido por comandos, no por declaración.
 
 ---
 
-## 3. Commits (29, atómicos y en orden de fases)
+## 3. Commits (31, atómicos y en orden de fases)
 
 ### Fase A — Backup + audit
 | SHA | Mensaje |
@@ -102,6 +102,8 @@ Todo lo anterior está reproducido por comandos, no por declaración.
 | `3308371` | `docs(metrics): add METRIC_CATALOG.md with source/formula/fallback per metric` |
 | `cf59397` | `perf(§28): lazy-load de 9 superficies + vendor chunks (index 948kB→592kB, gzip −34.8%)` |
 | `4e0fddd` | `feat(§20/§27.4/§27.5): responsive real + Playwright E2E y visual con navegador real` |
+| `4099e5c` | `test(§27.4/§27.5): 61 E2E verdes en 4 viewports + 12 capturas; fix a11y (landmarks, toggle consola móvil, nombres duplicados)` |
+| `7d86ccd` | `docs: correct branch baseline (main at ccf432e, untouched) + accurate commit counts` |
 
 ---
 
@@ -301,6 +303,41 @@ npm run e2e
 npm run e2e:visual      # -> docs/evidence/ui/
 ```
 
+### 13.1 Evidencia en disco (última verificación)
+
+| Artefacto | Estado verificado |
+|---|---|
+| `npx tsc --noEmit` | **exit 0** |
+| `npx vitest run --no-cache` | **15 files · 199/199 passed** |
+| `pytest platform/tests -q -p no:cacheprovider` | **64 passed**, exit 0, 3 warnings |
+| `npx playwright test` | **61 passed · 39 skipped · 0 failed** |
+| `e2e/.artifacts/.last-run.json` | `{"status":"passed","failedTests":[]}` |
+| `docs/evidence/ui/*.png` | **12 capturas**, regeneradas 13:51–13:56 |
+| `git rev-list --count b6995e5..HEAD` | **31** |
+| `git rev-list --count main..HEAD` | **57** (26 previos + 31 de este TASK) |
+| `git merge-base main HEAD` | `ccf432e` = tip de `main` → **sin merge, `main` intacto** |
+| `git status --short` | limpio (solo sin trackear: `tmp/`, `.sisyphus/`, `.playwright-mcp/`, `platform/platform/`) |
+
+**Backup externo intacto.** Los tres artefactos conservan sus mtimes de creación,
+todos anteriores al inicio del trabajo (~10:29):
+
+```
+BACKUP_MANIFEST.md            7 273 B   03/10/2026 10:09:23
+control-hub-before-ui.bundle  2 970 380 B  03/10/2026 10:03:28
+working-tree.tar            840 969 728 B  03/10/2026 10:04:27
+```
+
+Rama `backup/pre-ui-redesign-20261003-100319` → `b6995e5`.
+
+**Tokens CSS: 0 indefinidos.** Se cruzaron los 20 tokens `var(--*)` usados en
+`src/**` contra los 46 definidos en `src/index.css`: ninguno queda sin definir.
+El defecto del §4 está realmente corregido, no solo documentado.
+
+**OpenAPI sin lista manual.** `server/openapi.ts` recorre `app._router.stack`
+(Express 4) y convierte los esquemas Zod con `z.toJSONSchema`. Los 55
+`app.get/post/patch/delete` de `server/app.ts` se reducen a 47 paths / 53
+operaciones (rutas agrupadas y el fallback `*` excluido a propósito).
+
 ---
 
 ## 14. Instrucciones de merge
@@ -317,7 +354,7 @@ git merge --ff-only feat/ui-ops-control-hub-v2
 ```
 
 Opción B — solo este TASK, sin el trabajo de diseño previo (rebase o cherry-pick
-de los 30 commits sobre `main`):
+de los 31 commits sobre `main`):
 
 ```bash
 git checkout -b feat/ui-ops-control-hub-v2-clean main

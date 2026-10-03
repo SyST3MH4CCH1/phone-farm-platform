@@ -23,7 +23,7 @@ y es ancestro de esta branch.
 | **REJECTED** | 0 | **2** (justificados en §13) |
 | **BLOCKED** | 0 | **0** |
 
-Commits de este TASK en la branch: **30** (la base `b6995e5` arrastra otros 26
+Commits de este TASK en la branch: **31** (la base `b6995e5` arrastra otros 26
 previos de `chore/update-third-party`).
 
 ---
@@ -180,7 +180,7 @@ Cross-post desactivado por defecto. RBAC/CSRF sin cambios de comportamiento
 Fases A→H respetadas; el orden de commits sigue esa secuencia.
 
 ### §26 Commits — **DONE**
-30 commits atómicos y descriptivos en `feat/ui-ops-control-hub-v2`.
+31 commits atómicos y descriptivos en `feat/ui-ops-control-hub-v2`.
 
 ### §27 Tests — **DONE**
 - vitest: **199** (145 preexistentes + 54 nuevos de openapi/data-layer/
