@@ -46,17 +46,17 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header
-      className="h-11 border-b flex items-center justify-between px-4 text-[13px] font-mono select-none"
+      className="ref-header border-b flex items-center justify-between px-4 text-[13px] font-mono select-none"
       style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
     >
-      <div className="flex items-center gap-4">
+      <div className="ref-brand flex items-center gap-4">
         {/* Logo PF + nombre */}
-        <span className="font-bold tracking-wide" style={{ color: 'var(--color-text)' }}>PF</span>
-        <span className="hidden md:inline text-[11px]" style={{ color: 'var(--color-muted-2)' }}>Phone Farm</span>
+        <span className="ref-brand-mark font-bold tracking-wide" style={{ color: 'var(--color-text)' }}>PF</span>
+        <span className="hidden md:inline ref-brand-name" style={{ color: 'var(--color-text)' }}>Phone<br/>Farm</span>
       </div>
 
       {/* Pestañas de acceso rápido */}
-      <nav className="hidden md:flex items-center gap-0.5 text-[11px]" style={{ color: 'var(--color-muted)' }}>
+      <nav className="ref-top-nav hidden md:flex items-center gap-0.5 text-[11px]" style={{ color: 'var(--color-muted)' }}>
         <button
           onClick={onOpenMoneyPrinter}
           className="px-2.5 py-1.5 rounded-md transition-colors flex items-center gap-1.5 hover:bg-[var(--color-surface-3)]"
@@ -104,7 +104,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
       </nav>
 
-      <div className="flex items-center gap-4 text-[11px]" style={{ color: 'var(--color-muted)' }}>
+      <div className="ref-header-stats flex items-center gap-4 text-[11px]" style={{ color: 'var(--color-muted)' }}>
         {/* Panda */}
         <button
           onClick={onOpenPandaGrid}
@@ -140,6 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* CPU/RAM */}
         <span className="hidden xl:inline font-mono tabular-nums">
           CPU/RAM: <span style={{ color: 'var(--color-text)' }}>{stats.cpu_percent}% / {stats.ram_percent}%</span>
+          <span className="ref-header-meter"><i style={{ width: `${Math.min(100,Math.max(0,stats.cpu_percent))}%` }}/></span>
         </span>
 
         {/* ZIP button */}

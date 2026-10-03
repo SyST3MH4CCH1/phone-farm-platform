@@ -8,6 +8,7 @@ import { AlertRow, StatusBadge, BarChart, HeatMap, ChartCard, formatPercent, Ske
 import { TerminalLogs } from './components/TerminalLogs';
 import { LoginScreen } from './components/LoginScreen';
 import { ScheduleModal } from './components/ScheduleModal';
+import { ReferenceViews, type ReferenceView } from './components/ReferenceViews';
 import { apiFetch } from './api';
 
 // TASK §28 — lazy-load de las superficies pesadas. El bundle inicial bajó de
@@ -901,7 +902,7 @@ export default function App() {
   // Página principal: 'dashboard' = solo calendario visual (default),
   // 'cuentas' = lista de cuentas, 'cola' = cola de jobs, 'calendario' =
   // calendario completo con formulario de programación.
-  const [mainView, setMainView] = useState<'dashboard' | 'cuentas' | 'cola' | 'calendario'>('dashboard');
+  const [mainView, setMainView] = useState<'dashboard' | 'calendario' | ReferenceView>('dashboard');
   // Sidebar izquierdo colapsado (reducido a iconos). Default expandido.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // TASK §20: por debajo de 1024px el sidebar deja de ser un dock fijo y pasa
@@ -936,6 +937,21 @@ export default function App() {
   const openTab = (tab: ActiveTab, open: () => void) => {
     setActiveTab(tab);
     open();
+  };
+  const navigateTool = (view: ReferenceView) => {
+    setMainView(view);
+    if (view !== 'cuentas' && view !== 'cola') setActiveTab(view);
+    if (narrowLayout) setNavOpen(false);
+  };
+  const openToolModal = (view: ReferenceView) => {
+    if (view === 'moneyprinter') setShowMoneyPrinterModal(true);
+    if (view === 'panda') setShowPandaModal(true);
+    if (view === 'curl') setShowCurlModal(true);
+    if (view === 'code') setShowCodeModal(true);
+    if (view === 'versions') setShowVersionControlModal(true);
+    if (view === 'proxies') setShowProxyModal(true);
+    if (view === 'cuentas') setMainView('cuentas');
+    if (view === 'cola') handleProcessNextJob();
   };
 
   // Master ON/OFF eliminado en Fase A: ya no hay bots taktik que orquestar.
@@ -1434,7 +1450,7 @@ export default function App() {
   }
 
   return (
-    <div className={`flex flex-col h-screen overflow-hidden font-sans ${theme === 'dark' ? 'theme-dark bg-[#17181A] text-[#E5E5E5]' : 'theme-light bg-[#F8FAFC] text-[#1E293B]'}`}>
+    <div className="theme-dark flex flex-col h-screen overflow-hidden font-sans">
       {/* TASK §20: en layout estrecho no hay dock, así que la navegación se
           abre desde aquí. En escritorio el botón no se renderiza. */}
       {narrowLayout && (
@@ -1461,11 +1477,11 @@ export default function App() {
         currentUser={currentUser}
         deviceCount={deviceCount}
         onOpenPandaGrid={() => window.open('/panda', '_blank', 'noopener,width=1100,height=760')}
-        onOpenMoneyPrinter={() => openTab('moneyprinter', () => setShowMoneyPrinterModal(true))}
+        onOpenMoneyPrinter={() => navigateTool('moneyprinter')}
         onOpenAdbBridge={() => openTab('adb', () => setShowAdbModal(true))}
-        onOpenCurlTester={() => openTab('curl', () => setShowCurlModal(true))}
-        onOpenCodeViewer={() => openTab('code', () => setShowCodeModal(true))}
-        onOpenVersionControl={() => openTab('versions', () => setShowVersionControlModal(true))}
+        onOpenCurlTester={() => navigateTool('curl')}
+        onOpenCodeViewer={() => navigateTool('code')}
+        onOpenVersionControl={() => navigateTool('versions')}
         onDownloadAllZip={() => { window.location.href = '/api/download-zip'; }}
         onToggleMaster={() => { /* Fase A: master ON/OFF inerte. */ }}
         onLogout={handleLogout}
@@ -1512,7 +1528,7 @@ export default function App() {
           className={
             narrowLayout
               ? `absolute inset-y-0 left-0 z-40 ${navOpen ? 'w-56' : 'w-0'} shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200`
-              : `${sidebarCollapsed ? 'w-14' : 'w-52'} shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200`
+              : `${sidebarCollapsed ? 'w-14' : 'w-[212px]'} shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200`
           }
           style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
         >
@@ -1581,7 +1597,8 @@ export default function App() {
           <div className="border-t py-1" style={{ borderColor: 'var(--color-line)' }}>
             <SidebarItem
               collapsed={sidebarCollapsed}
-              onClick={() => openTab('moneyprinter', () => setShowMoneyPrinterModal(true))}
+              active={mainView === 'moneyprinter'}
+              onClick={() => navigateTool('moneyprinter')}
               title="MoneyPrinter"
               label="MoneyPrinter"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>}
@@ -1595,14 +1612,16 @@ export default function App() {
             />
             <SidebarItem
               collapsed={sidebarCollapsed}
-              onClick={() => openTab('panda', () => setShowPandaModal(true))}
+              active={mainView === 'panda'}
+              onClick={() => navigateTool('panda')}
               title="Panda live"
               label="Panda live"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="8" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/></svg>}
             />
             <SidebarItem
               collapsed={sidebarCollapsed}
-              onClick={() => openTab('proxies', () => setShowProxyModal(true))}
+              active={mainView === 'proxies'}
+              onClick={() => navigateTool('proxies')}
               title="Proxies"
               label="Proxies"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>}
@@ -1622,21 +1641,24 @@ export default function App() {
           <div className="py-1">
             <SidebarItem
               collapsed={sidebarCollapsed}
-              onClick={() => openTab('curl', () => setShowCurlModal(true))}
+              active={mainView === 'curl'}
+              onClick={() => navigateTool('curl')}
               title="cURL API"
               label="cURL API"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>}
             />
             <SidebarItem
               collapsed={sidebarCollapsed}
-              onClick={() => openTab('code', () => setShowCodeModal(true))}
+              active={mainView === 'code'}
+              onClick={() => navigateTool('code')}
               title="Código Python"
               label="Código Python"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>}
             />
             <SidebarItem
               collapsed={sidebarCollapsed}
-              onClick={() => openTab('versions', () => setShowVersionControlModal(true))}
+              active={mainView === 'versions'}
+              onClick={() => navigateTool('versions')}
               title="Versiones"
               label="Versiones"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
@@ -1665,19 +1687,16 @@ export default function App() {
         {/* Main — vista seleccionada por mainView */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Encabezado de página */}
-          <div className="flex items-center justify-between border-b px-4 py-2.5" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
+          {mainView === 'dashboard' && <div className="flex items-center justify-between border-b px-4 py-2.5" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
             <h1 className="text-[13px] font-mono uppercase tracking-wider font-bold" style={{ color: 'var(--color-text)' }}>
-              {mainView === 'dashboard' && 'Dashboard'}
-              {mainView === 'cuentas' && 'Cuentas'}
-              {mainView === 'cola' && 'Cola'}
-              {mainView === 'calendario' && 'Calendario'}
+              Dashboard
             </h1>
             {mainView === 'dashboard' && (
               <span className="text-[11px]" style={{ color: 'var(--color-muted-2)' }}>
                 Resumen general de tu Phone Farm
               </span>
             )}
-          </div>
+          </div>}
 
           {/*
             * Cuerpo:
@@ -1686,7 +1705,7 @@ export default function App() {
             *  - 'cola'        → solo QueuePanel
             *  - 'calendario'  → calendario editor completo
             */}
-          <div className="flex-1 overflow-auto">
+          <div key={mainView} className="flex-1 overflow-auto">
             {mainView === 'dashboard' && (
               <DashboardView
                 accounts={accounts}
@@ -1714,38 +1733,34 @@ export default function App() {
               />
             )}
 
-            {mainView === 'cuentas' && (
-              <div className="h-full p-3">
-                <AccountsPanel
-                  accounts={accounts}
-                  proxies={proxies}
-                  onAddAccount={handleAddAccount}
-                  onDeleteAccount={handleDeleteAccount}
-                  onSelectAccountForDetail={(acc) => setSelectedAccountForDetail(acc)}
-                />
-              </div>
-            )}
-
-            {mainView === 'cola' && (
-              <div className="h-full p-3">
-                <QueuePanel
-                  queue={queue}
-                  accounts={accounts}
-                  isProcessing={isProcessingJob}
-                  onAddJob={handleAddJob}
-                  onProcessNextJob={handleProcessNextJob}
-                  onOpenPreview={handleOpenPreviewForJob}
-                  onApproveJob={handleApproveJob}
-                  onPublishJob={handlePublishJob}
-                  onMarkReady={handleMarkReady}
-                  onRejectJob={handleRejectJob}
-                  onDeleteJob={handleDeleteJob}
-                />
-              </div>
+            {mainView !== 'dashboard' && mainView !== 'calendario' && (
+              <ReferenceViews
+                view={mainView}
+                accounts={accounts}
+                queue={queue}
+                proxies={proxies}
+                stats={stats}
+                stack={stack}
+                deviceCount={deviceCount}
+                onSelectAccount={(acc) => setSelectedAccountForDetail(acc)}
+                onAddAccount={handleAddAccount}
+                onProcessNextJob={handleProcessNextJob}
+                onOpenTool={openToolModal}
+                onOpenPreview={handleOpenPreviewForJob}
+                onOpenCalendar={() => setMainView('calendario')}
+              />
             )}
 
             {mainView === 'calendario' && (
-              <div className="h-full p-3">
+              <div className="ref-page ref-calendar-page">
+                <div className="ref-page-heading"><div><h1>Calendario</h1><p>Planifica y gestiona tus publicaciones en todas las cuentas</p></div><button className="ref-primary" onClick={() => document.getElementById('schedule-quick-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>+ Nueva publicación</button></div>
+                <div className="ref-metrics">
+                  <div className="ref-metric ref-tone-blue"><span className="ref-metric-icon">↗</span><div className="ref-metric-copy"><span>Publicaciones hoy</span><strong>{queue.filter(j => j.scheduled_ts && new Date(j.scheduled_ts).toDateString() === new Date().toDateString()).length}</strong><small>Programadas para hoy</small></div></div>
+                  <div className="ref-metric ref-tone-purple"><span className="ref-metric-icon">▣</span><div className="ref-metric-copy"><span>Esta semana</span><strong>{queue.filter(j => j.scheduled_ts && Math.abs(new Date(j.scheduled_ts).getTime() - Date.now()) < 7*86400000).length}</strong><small>Publicaciones</small></div></div>
+                  <div className="ref-metric ref-tone-green"><span className="ref-metric-icon">◷</span><div className="ref-metric-copy"><span>Programadas</span><strong>{queue.filter(j => j.scheduled_ts && new Date(j.scheduled_ts).getTime() > Date.now()).length}</strong><small>En cola</small></div></div>
+                  <div className="ref-metric ref-tone-yellow"><span className="ref-metric-icon">▤</span><div className="ref-metric-copy"><span>Pendientes de revisión</span><strong>{queue.filter(j => j.status === 'awaiting_approval' || j.status === 'awaiting_preview').length}</strong><small>Por aprobar</small></div></div>
+                </div>
+                <div className="ref-calendar-layout"><div className="ref-calendar-main">
                 <div className="h-full flex flex-col rounded-lg overflow-hidden border" style={{ borderColor: 'var(--color-line)' }}>
                   <ScheduleModal
                     embedded
@@ -1757,6 +1772,7 @@ export default function App() {
                     onRefresh={refreshBackendData}
                   />
                 </div>
+                </div><div className="ref-section ref-upcoming"><header className="ref-section-head"><h2>Próximas publicaciones</h2><span>Siguientes 24 horas</span></header>{queue.filter(j => j.scheduled_ts && new Date(j.scheduled_ts).getTime() >= Date.now()).sort((a,b) => new Date(a.scheduled_ts!).getTime() - new Date(b.scheduled_ts!).getTime()).slice(0,6).map(j => <button key={j.id} className="ref-upcoming-row" onClick={() => setMainView('cola')}><time>{new Date(j.scheduled_ts!).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</time><span>{j.keyword}<small>@{j.target_account}</small></span><b>{j.status}</b></button>)}{!queue.some(j => j.scheduled_ts && new Date(j.scheduled_ts).getTime() >= Date.now()) && <p className="ref-empty">No hay publicaciones próximas.</p>}</div></div>
               </div>
             )}
           </div>

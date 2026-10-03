@@ -485,7 +485,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
 
           {/* Formulario rápido (oculto en modo dashboard/visual) */}
           {!hideForm && (
-          <div className="mt-3 border-t border-[#2A2C30] pt-3">
+          <div id="schedule-quick-form" className="mt-3 border-t border-[#2A2C30] pt-3">
             <div className="font-mono text-xs font-bold text-[#E5E5E5] mb-2">
               Programar nueva publicación
               {selectedDay && view === 'month' && <span className="text-[#6B7076] font-normal"> — {selectedDay.getDate()} {MONTHS[selectedDay.getMonth()]}</span>}
