@@ -62,7 +62,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
   const [view, setView] = useState<View>('month');
   const [cursor, setCursor] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
-  const [filterType, setFilterType] = useState<'all' | 'terminal' | 'account'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'terminal' | 'account' | 'platform' | 'status'>('all');
   const [filterValue, setFilterValue] = useState('');
 
   const [kw, setKw] = useState('');
@@ -92,6 +92,8 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
       if (filterType === 'all') return true;
       if (filterType === 'account') return job.target_account === filterValue;
       if (filterType === 'terminal') return accountOf(job)?.device_serial === filterValue;
+      if (filterType === 'platform') return accountOf(job)?.platform === filterValue;
+      if (filterType === 'status') return job.status === filterValue;
       return true;
     }), [queue, filterType, filterValue]);
 
@@ -264,6 +266,8 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
               <option value="all">Global (todas las cuentas)</option>
               <option value="account">Por cuenta</option>
               <option value="terminal">Por terminal</option>
+              <option value="platform">Por plataforma</option>
+              <option value="status">Por estado</option>
             </select>
             {filterType === 'account' && (
               <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
@@ -275,6 +279,30 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
               <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
                 <option value="">— selecciona —</option>
                 {terminals.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            )}
+            {filterType === 'platform' && (
+              <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
+                <option value="">— selecciona —</option>
+                <option value="instagram">Instagram</option>
+                <option value="tiktok">TikTok</option>
+                <option value="both">Instagram + TikTok</option>
+              </select>
+            )}
+            {filterType === 'status' && (
+              <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
+                <option value="">— selecciona —</option>
+                <option value="pending">Queued</option>
+                <option value="scripting">Scripting</option>
+                <option value="generating">Generating</option>
+                <option value="awaiting_approval">Awaiting approval</option>
+                <option value="awaiting_preview">Awaiting preview</option>
+                <option value="ready_for_publish">Ready</option>
+                <option value="publishing">Publishing</option>
+                <option value="published">Published</option>
+                <option value="failed">Failed</option>
+                <option value="rejected">Rejected</option>
+                <option value="awaiting_manual_upload">Manual upload</option>
               </select>
             )}
           </div>
