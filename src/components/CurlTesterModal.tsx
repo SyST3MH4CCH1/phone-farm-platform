@@ -1,6 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { useFocusTrap } from '../a11y';
+import { apiFetch } from '../api';
+import { useResource } from '../data/resource';
+import { buildCurl, flattenOpenApi, type ApiOperationViewModel } from '../data/mappers';
+import { FilterBar } from './design/FilterBar';
+import { EmptyState } from './design/EmptyState';
+import { ErrorState } from './design/ErrorState';
+import { Skeleton } from './design/Skeleton';
+import { StatusBadge, type StatusBadgeKind } from './design/StatusBadge';
 
 interface CurlTesterModalProps {
   isOpen: boolean;
@@ -8,172 +16,184 @@ interface CurlTesterModalProps {
   onRunEndpointTest: (method: string, endpoint: string, body?: any) => Promise<any>;
 }
 
+const METHOD_KIND: Record<ApiOperationViewModel['methodKind'], StatusBadgeKind> = {
+  read: 'info',
+  write: 'brand',
+  destroy: 'danger',
+};
+
+const METHOD_LABEL: Record<ApiOperationViewModel['methodKind'], string> = {
+  read: 'Lectura',
+  write: 'Escritura',
+  destroy: 'Destructivo',
+};
+
+type ExecutionState = { status: number; body: string } | null;
+
+/**
+ * Explorador cURL REAL (TASK §16).
+ *
+ * La lista de endpoints NO está escrita a mano: se carga de
+ * GET /api/openapi.json, que el servidor genera recorriendo su propio router
+ * Express y los esquemas Zod reales. Si el backend añade o quita una ruta, este
+ * modal lo refleja sin tocar una línea de React.
+ */
 export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
   isOpen,
   onClose,
-  onRunEndpointTest
+  onRunEndpointTest,
 }) => {
-  const [activeTab, setActiveTab] = useState(0);
-  const [responseOutput, setResponseOutput] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [methodFilter, setMethodFilter] = useState<'all' | ApiOperationViewModel['methodKind']>('all');
+  const [tagFilter, setTagFilter] = useState<string>('all');
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [pathValues, setPathValues] = useState<Record<string, string>>({});
+  const [bodyText, setBodyText] = useState<string>('');
+  const [result, setResult] = useState<ExecutionState>(null);
   const [loading, setLoading] = useState(false);
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   useFocusTrap(containerRef, onClose);
 
+  const spec = useResource(
+    isOpen ? '/api/openapi.json' : null,
+    (raw) => raw as never,
+    { enabled: isOpen },
+  );
+
+  const operations = useMemo(() => flattenOpenApi(spec.data as never), [spec.data]);
+
+  const tags = useMemo(
+    () => Array.from(new Set(operations.flatMap((o) => o.tags))).sort(),
+    [operations],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return operations.filter((op) => {
+      if (methodFilter !== 'all' && op.methodKind !== methodFilter) return false;
+      if (tagFilter !== 'all' && !op.tags.includes(tagFilter)) return false;
+      if (!q) return true;
+      return (
+        op.path.toLowerCase().includes(q) ||
+        op.summary.toLowerCase().includes(q) ||
+        op.operationId.toLowerCase().includes(q)
+      );
+    });
+  }, [operations, query, methodFilter, tagFilter]);
+
+  const active: ApiOperationViewModel | null =
+    operations.find((o) => o.key === activeKey) ?? filtered[0] ?? null;
+
+  useEffect(() => {
+    setPathValues({});
+    setBodyText(active?.sampleBody ?? '');
+    setResult(null);
+  }, [active?.key]);
+
   if (!isOpen) return null;
 
-  const endpoints = [
-    {
-      name: "1. Listar todas las cuentas",
-      method: "GET",
-      url: "/api/accounts",
-      curl: `curl -X GET http://127.0.0.1:5000/api/accounts`,
-      body: null
-    },
-    {
-      name: "2. Crear nueva cuenta IG",
-      method: "POST",
-      url: "/api/accounts",
-      curl: `curl -X POST http://127.0.0.1:5000/api/accounts -H "Content-Type: application/json" -d '{"username":"<cuenta>","password":"<password>","device_serial":"<serial>","proxy_id":"proxy_01","warmup_day":1}'`,
-      body: { username: "<cuenta>", password: "<password>", device_serial: "<serial>", proxy_id: "proxy_01", warmup_day: 1 }
-    },
-    {
-      name: "3. Eliminar cuenta por ID",
-      method: "DELETE",
-      url: "/api/accounts/acc_02",
-      curl: `curl -X DELETE http://127.0.0.1:5000/api/accounts/acc_02`,
-      body: null
-    },
-    {
-      name: "4. Listar proxies con IP pública",
-      method: "GET",
-      url: "/api/proxies",
-      curl: `curl -X GET http://127.0.0.1:5000/api/proxies`,
-      body: null
-    },
-    {
-      name: "5. Agregar credencial de proxy",
-      method: "POST",
-      url: "/api/proxies",
-      curl: `curl -X POST http://127.0.0.1:5000/api/proxies -H "Content-Type: application/json" -d '{"provider":"DataImpulse","type":"socks5","host":"gw.dataimpulse.com","port":10003,"user":"usr","pass":"pwd"}'`,
-      body: { provider: "DataImpulse", type: "socks5", host: "gw.dataimpulse.com", port: 10003, user: "usr", pass: "pwd" }
-    },
-    {
-      name: "6. Consultar cola de generación",
-      method: "GET",
-      url: "/api/queue",
-      curl: `curl -X GET http://127.0.0.1:5000/api/queue`,
-      body: null
-    },
-    {
-      name: "7. Agregar job a la cola",
-      method: "POST",
-      url: "/api/queue",
-      curl: `curl -X POST http://127.0.0.1:5000/api/queue -H "Content-Type: application/json" -d '{"keyword":"postres faciles sin horno","target_account":"acc_01"}'`,
-      body: { keyword: "postres faciles sin horno", target_account: "acc_01" }
-    },
-    {
-      name: "8. Procesar siguiente job (Generar + Publicar)",
-      method: "POST",
-      url: "/api/queue/next",
-      curl: `curl -X POST http://127.0.0.1:5000/api/queue/next`,
-      body: null
-    },
-    {
-      name: "9. Iniciar bot de engagement",
-      method: "POST",
-      url: "/engagement/start",
-      curl: `curl -X POST http://127.0.0.1:5000/engagement/start -H "Content-Type: application/json" -d '{"account_id":"acc_01"}'`,
-      body: { account_id: "acc_01" }
-    },
-    {
-      name: "10. Detener bot de engagement",
-      method: "POST",
-      url: "/engagement/stop",
-      curl: `curl -X POST http://127.0.0.1:5000/engagement/stop -H "Content-Type: application/json" -d '{"account_id":"acc_01"}'`,
-      body: { account_id: "acc_01" }
-    },
-    {
-      name: "11. Métricas globales del sistema",
-      method: "GET",
-      url: "/api/stats",
-      curl: `curl -X GET http://127.0.0.1:5000/api/stats`,
-      body: null
-    },
-    {
-      name: "12. Autenticación (Login) — ejemplo NO ejecutable",
-      method: "POST",
-      url: "/api/auth/login",
-      curl: `curl -X POST http://127.0.0.1:5000/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"<password>"}'`,
-      // FE-01: sin credenciales reales. Password vacío -> el servidor rechaza
-      // con 400 (validación) y NUNCA autentica con credenciales hardcodeadas.
-      body: { username: "admin", password: "" }
-    },
-    {
-      name: "13. Consultar sesión actual (Auth Me)",
-      method: "GET",
-      url: "/api/auth/me",
-      curl: `curl -X GET http://127.0.0.1:5000/api/auth/me`,
-      body: null
-    },
-    {
-      name: "14. MoneyPrinterTurbo Config (Get)",
-      method: "GET",
-      url: "/api/moneyprinter/config",
-      curl: `curl -X GET http://127.0.0.1:5000/api/moneyprinter/config`,
-      body: null
-    },
-    {
-      name: "15. MoneyPrinterTurbo Generación Vídeo 9:16",
-      method: "POST",
-      url: "/api/moneyprinter/generate",
-      curl: `curl -X POST http://127.0.0.1:5000/api/moneyprinter/generate -H "Content-Type: application/json" -d '{"keyword":"decoracion minimalista","target_account":"acc_01","video_aspect":"9:16"}'`,
-      body: { keyword: "decoracion minimalista", target_account: "acc_01", video_aspect: "9:16" }
-    },
-    {
-      name: "16. Verificar API Key de Pexels",
-      method: "POST",
-      url: "/api/moneyprinter/test-pexels",
-      curl: `curl -X POST http://127.0.0.1:5000/api/moneyprinter/test-pexels -H "Content-Type: application/json" -d '{"pexels_api_key":"your_pexels_key"}'`,
-      body: { pexels_api_key: "" }
-    }
-  ];
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const curl = active ? buildCurl(active, baseUrl, pathValues, bodyText.trim() || null) : '';
 
-  const currentEndpoint = endpoints[activeTab];
+  const concretePath = active
+    ? active.path.replace(/\{([^}]+)\}/g, (_m, name: string) => pathValues[name] ?? `<${name}>`)
+    : '';
 
-  const handleTest = async () => {
-    // FE-02: las mutaciones (no-GET) requieren confirmación explícita — antes
-    // un clic borraba cuentas / arrancaba el pipeline con la sesión completa.
-    if (currentEndpoint.method !== "GET" && currentEndpoint.method !== "HEAD") {
+  const handleRun = async () => {
+    if (!active) return;
+    // Las mutaciones y borrados se confirmanan: esta herramienta usa la
+    // sesión real del operador.
+    if (active.methodKind !== 'read') {
       const ok = window.confirm(
-        `¿Ejecutar ${currentEndpoint.method} ${currentEndpoint.url} con tu sesión actual?\n` +
-        `Esta acción NO es reversible.`
+        `¿Ejecutar ${active.method} ${concretePath} con tu sesión actual?\n` +
+        `Clasificación: ${METHOD_LABEL[active.methodKind]}. La acción puede no ser reversible.`,
       );
       if (!ok) return;
     }
-    // FE-02: el login con password vacío no debe ejecutarse (fallaría 400,
-    // pero evitamos llamadas inútiles al endpoint de auth).
-    if (currentEndpoint.url === "/api/auth/login" && !currentEndpoint.body?.password) {
-      setResponseOutput(JSON.stringify({ error: "Este preset es de ejemplo: introduce un password real para probar el login." }, null, 2));
-      return;
-    }
     setLoading(true);
-    setResponseOutput(null);
+    setResult(null);
     try {
-      const res = await onRunEndpointTest(currentEndpoint.method, currentEndpoint.url, currentEndpoint.body);
-      setResponseOutput(JSON.stringify(res, null, 2));
-    } catch (e: any) {
-      setResponseOutput(JSON.stringify({ error: e.message }, null, 2));
+      const payload = bodyText.trim() ? JSON.parse(bodyText) : undefined;
+      if (bodyText.trim() && payload === undefined) throw new Error('El body no es JSON válido');
+      const data = await onRunEndpointTest(active.method, concretePath, payload);
+      setResult({ status: 200, body: JSON.stringify(data, null, 2) });
+    } catch (e) {
+      setResult({ status: 0, body: e instanceof Error ? e.message : String(e) });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCopyCurl = (index: number, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(curl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const listBody = () => {
+    if (spec.status === 'loading') {
+      return (
+        <div className="space-y-2 p-2">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-3/4" />
+        </div>
+      );
+    }
+    if (spec.status === 'error') {
+      return (
+        <ErrorState
+          title="No se pudo cargar el contrato de la API"
+          message={spec.error ?? undefined}
+          onRetry={spec.reload}
+        />
+      );
+    }
+    if (filtered.length === 0) {
+      return (
+        <EmptyState
+          title={operations.length === 0 ? 'El servidor no expone ninguna ruta' : 'Ningún endpoint coincide'}
+          description={
+            operations.length === 0
+              ? 'GET /api/openapi.json devolvió un documento sin rutas.'
+              : 'Ajusta la búsqueda o el filtro de método.'
+          }
+        />
+      );
+    }
+    return (
+      <ul className="space-y-1 text-xs">
+        {filtered.map((op) => (
+          <li key={op.key}>
+            <button
+              onClick={() => setActiveKey(op.key)}
+              aria-current={active?.key === op.key}
+              className={`w-full text-left px-3 py-2 rounded-lg flex flex-col gap-0.5 transition-colors font-mono ${
+                active?.key === op.key
+                  ? 'bg-[var(--color-brand)]/10 border border-[var(--color-brand)]/40 text-[var(--color-brand)]'
+                  : 'text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${
+                  op.methodKind === 'read'
+                    ? 'text-[var(--color-info)] border-[var(--color-info)]/30 bg-[var(--color-info)]/10'
+                    : op.methodKind === 'destroy'
+                      ? 'text-[var(--color-danger)] border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10'
+                      : 'text-[var(--color-brand)] border-[var(--color-brand)]/30 bg-[var(--color-brand)]/10'
+                }`}>
+                  {op.method}
+                </span>
+                <span className="truncate font-semibold text-[var(--color-text)]">{op.summary}</span>
+              </span>
+              <span className="text-[10px] text-[var(--color-muted-2)] truncate">{op.path}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
   };
 
   return (
@@ -186,89 +206,160 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
         transition={{ duration: 0.18 }}
         role="dialog"
         aria-modal="true"
-        className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden"
+        aria-label="Explorador de la API del panel"
+        className="bg-[var(--color-surface)] border border-[var(--color-line)] rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
       >
-        {/* Header */}
-        <div className="bg-[#232528] px-4 py-3 border-b border-[#2A2C30] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-wider">
-              Pruebas cURL y Validación REST API (16 Endpoints - Incluye MoneyPrinterTurbo)
+        <div className="bg-[var(--color-surface-2)] px-4 py-3 border-b border-[var(--color-line)] flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold text-[var(--color-text)] uppercase tracking-wider truncate">
+              API Explorer
             </h3>
+            <p className="text-[11px] text-[var(--color-muted-2)] font-sans normal-case">
+              {spec.status === 'ready'
+                ? `${operations.length} operaciones desde GET /api/openapi.json · contrato v${(spec.data as never as { info: { version: string } }).info.version}`
+                : 'Cargando contrato generado por el servidor…'}
+            </p>
           </div>
-          <button onClick={onClose} className="text-[#9CA1A8] hover:text-[#E5E5E5] font-bold text-sm p-1">✕</button>
+          <div className="flex items-center gap-2">
+            {spec.isStale && <StatusBadge kind="warn" label="Stale" title={spec.error ?? undefined} />}
+            <button onClick={spec.reload} className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-muted)] hover:text-[var(--color-text)] border border-[var(--color-line)] rounded-lg px-2 py-1">
+              Recargar
+            </button>
+            <button onClick={onClose} aria-label="Cerrar" className="text-[var(--color-muted)] hover:text-[var(--color-text)] font-bold text-sm p-1">✕</button>
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* List of 16 Endpoints */}
-          <div className="w-72 bg-[#1A1C1E] border-r border-[#2A2C30] p-2 overflow-y-auto space-y-1 text-xs">
-            {endpoints.map((ep, idx) => (
-              <button
-                key={idx}
-                onClick={() => { setActiveTab(idx); setResponseOutput(null); }}
-                className={`w-full text-left px-3 py-2 rounded-lg flex flex-col gap-0.5 transition-colors font-mono ${
-                  activeTab === idx
-                    ? 'bg-[#8A8F98]/10 border border-[#8A8F98]/30 text-[#8A8F98]'
-                    : 'text-[#9CA1A8] hover:bg-[#1E2023] hover:text-[#E5E5E5]'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                    ep.method === 'GET' ? 'bg-[#A1A6AE]/10 text-[#A1A6AE] border border-[#A1A6AE]/30' :
-                    ep.method === 'POST' ? 'bg-[#8A8F98]/10 text-[#8A8F98] border border-[#8A8F98]/30' : 'bg-red-950/40 text-[#E05B5B] border border-red-500/30'
-                  }`}>
-                    {ep.method}
-                  </span>
-                  <span className="truncate font-semibold text-[#E5E5E5]">{ep.name}</span>
+        <div className="flex flex-1 overflow-hidden min-h-0">
+          <aside className="w-80 shrink-0 bg-[var(--color-canvas)] border-r border-[var(--color-line)] flex flex-col min-h-0">
+            <div className="p-2 border-b border-[var(--color-line)] space-y-2">
+              <FilterBar
+                query={query}
+                onQueryChange={setQuery}
+                options={[
+                  { value: 'all', label: 'Todos', count: operations.length },
+                  { value: 'read', label: 'Lectura', count: operations.filter((o) => o.methodKind === 'read').length },
+                  { value: 'write', label: 'Escritura', count: operations.filter((o) => o.methodKind === 'write').length },
+                  { value: 'destroy', label: 'Destr.', count: operations.filter((o) => o.methodKind === 'destroy').length },
+                ]}
+                activeOption={methodFilter}
+                onActiveOptionChange={(v) => setMethodFilter(v as typeof methodFilter)}
+                placeholder="Buscar ruta, resumen u operationId…"
+                searchLabel="Buscar endpoint"
+                filtersLabel="Filtrar por clase de método"
+              />
+              {tags.length > 1 && (
+                <select
+                  value={tagFilter}
+                  onChange={(e) => setTagFilter(e.target.value)}
+                  aria-label="Filtrar por tag"
+                  className="w-full bg-[var(--color-surface)] border border-[var(--color-line)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text)]"
+                >
+                  <option value="all">Todos los tags</option>
+                  {tags.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto">{listBody()}</div>
+          </aside>
+
+          <section className="flex-1 flex flex-col p-4 bg-[var(--color-canvas)] overflow-y-auto space-y-4 min-w-0">
+            {!active ? (
+              <EmptyState title="Selecciona un endpoint" description="La lista se genera desde el router real del servidor." />
+            ) : (
+              <>
+                <header className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge kind={METHOD_KIND[active.methodKind]} label={active.method} />
+                    <h4 className="text-sm font-bold text-[var(--color-text)] font-sans">{active.summary}</h4>
+                  </div>
+                  <code className="block text-xs text-[var(--color-muted)] break-all">
+                    {baseUrl}{active.path}
+                  </code>
+                  <div className="flex flex-wrap gap-1.5">
+                    <StatusBadge kind="neutral" label={active.operationId} quiet />
+                    {active.roleRequired && <StatusBadge kind="warn" label={`Rol ${active.roleRequired}`} />}
+                    {active.needsSession && <StatusBadge kind="info" label="Sesión" quiet />}
+                    {active.needsCsrf && <StatusBadge kind="info" label="CSRF" quiet />}
+                    {active.rateLimited && <StatusBadge kind="warn" label="Rate limited" quiet />}
+                    {active.validated && <StatusBadge kind="ok" label="Zod validado" quiet />}
+                    {active.tags.map((t) => <StatusBadge key={t} kind="neutral" label={t} quiet />)}
+                  </div>
+                </header>
+
+                {active.pathParams.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {active.pathParams.map((name) => (
+                      <label key={name} className="flex flex-col gap-1 text-[11px] text-[var(--color-muted-2)] font-sans">
+                        <span>{name} (path param)</span>
+                        <input
+                          value={pathValues[name] ?? ''}
+                          onChange={(e) => setPathValues((prev) => ({ ...prev, [name]: e.target.value }))}
+                          placeholder={`<${name}>`}
+                          className="bg-[var(--color-surface)] border border-[var(--color-line)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text)]"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {active.sampleBody !== null ? (
+                  <label className="flex flex-col gap-1 text-[11px] text-[var(--color-muted-2)] font-sans">
+                    <span>
+                      Body — generado desde el JSON Schema real del endpoint
+                      {active.validated ? ' (misma validación Zod que en runtime)' : ''}
+                    </span>
+                    <textarea
+                      value={bodyText}
+                      onChange={(e) => setBodyText(e.target.value)}
+                      rows={Math.min(12, Math.max(3, bodyText.split('\n').length))}
+                      spellCheck={false}
+                      className="bg-[var(--color-surface)] border border-[var(--color-line)] rounded-lg p-2 text-xs text-[var(--color-text)] font-mono"
+                    />
+                  </label>
+                ) : (
+                  <p className="text-[11px] text-[var(--color-muted-2)] font-sans">
+                    Este endpoint no declara cuerpo: el backend no aplica validación Zod al body.
+                  </p>
+                )}
+
+                <div className="bg-[var(--color-surface)] border border-[var(--color-line)] rounded-xl p-3 relative text-xs text-[var(--color-brand)]">
+                  <button
+                    onClick={handleCopy}
+                    className="absolute top-2 right-2 bg-[var(--color-canvas)] hover:bg-[var(--color-surface-2)] text-[var(--color-text)] border border-[var(--color-line)] px-2.5 py-1 rounded-lg text-[11px] font-bold"
+                  >
+                    {copied ? 'Copiado' : 'Copiar cURL'}
+                  </button>
+                  <pre className="pr-24 whitespace-pre-wrap break-all">{curl}</pre>
                 </div>
-                <span className="text-[10px] text-[#6B7076] truncate">{ep.url}</span>
-              </button>
-            ))}
-          </div>
 
-          {/* Test Workbench */}
-          <div className="flex-1 flex flex-col p-4 bg-[#1A1C1E] overflow-y-auto space-y-4">
-            <div>
-              <h4 className="text-sm font-bold text-[#E5E5E5] mb-1">{currentEndpoint.name}</h4>
-              <div className="flex items-center gap-2 text-xs font-mono text-[#9CA1A8]">
-                <span className="text-[#8A8F98] font-bold">{currentEndpoint.method}</span>
-                <span>{window.location.origin}{currentEndpoint.url}</span>
-                <span className="text-[#6B7076]">(same-origin — usa tu sesión)</span>
-              </div>
-            </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleRun}
+                    disabled={loading}
+                    className="bg-[var(--color-brand)] hover:opacity-90 text-white font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {loading ? 'Ejecutando…' : 'Ejecutar'}
+                  </button>
+                  {active.methodKind !== 'read' && (
+                    <span className="text-[11px] text-[var(--color-warn)] font-sans">
+                      Pide confirmación: usa tu sesión y rol reales.
+                    </span>
+                  )}
+                </div>
 
-            {/* cURL Command Block */}
-            <div className="bg-[#1E2023] border border-[#2A2C30] rounded-xl p-3 relative font-mono text-xs text-[#8A8F98]">
-              <button
-                onClick={() => handleCopyCurl(activeTab, currentEndpoint.curl)}
-                className="absolute top-2 right-2 bg-[#1A1C1E] hover:bg-[#33363A] text-[#E5E5E5] border border-[#2A2C30] px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 font-bold"
-              >
-                {copiedIndex === activeTab ? true : null}
-                {copiedIndex === activeTab ? 'Copiado' : 'Copiar cURL'}
-              </button>
-              <pre className="pr-24 whitespace-pre-wrap">{currentEndpoint.curl}</pre>
-            </div>
-
-            {/* Execute Test Button */}
-            <div>
-              <button
-                onClick={handleTest}
-                disabled={loading}
-                className="bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-2"
-              > Ejecutar Prueba cURL
-              </button>
-            </div>
-
-            {/* Response Output */}
-            {responseOutput && (
-              <div className="flex-1 flex flex-col">
-                <span className="text-xs font-mono text-[#9CA1A8] mb-1">Respuesta del endpoint:</span>
-                <pre className="bg-[#1E2023] border border-[#2A2C30] rounded-xl p-3 font-mono text-xs text-[#A1A6AE] overflow-auto flex-1 max-h-60">
-                  {responseOutput}
-                </pre>
-              </div>
+                {result && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-[var(--color-muted-2)] font-sans">
+                      Respuesta {result.status === 0 ? '(sin respuesta)' : ''}
+                    </span>
+                    <pre className="bg-[var(--color-surface)] border border-[var(--color-line)] rounded-xl p-3 text-xs text-[var(--color-muted)] overflow-auto max-h-60 whitespace-pre-wrap break-all">
+                      {result.body}
+                    </pre>
+                  </div>
+                )}
+              </>
             )}
-          </div>
+          </section>
         </div>
       </motion.div>
     </div>

@@ -30,6 +30,17 @@
   /* --- Línea/bordes universal --- */
   --color-line: #2A2C30;
 
+  /* --- Alias de compatibilidad ---------------------------------------------
+     Los componentes del design system y varios modales ya referencian estos
+     nombres, pero NO existían en la escala: `var(--color-border)` sin definir
+     hace que el borde caiga a "currentColor/inherit" y el fondo se aplane.
+     Se declaran aquí, en un solo sitio, en vez de reescribir ~60 call sites.
+     0 = raíz, 1 = panel, 2 = elevado, 3 = hover/input.                    */
+  --color-surface-0: #0A0A0B;   /* == canvas */
+  --color-surface-1: #111113;   /* == surface */
+  --color-border: #2A2C30;      /* == line */
+  --color-text-dim: #9CA1A8;    /* == muted */
+
   /* --- ACCENT FUNCIONAL: AZUL (TASK §9) --- */
   --color-brand: #3B82F6;           /* azul 500 — accent de acciones/links */
   --color-brand-dim: #2563EB;      /* hover/active */
