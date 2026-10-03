@@ -17,7 +17,7 @@ import { SessionStore, safeEqual, newSessionToken, SESSION_COOKIE, SESSION_MAX_A
 import { verifyPassword, hashPassword, needsRehash } from "./passwords";
 import { LoginRateLimiter, CostLimiter } from "./rate-limit";
 import { safeFetchInternal, guardInternalUrl, EgressError, INTERNAL_HOSTS } from "./net";
-import { validate, loginSchema, queueCreateSchema, accountCreateSchema, proxyCreateSchema, mptSettingsSchema, adbTouchSchema, adbMirrorSchema, proxyVerifySchema } from "./schemas";
+import { validate, loginSchema, queueCreateSchema, accountCreateSchema, proxyCreateSchema, mptSettingsSchema, adbTouchSchema, adbMirrorSchema, proxyVerifySchema, accountPatchSchema } from "./schemas";
 
 // --- Dependencias inyectables (tests) ---
 export interface AppDeps {
@@ -468,9 +468,15 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
   // EXP-08: params de ruta encodados (endpoint confusion en Flask si un id
   // trae %2F/%23 decodificado por Express).
   app.delete("/api/accounts/:id", requireRole("admin"), (req, res) => flask(req, res, "DELETE", `/api/accounts/${encodeURIComponent(req.params.id)}`));
+  // PATCH de cuenta: status / enabled. Reutiliza el mismo esquema de validación
+  // (acota qué campos acepta el backend para evitar mass-assignment).
+  app.patch("/api/accounts/:id", requireRole("admin"), validate(accountPatchSchema), (req, res) => flask(req, res, "PATCH", `/api/accounts/${encodeURIComponent(req.params.id)}`, req.body));
 
   // Engagement bots ELIMINADOS en Fase A (taktik-bot fuera del alcance).
   // Las rutas /engagement/* ya no existen ni en Flask ni aquí.
+
+  // Events: tail del ring buffer en memoria (logs recientes).
+  app.get("/api/events/recent", (req, res) => flask(req, res, "GET", `/api/events/recent?limit=${encodeURIComponent(String(req.query.limit ?? 50))}`));
 
   // 3. Proxies (admin para mutaciones)
   app.get("/api/proxies", (req, res) => flask(req, res, "GET", "/api/proxies"));

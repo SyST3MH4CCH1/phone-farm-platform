@@ -40,7 +40,7 @@ import psutil
 from dotenv import load_dotenv
 from flask import Flask, Response, g, jsonify, request, send_from_directory
 
-from phonefarm.platform_data import load_accounts, load_proxies, load_queue, save_accounts, save_proxies, save_queue, find_account
+from phonefarm.platform_data import load_accounts, load_proxies, load_queue, save_accounts, save_proxies, save_queue, find_account, update_account_status
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")  # antes de resolver DATA_DIR: PHONE_FARM_DATA_DIR viene del .env
@@ -1079,6 +1079,12 @@ def api_stats():
     proxies = load_proxies()
     cpu = psutil.cpu_percent(interval=0.1)  # intervalo corto para una lectura real
     ram = psutil.virtual_memory().percent
+    # Disco: psutil.disk_usage('/') da total/free/percent. Si falla (p.ej. Windows
+    # sin permisos), devolvemos None para que el frontend muestre '—' en vez de 0.
+    try:
+        disk_percent = psutil.disk_usage("/").percent
+    except Exception:
+        disk_percent = None
     return jsonify({
         "videos_subidos": sum(1 for j in queue if j.get("status") == "published"),
         "acciones_hoy": sum(
@@ -1088,6 +1094,7 @@ def api_stats():
         "errores": sum(1 for j in queue if j.get("status") == "failed"),
         "cpu_percent": cpu,
         "ram_percent": ram,
+        "disk_percent": disk_percent,
         "active_proxies": sum(1 for p in proxies if p.get("status") == "online"),
         # Panda Grid = rejilla de dispositivos ADB REALES (antes era una env var
         # con default "Connected" sin verificar nada -> cero fake).
@@ -1101,6 +1108,46 @@ def api_stats():
             "status": "connected_remote_flask",
         },
     })
+
+
+@app.patch("/api/accounts/<account_id>")
+@require_role("admin")
+def api_accounts_patch(account_id: str):
+    """Actualiza campos editables de una cuenta.
+
+    Body: {"status": "active" | "warmup" | "paused" | "error"} o
+          {"enabled": bool} (mapea a status 'active'/'paused').
+    Devuelve 200 con la cuenta actualizada, o 404 si no existe.
+    """
+    body = request.get_json(silent=True) or {}
+    target_status: str | None = None
+    if "status" in body:
+        s = str(body["status"]).lower()
+        if s not in {"active", "warmup", "paused", "error"}:
+            return jsonify({"error": "status inválido; usa active|warmup|paused|error"}), 400
+        target_status = s
+    elif "enabled" in body:
+        target_status = "active" if bool(body["enabled"]) else "paused"
+    else:
+        return jsonify({"error": "status o enabled requerido"}), 400
+    if not update_account_status(account_id, target_status):
+        return jsonify({"error": f"cuenta {account_id} no encontrada"}), 404
+    acc = find_account(account_id)
+    _audit("account.patch", account_id, {"status": target_status})
+    return jsonify(_account_dto(acc)), 200
+
+
+@app.get("/api/events/recent")
+def api_events_recent():
+    """Últimos N eventos del ring buffer (no SSE). Para fallback si SSE no conecta.
+
+    Devuelve JSON con la lista de líneas recientes. Si el ring buffer está
+    vacío, devuelve [].
+    """
+    limit = int(request.args.get("limit", 50))
+    limit = max(1, min(500, limit))
+    events = log_buffer.tail(limit)
+    return jsonify({"events": events, "count": len(events)})
 
 
 # --- Extras de compatibilidad (dashboard React) -------------------------------

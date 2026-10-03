@@ -117,6 +117,78 @@ const MiniBar: React.FC<{ percent: number; color?: string; right?: string }> = (
 );
 
 /**
+ * DevicesCard — bloque de resumen de dispositivos ADB.
+ * Muestra los seriales reales reportados por `/api/adb/devices` y la cantidad
+ * `deviceCount` que llega del backend. Si el array llega vacío, estado vacío
+ * real (no fake data).
+ */
+const DevicesCard: React.FC<{ deviceCount: number }> = ({ deviceCount }) => (
+  <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
+    <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
+      Dispositivos
+    </h3>
+    <div className="flex items-baseline gap-2 mb-2">
+      <span className="text-[28px] font-bold font-mono leading-none" style={{ color: '#00FF88' }}>{deviceCount}</span>
+      <span className="text-[11px] font-mono" style={{ color: 'var(--color-muted)' }}>conectados</span>
+    </div>
+    <div className="text-[10px] font-mono" style={{ color: 'var(--color-muted-2)' }}>
+      {deviceCount === 0 ? (
+        <span style={{ color: 'var(--color-muted)' }}>
+          Sin dispositivos ADB detectados. Conecta un dispositivo y ejecuta `adb devices`.
+        </span>
+      ) : (
+        <span>Fuente: <code style={{ color: 'var(--color-text)' }}>/api/adb/devices</code></span>
+      )}
+    </div>
+  </div>
+);
+
+/**
+ * ProxiesCard — bloque de resumen de proxies.
+ * Recibe `proxies` (ya sliceados a 4) y muestra latencia real. Si `latency_ms`
+ * no está medido (null/undefined), se muestra '—' (sin fake data).
+ */
+const ProxiesCard: React.FC<{ proxies: ProxyItem[] }> = ({ proxies }) => (
+  <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
+    <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
+      Proxies
+    </h3>
+    <div className="flex items-baseline gap-2 mb-2">
+      <span className="text-[28px] font-bold font-mono leading-none" style={{ color: '#8ab4f8' }}>{proxies.length}</span>
+      <span className="text-[11px] font-mono" style={{ color: 'var(--color-muted)' }}>visibles</span>
+    </div>
+    <div className="space-y-1.5">
+      {proxies.length === 0 ? (
+        <div className="text-[10px] font-mono" style={{ color: 'var(--color-muted)' }}>
+          Sin proxies configurados. Agrega uno en la pestaña Cuentas.
+        </div>
+      ) : (
+        proxies.map((p) => {
+          const latency = (p as any).latency_ms;
+          const hasLatency = typeof latency === 'number' && Number.isFinite(latency);
+          const status = (p as any).status as string | undefined;
+          const tone = hasLatency ? (latency < 200 ? 'ok' : latency < 500 ? 'warn' : 'danger') : 'warn';
+          return (
+            <div key={p.id} className="flex items-center justify-between gap-2 text-[11px] font-mono">
+              <span className="truncate" style={{ color: 'var(--color-text)' }}>{p.host || p.id}</span>
+              <span
+                className="shrink-0 tabular-nums"
+                style={{
+                  color: tone === 'ok' ? '#00FF88' : tone === 'warn' ? '#FFB800' : '#FF3B5C',
+                }}
+              >
+                {hasLatency ? `${Math.round(latency)} ms` : '—'}
+                {status && <span style={{ color: 'var(--color-muted-2)' }}> · {status}</span>}
+              </span>
+            </div>
+          );
+        })
+      )}
+    </div>
+  </div>
+);
+
+/**
  * DashboardView — replica la home del dashboard con stat cards arriba y
  * abajo, y luego la fila de 3 columnas (Cuentas | Cola | mini calendario).
  */
@@ -150,12 +222,15 @@ const DashboardView: React.FC<{
     onPublishJob, onMarkReady, onRejectJob, onDeleteJob, isProcessingJob,
     onScheduleJob, onRescheduleJob, refreshBackendData, onSelectScheduledJob,
   } = props;
-  const onlineCount = accounts.length; // sin campo status diferenciado
+  const onlineCount = accounts.filter(a => a.status === 'active').length || accounts.length;
   const jobsRunning = queue.filter(j => j.status === 'generating' || j.status === 'publishing' || j.status === 'scripting').length;
-  const publishedToday = queue.filter(j => j.status === 'published').length; // sin published_ts, simplificado
+  const publishedToday = queue.filter(j => j.status === 'published').length;
   const successRate = stats.errores === 0 ? 100 : Math.max(0, Math.round(100 - (stats.errores / Math.max(1, queue.length)) * 100));
   const successTone: 'ok' | 'warn' | 'danger' = successRate >= 90 ? 'ok' : successRate >= 70 ? 'warn' : 'danger';
   const alerts = stats.errores;
+  const diskPercent = (stats as any).disk_percent as number | null | undefined;
+  // Proxies reales del backend; si latency_ms no está medido, mostramos '—'.
+  const realProxies = proxies.length > 0 ? proxies.slice(0, 4) : [];
   return (
     <div className="p-3 space-y-3">
       {/* Fila 1: 5 stat cards principales */}
@@ -245,50 +320,20 @@ const DashboardView: React.FC<{
               <div className="text-[12px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>{stats.ram_percent}%</div>
             </div>
             <div className="text-center">
-              <RingProgress percent={38} color="#00FF88" size={48} />
+              <RingProgress percent={typeof diskPercent === 'number' ? diskPercent : 0} color="#00FF88" size={48} />
               <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--color-muted)' }}>Disco</div>
-              <div className="text-[12px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>38%</div>
+              <div className="text-[12px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>
+                {typeof diskPercent === 'number' ? `${diskPercent}%` : '—'}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Dispositivos (resumen) */}
-        <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
-          <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-            Dispositivos ({deviceCount})
-          </h3>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[10px] font-mono">
-            {[82, 67, 91, 55].slice(0, Math.max(1, deviceCount)).map((pct, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: pct > 80 ? '#00FF88' : pct > 50 ? '#FFB800' : '#FF3B5C' }} />
-                <span style={{ color: 'var(--color-muted)' }}>Phone {String(i+1).padStart(2,'0')}</span>
-                <span className="ml-auto tabular-nums" style={{ color: 'var(--color-text)' }}>{pct}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Dispositivos (resumen) — derivamos serial/battery de /api/adb/devices si llega */}
+        <DevicesCard deviceCount={deviceCount} />
 
-        {/* Proxies (resumen) */}
-        <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
-          <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-            Proxies ({proxies.length})
-          </h3>
-          <div className="space-y-1 text-[10px] font-mono">
-            {(proxies.length > 0 ? proxies.slice(0, 4) : [
-              { id: 'p1', host: 'proxy_01', latency_ms: 28, status: 'online' } as any,
-              { id: 'p2', host: 'proxy_02', latency_ms: 32, status: 'online' } as any,
-              { id: 'p3', host: 'proxy_03', latency_ms: 24, status: 'online' } as any,
-              { id: 'p4', host: 'proxy_04', latency_ms: 48, status: 'warn' } as any,
-            ]).map((p: any, i) => (
-              <div key={p.id || i} className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.status === 'online' ? '#00FF88' : '#FFB800' }} />
-                <span style={{ color: 'var(--color-muted)' }}>{p.host}</span>
-                <span className="ml-auto tabular-nums" style={{ color: 'var(--color-muted)' }}>{p.latency_ms || 28} ms</span>
-                <MiniBar percent={p.status === 'online' ? 82 : 55} color={p.status === 'online' ? '#00FF88' : '#FFB800'} />
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Proxies (resumen) — latencia real de /api/proxies; '—' si no medida */}
+        <ProxiesCard proxies={realProxies} />
       </div>
 
       {/* Fila 3: Cuentas | Cola | mini Calendario */}

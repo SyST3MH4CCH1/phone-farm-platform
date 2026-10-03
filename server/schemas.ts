@@ -72,6 +72,16 @@ export const proxyVerifySchema = z.object({
   proxy_id: z.string().min(1).max(64).refine(noControls),
 }).strict();
 
+/** PATCH de cuenta: solo status/enabled. Estricto (rechaza campos extra).
+ * El enum status refleja lo que acepta platform.py:api_accounts_patch.
+ */
+export const accountPatchSchema = z.object({
+  status: z.enum(["active", "warmup", "paused", "error"]).optional(),
+  enabled: z.boolean().optional(),
+}).strict().refine((d) => d.status !== undefined || d.enabled !== undefined, {
+  message: "PATCH vacío: al menos uno de {status, enabled} requerido",
+});
+
 /** Middleware: valida req.body; 400 con detalle si falla. */
 export function validate(schema: z.ZodTypeAny) {
   return (req: Request, res: Response, next: NextFunction) => {

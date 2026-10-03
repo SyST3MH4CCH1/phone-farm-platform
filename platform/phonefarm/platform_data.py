@@ -180,6 +180,20 @@ def find_account(account_id: str) -> dict[str, Any] | None:
     return _row_to_account(row) if row else None
 
 
+def update_account_status(account_id: str, status: str) -> bool:
+    """Actualiza el campo `status` de una cuenta. Devuelve True si encontró la fila.
+
+    Status válidos: 'active' | 'warmup' | 'paused' | 'error'.
+    """
+    conn = _conn()
+    cur = conn.execute(
+        "UPDATE accounts SET status = ? WHERE id = ?",
+        (status, account_id),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
 # --- proxies.json -----------------------------------------------------------
 
 def load_proxies() -> list[dict[str, Any]]:
