@@ -34,7 +34,7 @@
   /* --- Tipografía --- */
   --color-text: #E5E5E5;
   --color-muted: #9CA1A8;
-  --color-muted-2: #6B7076;
+  --color-muted-2: #7E8590;  /* ADR-007: subido desde #6B7076 → ~5.4:1 sobre #0A0A0B (WCAG AA) */
 
   /* --- Interactivity --- */
   --color-input-bg: #1A1C1E;
@@ -70,6 +70,9 @@
 body, #root {
   background-color: #0A0A0B;
   color: #E5E5E5;
+  /* ADR-007 + TYPOGRAPHY_RESEARCH: Inter (sans) + JetBrains Mono (mono). */
+  font-family: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'tnum';
 }
 
 /* ============================================================
@@ -80,6 +83,7 @@ body, #root {
   /* --- Tipografía mono para datos/métricas --- */
   .font-mono {
     font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-feature-settings: 'zero', 'ss02';
   }
 
   /* ============================================================
@@ -385,11 +389,12 @@ body, #root {
    14. MICRO-INTERACCIONES — Motion identidad, no decoración
    NO bloqueamos todo el motion. Permitimos micro-interacciones de 80ms.
    prefers-reduced-motion solo desactiva animaciones largas (status pulses).
+   La regla reescrita evita enumerar keyframes con comas (CSS inválido).
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
-  @keyframes pulse-ok,
-         @keyframes pulse-warn,
-         @keyframes pulse-danger {
+  .status-pill.ok .dot,
+  .status-pill.warn .dot,
+  .status-pill.danger .dot {
     animation: none;
   }
 }
