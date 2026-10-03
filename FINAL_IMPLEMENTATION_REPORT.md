@@ -1,7 +1,7 @@
 # FINAL IMPLEMENTATION REPORT — TASK_UI_UX_REAL_CONTROL_HUB_V1
 
 **Repositorio:** `C:\Users\haxth3\Documents\phone-farm-platform`
-**Branch:** `feat/ui-ops-control-hub-v2` (34 commits de este TASK (incluido este commit de documentación))
+**Branch:** `feat/ui-ops-control-hub-v2` (commits de este TASK enumerados uno a uno en §3)
 **Baseline del TASK:** `b6995e5` (`chore/update-third-party`, 2026-10-03 09:51)
 **`main`:** `ccf432e` — **sin modificar** (último commit 2026-09-15, anterior al TASK)
 **Fecha:** 2026-10-03
@@ -47,7 +47,7 @@ Todo lo anterior está reproducido por comandos, no por declaración.
 
 ---
 
-## 3. Commits (34, atómicos y en orden de fases)
+## 3. Commits (atómicos y en orden de fases)
 
 ### Fase A — Backup + audit
 | SHA | Mensaje |
@@ -104,6 +104,11 @@ Todo lo anterior está reproducido por comandos, no por declaración.
 | `4e0fddd` | `feat(§20/§27.4/§27.5): responsive real + Playwright E2E y visual con navegador real` |
 | `4099e5c` | `test(§27.4/§27.5): 61 E2E verdes en 4 viewports + 12 capturas; fix a11y (landmarks, toggle consola móvil, nombres duplicados)` |
 | `7d86ccd` | `docs: correct branch baseline (main at ccf432e, untouched) + accurate commit counts` |
+| `4099e5c` | `test(§27.4/§27.5): 61 E2E verdes + 12 capturas; fix a11y` |
+| `daa8253` | `docs: refresh on-disk evidence (61 E2E, 0 undefined tokens) + reproducible verification block` |
+| `720a14d` | `docs: final evidence pass — backup integrity, token audit, E2E artifact refs` |
+| `44b8057` | `docs: add e2e report.json artifact reference (61 expected / 0 unexpected / 0 flaky)` |
+| `2ec2a3d` | `docs: sync commit count` |
 
 ---
 
@@ -314,8 +319,8 @@ npm run e2e:visual      # -> docs/evidence/ui/
 | `e2e/.artifacts/.last-run.json` | `{"status":"passed","failedTests":[]}` — 14:07:27 |
 | `e2e/.artifacts/report.json` | expected 61 · unexpected 0 · flaky 0 · skipped 39 — 14:07:27 |
 | `docs/evidence/ui/*.png` | **12 capturas**, regeneradas 13:51–13:56 |
-| `git rev-list --count b6995e5..HEAD` | **34** (incluye los commits de documentación) |
-| `git rev-list --count main..HEAD` | **60** (26 previos + 34 de este TASK) |
+| `git rev-list --count b6995e5..HEAD` | ejecutar para el recuento vigente (la §3 lista cada SHA) |
+| `git rev-list --count main..HEAD` | 26 previos de `chore/update-third-party` + los de este TASK |
 | `git merge-base main HEAD` | `ccf432e` = tip de `main` → **sin merge, `main` intacto** |
 | `git status --short` | limpio (solo sin trackear: `tmp/`, `.sisyphus/`, `.playwright-mcp/`, `platform/platform/`) |
 
@@ -355,7 +360,7 @@ git merge --ff-only feat/ui-ops-control-hub-v2
 ```
 
 Opción B — solo este TASK, sin el trabajo de diseño previo (rebase o cherry-pick
-de los 34 commits sobre `main`):
+de los commits listados arriba sobre `main`):
 
 ```bash
 git checkout -b feat/ui-ops-control-hub-v2-clean main
