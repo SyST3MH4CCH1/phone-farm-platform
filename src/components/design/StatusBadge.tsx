@@ -2,14 +2,14 @@
 
 /**
  * StatusBadge — TASK §22.2 componente compartido.
- * Variantes: ok / warn / danger / info / paused / running / leased / degraded / neutral / brand / ai.
+ * Variantes: ok / warn / danger / info / paused / running / leased / degraded / neutral / brand / ai / unknown.
  * Semantica TASK §9: brand=AZUL(accent), ok=VERDE, warn=AMARILLO,
  * danger=ROJO, ai=PURPURA (procesamiento / IA / MPT).
  * Icon + texto; nunca solo color (cumple TASK §4.4 / a11y §21).
  */
 export type StatusBadgeKind =
   | 'ok' | 'warn' | 'danger' | 'info' | 'paused' | 'running'
-  | 'leased' | 'degraded' | 'neutral' | 'brand' | 'ai';
+  | 'leased' | 'degraded' | 'neutral' | 'brand' | 'ai' | 'unknown';
 
 interface StatusBadgeProps {
   kind: StatusBadgeKind;
@@ -34,6 +34,7 @@ const KIND_ICON: Record<StatusBadgeKind, string> = {
   neutral: 'circle',
   brand: 'sparkles',
   ai: 'cpu',
+  unknown: 'help',
 };
 
 const KIND_FG: Record<StatusBadgeKind, string> = {
@@ -48,6 +49,7 @@ const KIND_FG: Record<StatusBadgeKind, string> = {
   neutral: 'var(--color-muted)',
   brand: 'var(--color-brand)',
   ai: 'var(--color-ai)',
+  unknown: 'var(--color-muted-2)',
 };
 
 const KIND_BG: Record<StatusBadgeKind, string> = {
@@ -62,6 +64,7 @@ const KIND_BG: Record<StatusBadgeKind, string> = {
   neutral: 'rgba(158, 161, 168, 0.08)',
   brand: 'rgba(59, 130, 246, 0.10)',
   ai: 'rgba(168, 85, 247, 0.10)',
+  unknown: 'rgba(126, 133, 144, 0.10)',
 };
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({
