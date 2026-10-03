@@ -103,11 +103,11 @@ test.describe('TASK §27.5 — capturas', () => {
           await nav.getByText(/Calendario/i).first().click();
         } else if (shot.name === 'api-explorer') {
           await techNav.getByText(/cURL API/i).first().click();
-          await expect(page.getByRole('dialog', { name: /Explorador de la API/i })).toBeVisible({ timeout: 20_000 });
+          await expect(page.getByRole('heading', { name: 'cURL API' })).toBeVisible({ timeout: 20_000 });
           await page.waitForTimeout(400);
         } else if (shot.name === 'moneyprinter') {
           await techNav.getByText(/MoneyPrinter/i).first().click();
-          await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 20_000 });
+          await expect(page.getByRole('heading', { name: 'MoneyPrinter' })).toBeVisible({ timeout: 20_000 });
           await page.waitForTimeout(400);
         }
         await page.waitForTimeout(500);
