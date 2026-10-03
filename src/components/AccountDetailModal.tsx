@@ -33,9 +33,13 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
   const proxy: ProxyItem | undefined = proxies.find(p => p.id === account.proxy_id) || proxies[0];
   const accountJobs = queue.filter(j => j.target_account === account.id || j.target_account === account.username);
 
-  const followers = account.followers_count || 4820;
-  const engagementRate = account.engagement_rate || 4.8;
-  const niche = account.niche || 'Decoración & Estilo de Vida';
+  // §0 / §30 — no inventar métricas. Si el campo no llega, mostrar `—`.
+  const followers = account.followers_count;
+  const engagementRate = account.engagement_rate;
+  const niche = account.niche;
+  const likesToday = account.likes_today;
+  const followsToday = account.follows_today;
+  const commentsToday = account.comments_today;
 
   const getWarmupProgress = () => {
     const pct = Math.min((account.warmup_day / 30) * 100, 100);
@@ -81,7 +85,8 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] font-sans mt-0.5" style={{ color: 'var(--color-muted)' }}>
-                Nicho: <strong style={{ color: 'var(--color-muted)' }}>{niche}</strong> · {account.platform || 'Instagram Reels & TikTok'}
+                {niche ? <>Nicho: <strong style={{ color: 'var(--color-muted)' }}>{niche}</strong> · </> : null}
+                {account.platform || '—'}
               </p>
             </div>
           </div>
@@ -129,19 +134,29 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
               <div className="flex gap-4 text-center">
                 <div className="flex-1 p-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
                   <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>Seguidores</div>
-                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-text)' }}>{followers.toLocaleString()}</div>
+                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-text)' }}>
+                    {typeof followers === 'number' ? followers.toLocaleString() : '—'}
+                  </div>
                 </div>
                 <div className="flex-1 p-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
                   <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>Engagement</div>
-                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-text)' }}>{engagementRate}%</div>
+                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-text)' }}>
+                    {typeof engagementRate === 'number' ? `${engagementRate}%` : '—'}
+                  </div>
                 </div>
                 <div className="flex-1 p-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
                   <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>Likes Hoy</div>
-                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-danger)' }}>{account.likes_today || 24}</div>
+                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-danger)' }}>
+                    {typeof likesToday === 'number' ? likesToday : '—'}
+                  </div>
                 </div>
                 <div className="flex-1 p-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
                   <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--color-muted)' }}>Follows/Comms</div>
-                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-text)' }}>{account.follows_today || 12} / {account.comments_today || 5}</div>
+                  <div className="text-xl font-bold font-mono" style={{ color: 'var(--color-text)' }}>
+                    {typeof followsToday === 'number' ? followsToday : '—'}
+                    {' / '}
+                    {typeof commentsToday === 'number' ? commentsToday : '—'}
+                  </div>
                 </div>
               </div>
 
