@@ -353,6 +353,44 @@ body, #root {
   .progress-bar-fill.warn     { background-color: #FFB800; }
   .progress-bar-fill.danger   { background-color: #FF3B5C; }
   .progress-bar-fill.info     { background-color: #8B8B95; }
+
+  /* ============================================================
+     TASK §22 — Skeleton bar + Status pulse (shimmer + blink)
+     ============================================================ */
+  @keyframes skeleton-shimmer {
+    0% { background-position: -200px 0; }
+    100% { background-position: calc(200px + 100%) 0; }
+  }
+  .skeleton-bar {
+    background: linear-gradient(90deg,
+      var(--color-surface-2) 0%,
+      var(--color-surface-3) 40%,
+      var(--color-surface-2) 80%);
+    background-size: 200px 100%;
+    background-repeat: no-repeat;
+    border-radius: 4px;
+    animation: skeleton-shimmer 1.4s linear infinite;
+  }
+  @keyframes status-pulse-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+  .status-pulse > *:first-child {
+    animation: status-pulse-blink 1.6s ease-in-out infinite;
+  }
+}
+
+/* ============================================================
+   TASK §22 — Reduced-motion: silencia skeleton y status-pulse
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar {
+    animation: none;
+    background: var(--color-surface-2);
+  }
+  .status-pulse > *:first-child {
+    animation: none;
+  }
 }
 
 /* ============================================================
