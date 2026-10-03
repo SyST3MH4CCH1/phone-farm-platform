@@ -1500,7 +1500,9 @@ export default function App() {
         {narrowLayout && navOpen && (
           <button
             type="button"
-            aria-label="Cerrar navegación"
+            // Nombre distinto al del toggle: dos controles con el mismo
+            // nombre accesible son indistinguibles para un lector de pantalla.
+            aria-label="Cerrar el menú lateral (tocar fuera)"
             onClick={() => setNavOpen(false)}
             className="absolute inset-0 z-30 bg-black/50"
           />
@@ -1766,11 +1768,12 @@ export default function App() {
             * Toggle con flecha arriba/abajo en la cabecera del bloque.
             */}
           <div
-            className="shrink-0 overflow-hidden border-t"
+            className="shrink-0 overflow-hidden border-t flex flex-col"
             style={{
-              // TASK §20: en móvil (<768px) la consola arranca a 0 px —el header
-              // del panel es lo que importa— y el operador la abre con el toggle.
-              height: terminalExpanded ? (narrowLayout ? 180 : 130) : (narrowLayout ? 0 : 60),
+              // TASK §20: en layout estrecho la consola arranca mostrando SOLO su
+              // cabecera (el toggle sigue siendo alcanzable) y el operador abre
+              // el log cuando lo necesita. Colapsarla a 0 px la haría inaccesible.
+              height: terminalExpanded ? (narrowLayout ? 200 : 130) : (narrowLayout ? 28 : 60),
               transition: 'height 220ms ease',
               borderColor: 'var(--color-line)',
             }}
@@ -1810,7 +1813,7 @@ export default function App() {
                 </button>
               </div>
               {/* Cuerpo: 5 líneas expandido / 2 colapsado */}
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-hidden" style={{ minHeight: 0 }}>
                 <TerminalLogs
                   logs={terminalExpanded ? logs.slice(-5) : logs.slice(-2)}
                   onClearLogs={() => setLogs([])}

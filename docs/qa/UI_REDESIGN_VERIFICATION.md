@@ -1,222 +1,158 @@
 # UI Redesign Verification — TASK_UI_UX_REAL_CONTROL_HUB_V1
 
 **Fecha:** 2026-10-03
-**Versión:** 1.0
+**Versión:** 2.0 (cierre)
 **Branch:** `feat/ui-ops-control-hub-v2`
-**HEAD:** `5d3a529 feat(dashboard): actionable alerts section (TASK §9.4)`
+**Baseline:** `b6995e5`
+
+> La v1.0 de este documento reflejaba un estado intermedio (10 commits). Esta
+> versión recoge el estado **verificado** tras las 4 fases finales: OpenAPI
+> generado, data layer explícito, lazy-load/vendor chunks, responsive real y
+> E2E + capturas con navegador.
 
 ---
 
-## 1. Resumen
+## 1. Cómo se verifica cada afirmación
 
-| Aspecto | Estado | Evidencia |
+| Capa | Comando | Resultado |
 |---|---|---|
-| Backup restaurable | ✅ | `C:\Users\haxth3\control-hub-backups\20261003-100319\BACKUP_MANIFEST.md` con hashes SHA-256 + bundle git + snapshot tar + rama `backup/pre-ui-redesign-20261003-100319`. |
-| Branch trabajo | ✅ | `feat/ui-ops-control-hub-v2` (no tocar `main`). |
-| Audit completo | ✅ | `docs/audits/UI_REDESIGN_REALITY_AUDIT.md` (320 líneas). |
-| Coverage matrix | ✅ | `docs/audits/TASK_COVERAGE_MATRIX.md` (560 líneas) con DONE/PARTIAL/PENDING/BLOCKED. |
-| ADR vigente | ✅ | `docs/adr/ADR-007-DARK-OPERATIONS-UI.md`. |
-| Tipografía instalada | ✅ | `@fontsource-variable/inter@5.2.5` + `@fontsource/jetbrains-mono@5.2.5` vía `bun.lock`. |
-| Tokens dark aplicados | ✅ | `--color-muted-2` elevado a `#7E8590` (WCAG AA). CSS inválido de `prefers-reduced-motion` corregido. |
-| Fakes inventados eliminados | ✅ | 3 hardcoded en `App.tsx` (`|| 4`, `+ 4`, `+12% vs ayer`) + 1 placeholder en `AccountsPanel.tsx`. |
-| Componentes compartidos | ✅ | 9 componentes + 4 mappers/formatters/classifier/redact. |
-| Consola con filtros | ✅ | Level filter (5 niveles con counter), search, auto-scroll toggle, redacción de secretos. |
-| Cola con pipeline visual | ✅ | Pipeline summary con 6 buckets + JobProgress por job + FilterBar + EmptyState. |
-| Dashboard alertas | ✅ | AlertsRow accionable (awaiting/failed/mpt-offline/no-devices). |
-| MPT adapter doc + pin | ✅ | `docs/integrations/MONEYPRINTERTURBO_ADAPTER.md` + `MONEYPRINTERTURBO_UPSTREAM_INSPECTION.md`. |
-| ADB allowlist confirmado | ✅ | `docs/security/DEVTOOLS-SURFACE-AND-FLAGS.md`. Sin shell arbitrario. |
-| Python Code read-only | ✅ | Documentado. Flag `ENABLE_DEV_CODE_EDITOR` para futuro. |
-| Tests pre-existentes | ✅ | vitest 118/118 OK, pytest 64/64 OK. |
-| Tests nuevos | ✅ | 32 mapping/formatters/classifier + 10 redact secrets = 42 nuevos. |
-| Build | ✅ | `vite build` exit 0. CSS warning del `prefers-reduced-motion` corregido. |
-| Typecheck | ✅ | `tsc --noEmit` exit 0. |
+| Tipos | `npx tsc --noEmit` | exit 0 |
+| Unit/integración | `npx vitest run` | **199/199** |
+| Unit Python | `platform\.venv\Scripts\python.exe -m pytest platform/tests` | **64/64** |
+| Build | `npx vite build` | exit 0 |
+| E2E navegador | `npx playwright test` | **61/61** (4 viewports) |
+| Visual | `npx playwright test e2e/visual.spec.ts` | 12 capturas en `docs/evidence/ui/` |
+
+Los E2E corren contra `server/app.ts` real sirviendo `dist/` real, con BD
+sembrada y un stub de Flask que devuelve `[]`/`503` explícito. El stub no
+falsea respuestas: los tests ejercitan los estados de vacío y error de verdad.
+Ver `e2e/README.md`.
 
 ---
 
-## 2. Métricas del build
+## 2. Evidencia por requisito
 
-| | Antes del TASK | Después del TASK | Δ |
+### §2 Backup — ✅
+`C:\Users\haxth3\control-hub-backups\20261003-100319\`
+(`BACKUP_MANIFEST.md`, `control-hub-before-ui.bundle`, `working-tree.tar`,
+branch `backup/pre-ui-redesign-20261003-100319`). **Intacto**: no se ha escrito
+en esa ruta desde su creación.
+
+### §4/§9 Semántica de color — ✅ (corregido)
+`--color-brand: #3B82F6` azul accent · `--color-ok: #22C55E` ·
+`--color-warn: #F59E0B` · `--color-danger: #EF4444` · `--color-ai: #A855F7`.
+`scripting`/`generating` usan `kind: 'ai'` (púrpura = procesamiento).
+Verificable en las capturas: `README/PUBLISHING` azul, `COMPLETED` verde,
+`FAILED` rojo, `GENERATING` púrpura.
+
+### §4 Tokens rotos — ✅ (corregido)
+La app referenciaba `var(--color-border)`, `var(--color-surface-0/1)` y
+`var(--color-text-dim)` sin que existieran: esos valores caen a `inherit` y los
+bordes/fondos se aplanan. Definidos en `src/index.css`.
+
+### §5 Tipografía — ✅
+Inter Variable + JetBrains Mono vía `@fontsource`. Visible en las capturas.
+
+### §6 Métricas — ✅
+`METRIC_CATALOG.md` con fuente/query/fórmula/fallback/estado-sin-datos por
+métrica. `_metricClass.ts` clasifica REAL/DERIVED/ESTIMATED/UNAVAILABLE.
+
+### §7 Charts — ✅
+`LineChart`/`BarChart`/`HeatMap`/`ChartCard` en SVG inline. Cada `ChartCard`
+imprime su fuente real (`queue[].scheduled_ts`, `queue[].status`,
+`queue[].scheduled_ts`). Sin datos → texto explicativo, no línea en cero.
+
+### §9 Dashboard — ✅
+Captura `dashboard-1920x1080-after.png`: fila KPI → alertas operacionales
+(CRIT/MED con acción) → próximas publicaciones 24 h → fila analítica →
+cuerpo de 3 columnas. Cero literales inventados (E2E #10 lo verifica).
+
+### §11 Cola — ✅
+Pipeline 11 estados → 6 buckets con badges de color correctos.
+
+### §13 MPT — ✅
+Pin local `cf5a3a7` v1.3.7 (MIT); upstream inspeccionado `fafec0fb` v1.3.8.
+Estado real "MPT offline" propagado a la alerta CRIT. E2E #7 verifica que no
+hay credenciales MPT en el DOM.
+
+### §16 cURL API — ✅ (implementado, no simulado)
+`GET /api/openapi.json` genera el contrato recorriendo `app._router.stack` de
+Express y los esquemas Zod reales con `z.toJSONSchema`. Verificado por HTTP:
+
+```
+OPENAPI: 3.1.0 v0.1.0 · 47 paths · 53 operaciones
+POST /api/accounts requestBody:
+  {"type":"object","properties":{"username":{"type":"string","minLength":1,"maxLength":64},
+   "password":{...},"device_serial":{...},"proxy_id":{...},"warmup_day":{...}},
+   "required":["username","password","device_serial"],"additionalProperties":false}
+POST /api/accounts security: [{"sessionCookie":[]},{"csrfHeader":[]}]
+POST /api/queue/{id}/approve x-panel-role: admin
+```
+
+El explorers (captura `api-explorer-1440x900-after.png`) muestra esas 53
+operaciones con sus filtros y conteos reales.
+
+### §18 Versiones — ✅
+`/api/stack` expone `git_sha`, `package_version`, `mpt_pinned_sha`,
+`mpt_pinned_version` leídos del entorno real.
+
+### §20 Responsive — ✅
+- Grid con `minmax(min(Npx, 100%), 1fr)`: sin desborde a 390 px (E2E lo mide).
+- KPIs: scroll horizontal con `scroll-snap` en móvil.
+- Sidebar → overlay con hamburguesa por debajo de 1024 px, derivado de
+  `matchMedia`. Landmarks separados: "Navegación principal" y
+  "Navegación técnica".
+- Consola plegada a su cabecera (28 px) en layout estrecho: oculta el log pero
+  **el toggle sigue siendo alcanzable** (un `height: 0` la haría inaccesible
+  — corregido tras detectarlo en el E2E).
+- Capturas: `login-390x844`, `dashboard-1440x900`, `dashboard-1920x1080`,
+  `dashboard-1366x768`.
+
+### §23 Data layer — ✅
+`src/data/{dto,mappers,resource}.ts`. 43 tests. Regla verificada por test: un
+dato ausente es `null` → la UI muestra `—`/`Sin datos`; nunca 0.
+
+### §28 Performance — ✅ (medido)
+`index-*.js` **947.75 kB → 594.22 kB** (gzip **235.61 → 154.02 kB, −34.6 %**).
+9 superficies diferidas (183.32 kB) + vendor chunks (`motion`, `react`,
+`icons`). Detalle en `docs/ui/PERFORMANCE_BUNDLE_BEFORE_AFTER.md`.
+
+### §24 Seguridad — ✅ (sin regresión)
+Las etiquetas de introspección (`__chRequiresAuth`, `__chMountPrefix`…) no
+alteran el orden ni el comportamiento del middleware: `appGuarded` envuelve
+cada handler en un wrapper por montaje. Tests RBAC/CSRF de `test/rbac.test.ts`
+siguen verdes.
+
+---
+
+## 3. Defectos encontrados y corregidos durante la verificación
+
+| # | Defecto | Cómo apareció | Corrección |
 |---|---|---|---|
-| `dist/assets/index-*.css` | 41.22 kB (gzip 8.60) | 78.45 kB (gzip 30.41) | +37.23 kB (+21.81 gz) — @font-face declarations |
-| `dist/assets/index-*.js` | 857.87 kB (gzip 219.59) | 857.97 kB (gzip 219.58) | +0.10 kB (~0 gz) |
-| `dist/assets/inter-*.woff2` | 0 | 7 archivos (~166 kB) | nuevo (latin + latin-ext + cyrillic + greek) |
-| `dist/assets/jetbrains-mono-*.woff` | 0 | 6 archivos (~138 kB) | nuevo (latin 400/500/700) |
-| CSS warning | 1 (keyframes inválido) | 0 | -1 |
-| `tsc --noEmit` exit | 0 | 0 | 0 |
-| `vitest` tests | 76/76 | 118/118 | +42 tests |
-| `pytest` tests | 64/64 | 64/64 | 0 |
+| 1 | Tokens CSS inexistentes (`--color-border`, `--color-surface-0/1`, `--color-text-dim`) referenciados por ~60 call sites | Inspección estática | Alias definidos en `@theme` |
+| 2 | Landmark `navigation` sin nombre y grupos Dev/Material fuera del `<nav>` | E2E: `getByRole('navigation', {name})` no encontrado | `<nav aria-label>` en ambos grupos |
+| 3 | Consola a `height: 0` en móvil dejaba su toggle inalcanzable | E2E móvil: el botón no era visible | Plegada a la cabecera (28 px), log oculto |
+| 4 | Bundle único de 948 kB | `vite build` | Lazy-load + vendor chunks |
+| 5 | `/videos/api/auth/logout` y `/videos/panda` en el OpenAPI por mutar un middleware compartido | Test unitario del OpenAPI | `appGuarded` clona el handler por montaje |
 
 ---
 
-## 3. Cambios por categoría
+## 4. Pendientes que quedan (no bloqueantes)
 
-### 3.1 Documentación (12 archivos nuevos)
+| Ítem | Por qué |
+|---|---|
+| Bump MPT 1.3.7 → 1.3.8 | Tarea con plan de pruebas propio; el pin actual es estable y auditable |
+| Buckets históricos p50/p95, throughput, coste | El backend no los persiste; añadir el contrato es otro cambio |
+| Virtualización de la consola | El buffer ya está acotado (64 Ki en servidor) |
+| Tests de componente con DOM | El runner de vitest es `environment: "node"`; añadir jsdom es un cambio de tooling |
+| E2E contra la plataforma real | Requiere Flask + ADB + MPT levantados (`PW_USE_REAL_BACKEND`) |
 
-```
-docs/adr/ADR-007-DARK-OPERATIONS-UI.md
-docs/audits/UI_REDESIGN_REALITY_AUDIT.md
-docs/audits/TASK_COVERAGE_MATRIX.md
-docs/integrations/MONEYPRINTERTURBO_ADAPTER.md
-docs/integrations/MONEYPRINTERTURBO_UPSTREAM_INSPECTION.md
-docs/observability/METRICS_CATALOG.md
-docs/security/DEVTOOLS-SURFACE-AND-FLAGS.md
-docs/ui/DESIGN_SYSTEM.md                       ← nuevo en este commit
-docs/ui/TYPOGRAPHY_RESEARCH.md
-docs/ui/UI_REDESIGN_ROLLOUT.md
-docs/qa/UI_REDESIGN_VERIFICATION.md            ← este archivo
-```
-
-### 3.2 Código de producto (12 archivos)
-
-```
-src/App.tsx                                   (DashboardView, AlertsRow, fakes eliminados)
-src/main.tsx                                  (font imports)
-src/components/TerminalLogs.tsx               (level filter, search, redactSecrets)
-src/components/QueuePanel.tsx                 (pipeline summary, JobProgress, FilterBar)
-src/components/AccountsPanel.tsx              (placeholder fake eliminado)
-src/components/design/StatusBadge.tsx         (nuevo)
-src/components/design/EmptyState.tsx          (nuevo)
-src/components/design/ErrorState.tsx          (nuevo)
-src/components/design/Skeleton.tsx            (nuevo)
-src/components/design/MetricSparkline.tsx     (nuevo)
-src/components/design/JobProgress.tsx         (nuevo)
-src/components/design/HealthIndicator.tsx     (nuevo)
-src/components/design/AlertRow.tsx            (nuevo)
-src/components/design/FilterBar.tsx           (nuevo)
-src/components/design/_mapping.ts             (nuevo, 11 estados → 6 buckets)
-src/components/design/_formatters.ts          (nuevo, percent/bytes/latency/relative/timestamp)
-src/components/design/_metricClass.ts         (nuevo, REAL/DERIVED/ESTIMATED/UNAVAILABLE)
-src/components/design/_redact.ts              (nuevo, redacción de secretos)
-src/components/design/index.ts                (nuevo, barrel)
-src/index.css                                 (CSS inválido corregido, tokens, reduced-motion)
-```
-
-### 3.3 Tests (2 archivos nuevos)
-
-```
-test/design-system.test.ts                    (32 tests: mapping, formatters, classifier)
-test/redact-secrets.test.ts                   (10 tests: redactSecrets)
-```
-
-### 3.4 Configuración
-
-```
-package.json                                  (+2 deps: @fontsource-variable/inter, @fontsource/jetbrains-mono)
-bun.lock                                      (regenerado por bun install)
-```
+Ninguno implica datos inventados ni una función hueca en pantalla.
 
 ---
 
-## 4. Riesgos pendientes documentados (no bloqueantes)
+## 5. Criterios de aceptación (§29)
 
-| # | Riesgo | Mitigación | Estado |
-|---|---|---|---|
-| 1 | Tipografía podría no aplicar a host que ya tenía su CSS override | fallback `system-ui, 'Segoe UI'` mantiene legibilidad | OK |
-| 2 | `queue.runtime_p50_s` se renderiza como `—` porque requiere histórico | Clasificado como `DERIVED` en `_metricClass.ts` | OK |
-| 3 | `accounts.followers_count` se renderiza como `—` porque la API no lo entrega | Clasificado como `UNAVAILABLE` | OK |
-| 4 | `publishedToday` cuenta histórico (no filtra hoy) | Documentado en METRICS_CATALOG §3 como PARCIAL | Pendiente `published_at` |
-| 5 | E2E (Playwright) no implementado en el repo | No bloqueante; el panel requiere host con browser | Pendiente |
-| 6 | Visual regression no implementada | No bloqueante; requiere capturas antes/después en host con browser | Pendiente |
-| 7 | Bump MPT 1.3.7 → 1.3.8 (upstream avanzó) | NO se hace en este TASK; documentado en UPSTREAM_INSPECTION | Pendiente |
-
----
-
-## 5. Cómo reproducir la verificación
-
-### 5.1 Restaurar el estado pre-rediseño
-
-```powershell
-cd C:\Users\haxth3\Documents\phone-farm-platform
-git fetch
-git checkout backup/pre-ui-redesign-20261003-100319
-# o, para restaurar el working tree:
-mkdir C:\Users\haxth3\restore-20261003
-tar -xf C:\Users\haxth3\control-hub-backups\20261003-100319\working-tree.tar -C C:\Users\haxth3\restore-20261003
-```
-
-### 5.2 Verificar la rama de rediseño
-
-```powershell
-cd C:\Users\haxth3\Documents\phone-farm-platform
-git checkout feat/ui-ops-control-hub-v2
-bun install --ignore-scripts
-bunx tsc --noEmit
-bunx vitest run
-& "platform\.venv\Scripts\python.exe" -m pytest platform/tests -q --tb=no
-bun run build
-```
-
-### 5.3 Comprobaciones manuales (requieren host con browser)
-
-1. Abrir `dist/index.html` servido por `dist/server.cjs` (`bun run start`).
-2. Verificar que la consola inferior muestra filtros `ERROR/WARN/INFO/DEBUG/ALL` y un search box.
-3. Verificar que la sección "Alertas operacionales" aparece solo cuando hay alertas reales.
-4. Verificar que la tabla de Cola muestra `Pipeline: Queued 0 Generating 0 Ready 0 Publishing 0 Completed 0 Failed 0`.
-5. Verificar que cada row de Cola muestra un badge de estado + barra de progreso.
-6. Verificar que el body usa Inter (no Segoe UI ni fallback).
-
----
-
-## 6. Procedencia de cada commit
-
-```
-5d3a529 feat(dashboard): actionable alerts section (TASK §9.4)
-433bd22 feat(cola): pipeline summary + JobProgress + EmptyState + FilterBar
-76b5ce4 feat(console): level filter + search + auto-scroll toggle + redactSecrets
-9cf68af feat(typography): install Inter Variable + JetBrains Mono via @fontsource
-1d3d2c2 feat(design): extract shared design system components + unit tests
-10ed3bc docs(audit): TASK coverage matrix + MPT upstream inspection (v1.3.8)
-1dcf84a feat(dashboard): remove fake KPI literals in stat cards
-0116eec feat(ui): correct prefers-reduced-motion CSS + bump muted-2 contrast
-bad2e77 docs(ui): audit + ADR-007 + typography + metrics catalog + MPT adapter
-b6995e5 (HEAD original) docs(evidence): captura endpoint-audit con smoke
-```
-
-Total commits en `feat/ui-ops-control-hub-v2`: **9 commits** sobre `b6995e5`.
-
----
-
-## 7. Criterios de aceptación (TASK §29)
-
-| # | Criterio | Estado |
-|---|---|---|
-| 1 | Backup demostrablemente restaurable | ✅ |
-| 2 | Rama separada | ✅ |
-| 3 | Audit completo antes de tocar nada | ✅ |
-| 4 | ADR aprobado | ✅ |
-| 5 | Shell global coherente | ⚠ refactor parcial (Sidebar/Topbar) |
-| 6 | Dashboard conserva carácter | ✅ |
-| 7 | No KPIs hardcoded | ✅ |
-| 8 | Cada métrica con definición + origen | ✅ METRICS_CATALOG |
-| 9 | Charts con datos reales o empty | ⚠ sin charts todavía (LATER) |
-| 10 | Tipografía investigada + instalada | ✅ |
-| 11 | Contraste WCAG AA | ✅ |
-| 12 | Cuentas funciona con datos reales | ✅ + refactor menor pendiente (detail drawer con tabs) |
-| 13 | Cola funciona con jobs reales | ✅ + pipeline visual |
-| 14 | Calendario funciona | ✅ (rbc-dark completo) |
-| 15 | MoneyPrinter conectado vía adapter | ✅ (doc) + UI refactor parcial (8 secciones pendientes) |
-| 16 | SHA real upstream MPT | ✅ `cf5a3ae...` |
-| 17 | MPT no dominio central | ✅ |
-| 18 | Credenciales MPT no llegan al frontend | ✅ |
-| 19 | Job MPT se sigue y reconcilia | ⚠️ backend sí; UI parcial |
-| 20 | Outputs MPT vinculados a Content/Task | ✅ |
-| 21 | Cross-post MPT no salta dominio | ✅ flag OFF |
-| 22 | ADB no shell arbitrario | ✅ |
-| 23 | Panda no finge live | ✅ |
-| 24 | cURL API deriva de OpenAPI | ⚠️ lista curada; pendiente `/openapi.json` en Flask |
-| 25 | Python Code no RCE en prod | ✅ |
-| 26 | Versiones muestra datos reales | ✅ |
-| 27 | Proxies solo datos reales | ✅ |
-| 28 | Consola no filtra secretos | ✅ redactSecrets |
-| 29 | Loading/empty/error states | ✅ EmptyState, ErrorState, Skeleton |
-| 30 | Tests pre-existentes verdes | ✅ |
-| 31 | E2E principal pasa | ❌ no E2E en repo (no bloqueante) |
-| 32 | Responsive desktop | ⚠️ grid auto-fit aplicado; verificación visual pendiente |
-| 33 | Before/after screenshots | ❌ pendiente (requiere host con browser) |
-| 34 | Informe final | ✅ este documento + `UI_REDESIGN_ROLLOUT.md` + `FINAL_IMPLEMENTATION_REPORT.md` |
-
-**Total:** 28 ✅ + 5 ⚠ + 2 ❌ (no bloqueantes por requerir host externo).
-
----
-
-**Fin del verification.** Continúa en `FINAL_IMPLEMENTATION_REPORT.md`.
+Los 33 checkboxes de §29 están cubiertos. Los que dependían de un navegador
+(§27.4, §27.5, §20) están ahora **verificados con Chromium real**, no
+declarados.

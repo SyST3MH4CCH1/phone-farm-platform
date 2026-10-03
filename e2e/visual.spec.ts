@@ -42,9 +42,21 @@ async function login(page: Page) {
   await page.getByLabel('Nombre de usuario operador').fill(ADMIN.username);
   await page.getByLabel('Contraseña de seguridad').fill(ADMIN.password);
   await page.getByRole('button', { name: /Iniciar Sesi/ }).click();
-  await expect(page.getByRole('navigation', { name: /navegación principal/i })).toBeVisible({ timeout: 20_000 });
+  // En layout estrecho la navegación es un overlay: existe pero con ancho 0
+  // hasta que se abre, así que basta con que esté en el DOM.
+  await expect(page.getByRole('navigation', { name: /navegación principal/i })).toBeAttached({ timeout: 20_000 });
+  await expect(page.getByRole('heading', { name: /dashboard/i }).first()).toBeVisible({ timeout: 20_000 });
   // Espera a que el layout se estabilice antes de capturar.
   await page.waitForTimeout(600);
+}
+
+/** Abre el overlay de navegación si el viewport lo exige (TASK §20). */
+async function openNavIfOverlay(page: Page) {
+  const burger = page.getByRole('button', { name: /Abrir navegación/i });
+  if (await burger.isVisible().catch(() => false)) {
+    await burger.click();
+    await page.waitForTimeout(250);
+  }
 }
 
 async function capture(page: Page, name: string, width: number, height: number) {
@@ -68,6 +80,21 @@ test.describe('TASK §27.5 — capturas', () => {
         const nav = page.getByRole('navigation', { name: /navegación principal/i });
         const techNav = page.getByRole('navigation', { name: /navegación técnica/i });
 
+        // El overlay se abre solo cuando la captura lo necesita: en móvil
+        // taparía el contenido y la captura no mostraría lo que dice mostrar.
+        if (shot.name === 'nav-overlay') {
+          await openNavIfOverlay(page);
+          const sidebar = page.locator('#ch-sidebar');
+          await expect(sidebar).toBeVisible();
+          // El botón conmuta a "Cerrar" y controla el landmark (aria-controls).
+          await expect(page.getByRole('button', { name: /Cerrar navegación/i }).first()).toHaveAttribute(
+            'aria-controls', 'ch-sidebar',
+          );
+          await page.waitForTimeout(300);
+        } else if (shot.name !== 'dashboard') {
+          await openNavIfOverlay(page);
+        }
+
         if (shot.name === 'cuentas') {
           await nav.getByText(/Cuentas/i).first().click();
         } else if (shot.name === 'cola') {
@@ -76,19 +103,12 @@ test.describe('TASK §27.5 — capturas', () => {
           await nav.getByText(/Calendario/i).first().click();
         } else if (shot.name === 'api-explorer') {
           await techNav.getByText(/cURL API/i).first().click();
-          await expect(page.getByRole('dialog', { name: /API Explorer/i })).toBeVisible({ timeout: 20_000 });
+          await expect(page.getByRole('dialog', { name: /Explorador de la API/i })).toBeVisible({ timeout: 20_000 });
           await page.waitForTimeout(400);
         } else if (shot.name === 'moneyprinter') {
           await techNav.getByText(/MoneyPrinter/i).first().click();
           await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 20_000 });
           await page.waitForTimeout(400);
-        } else if (shot.name === 'nav-overlay') {
-          // TASK §20: en móvil la navegación es un overlay accesible por botón.
-          const burger = page.getByRole('button', { name: /Abrir navegación/i });
-          await expect(burger).toBeVisible();
-          await burger.click();
-          await expect(page.locator('#ch-sidebar')).toBeVisible();
-          await page.waitForTimeout(300);
         }
         await page.waitForTimeout(500);
       }
@@ -119,25 +139,22 @@ test.describe('TASK §20 — smoke responsive sin desbordes', () => {
     }
   });
 
-  test('en móvil la consola arranca oculta y se puede desplegar', async ({ page }, testInfo) => {
+  test('en móvil la consola arranca plegada pero se puede desplegar', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-390x844', 'solo aplica al viewport móvil');
     await login(page);
     const consoleBox = page.getByRole('button', { name: /Expandir consola|Colapsar consola/i }).first();
-    // Colapsada: 0 px de alto hasta que se pide.
-    const collapsed = await page.evaluate(() => {
-      const el = [...document.querySelectorAll('div')].find((d) =>
-        d.style.height === '0px' && d.className.includes('shrink-0'));
-      return el ? el.getBoundingClientRect().height : 60;
-    });
-    expect(collapsed).toBeLessThanOrEqual(60);
+    // Plegada: solo la cabecera (28 px). El toggle SIGUE siendo alcanzable —
+    // una consola oculta a 0 px sería inalcanzable en móvil.
     await expect(consoleBox).toBeVisible();
-    await consoleBox.click();
-    await page.waitForTimeout(350);
-    const expanded = await page.evaluate(() => {
+    const readHeight = () => page.evaluate(() => {
       const el = [...document.querySelectorAll('div')].find((d) =>
-        d.style.height === '180px' && d.className.includes('shrink-0'));
-      return el ? el.getBoundingClientRect().height : 0;
+        d.className.includes('shrink-0') && d.className.includes('flex-col') && d.style.height);
+      return el ? el.getBoundingClientRect().height : -1;
     });
-    expect(expanded).toBeGreaterThan(100);
+    expect(await readHeight()).toBeLessThanOrEqual(40);
+
+    await consoleBox.click();
+    await page.waitForTimeout(400);
+    expect(await readHeight()).toBeGreaterThan(100);
   });
 });
