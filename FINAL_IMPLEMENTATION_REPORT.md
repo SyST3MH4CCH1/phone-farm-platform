@@ -1,10 +1,17 @@
 # FINAL IMPLEMENTATION REPORT — TASK_UI_UX_REAL_CONTROL_HUB_V1
 
 **Repositorio:** `C:\Users\haxth3\Documents\phone-farm-platform`
-**Branch:** `feat/ui-ops-control-hub-v2` (29 commits, `main` sin tocar)
-**Baseline:** `b6995e5`
+**Branch:** `feat/ui-ops-control-hub-v2` (30 commits de este TASK)
+**Baseline del TASK:** `b6995e5` (`chore/update-third-party`, 2026-10-03 09:51)
+**`main`:** `ccf432e` — **sin modificar** (último commit 2026-09-15, anterior al TASK)
 **Fecha:** 2026-10-03
 **Estado:** TASK aplicado. Sin merge a `main`. Branch y backup conservados.
+
+> **Sobre la base de la branch.** La branch de trabajo **no** parte de `main`:
+> parte de `b6995e5`, que vive en `chore/update-third-party` y ya contiene 26
+> commits de trabajo de diseño previos a este TASK. `main` (`ccf432e`) **sí** es
+> ancestro de esta branch, así que un merge sería limpio, pero arrastraría esos
+> 26 commits. Eso es una decisión de quien haga el merge, no de este trabajo.
 
 ---
 
@@ -298,11 +305,25 @@ npm run e2e:visual      # -> docs/evidence/ui/
 
 ## 14. Instrucciones de merge
 
+`main` está en `ccf432e` y es ancestro de esta branch (`HEAD..main` = 0
+commits), así que el merge es limpio. Pero arrastraría también los 26 commits
+previos de `chore/update-third-party` que ya están en la base de la branch.
+
+Opción A — fusionar la branch completa (incluye el trabajo de diseño previo):
+
 ```bash
 git checkout main
-git merge --no-ff feat/ui-ops-control-hub-v2 -m "feat(ui): redesign Control Hub dark operations UI (TASK §1-§34)"
+git merge --ff-only feat/ui-ops-control-hub-v2
 ```
 
-**No se ha ejecutado.** La branch queda lista para revisión; `main` sigue en
-`b6995e5`. Si algo no encaja, el rollback es `git reset --hard b6995e5` y el
+Opción B — solo este TASK, sin el trabajo de diseño previo (rebase o cherry-pick
+de los 30 commits sobre `main`):
+
+```bash
+git checkout -b feat/ui-ops-control-hub-v2-clean main
+git cherry-pick b6995e5..feat/ui-ops-control-hub-v2
+```
+
+**Ninguna se ha ejecutado.** La branch queda lista para revisión; `main` sigue
+en `ccf432e`. Si algo no encaja, el rollback es `git reset --hard b6995e5` y el
 backup externo sigue en `C:\Users\haxth3\control-hub-backups\20261003-100319\`.
