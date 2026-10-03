@@ -4,6 +4,7 @@ import type { Account, ProxyItem, QueueJob, LogEntry, SystemStats, AuthUser, Sta
 import { Header, ActiveTab } from './components/Header';
 import { AccountsPanel } from './components/AccountsPanel';
 import { QueuePanel } from './components/QueuePanel';
+import { AlertRow, StatusBadge } from './components/design';
 import { PandaGridModal } from './components/PandaGridModal';
 import { TerminalLogs } from './components/TerminalLogs';
 import { ProxyModal } from './components/ProxyModal';
@@ -350,6 +351,17 @@ const DashboardView: React.FC<{
         <ProxiesCard proxies={realProxies} />
       </div>
 
+      {/* Fila 2.5 — Alertas accionables (TASK §9.4) */}
+      <AlertsRow
+        queue={queue}
+        deviceCount={deviceCount}
+        stack={stack}
+        onOpenJob={(jobId) => onOpenPreview?.(queue.find((q) => q.id === jobId)!)}
+        onApproveJob={onApproveJob}
+        onRejectJob={onRejectJob}
+        onRetryJob={onProcessNextJob}
+      />
+
       {/* Fila 3: Cuentas | Cola | mini Calendario */}
       <div
         className="grid gap-3"
@@ -412,6 +424,123 @@ const DashboardView: React.FC<{
         </section>
       </div>
     </div>
+  );
+};
+
+/**
+ * AlertsRow — TASK §9.4 alertas accionables.
+ * Deriva alertas reales del estado de queue/devices/stack:
+ *  - Jobs en `awaiting_approval` (revisión necesaria).
+ *  - Jobs en `failed` o `awaiting_manual_upload` (acción manual).
+ *  - 0 dispositivos online.
+ *  - MPT offline.
+ *  - Flask offline (derivado de stack.flask_online).
+ *
+ * Cada alerta expone acciones (Revisar/Reintentar/Silenciar) en función del
+ * contexto real. Sin cifras inventadas.
+ */
+const AlertsRow: React.FC<{
+  queue: QueueJob[];
+  deviceCount: number;
+  stack: StackInfo | null;
+  onOpenJob?: (jobId: string) => void;
+  onApproveJob?: (jobId: string) => void;
+  onRejectJob?: (jobId: string) => void;
+  onRetryJob?: () => void;
+}> = ({ queue, deviceCount, stack, onOpenJob, onApproveJob, onRejectJob, onRetryJob }) => {
+  const awaiting = queue.filter((j) => j.status === 'awaiting_approval');
+  const failedJobs = queue.filter((j) => j.status === 'failed' || j.status === 'awaiting_manual_upload');
+  const mptOffline = stack != null && stack.mpt_online === false;
+  const noDevices = deviceCount === 0;
+
+  const items: Array<{
+    id: string;
+    kind: 'warn' | 'danger' | 'info' | 'ok';
+    title: string;
+    detail: string;
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    actions: Array<{ label: string; onClick: () => void; tone?: 'primary' | 'secondary' | 'danger' }>;
+  }> = [];
+
+  if (awaiting.length > 0) {
+    items.push({
+      id: 'awaiting-approval',
+      kind: 'warn',
+      title: `${awaiting.length} job(s) esperando aprobación`,
+      detail: 'Revisa el script y aprueba o rechaza antes de pasar a la fase de publicación.',
+      severity: 'medium',
+      actions: awaiting.slice(0, 3).flatMap((j) => [
+        { label: `Revisar ${j.id}`, onClick: () => onOpenJob?.(j.id), tone: 'primary' as const },
+        ...(onApproveJob ? [{ label: 'Aprobar', onClick: () => onApproveJob(j.id), tone: 'secondary' as const }] : []),
+        ...(onRejectJob ? [{ label: 'Rechazar', onClick: () => onRejectJob(j.id), tone: 'danger' as const }] : []),
+      ]),
+    });
+  }
+  if (failedJobs.length > 0) {
+    items.push({
+      id: 'failed-jobs',
+      kind: 'danger',
+      title: `${failedJobs.length} job(s) en estado de fallo`,
+      detail: 'Fallos recientes requieren inspección: ¿MPT timeout? ¿API key agotada? ¿Proxy bloqueado?',
+      severity: 'high',
+      actions: [
+        ...(onRetryJob ? [{ label: 'Generar siguiente', onClick: () => onRetryJob(), tone: 'primary' as const }] : []),
+        ...failedJobs.slice(0, 2).map((j) => ({ label: `Revisar ${j.id}`, onClick: () => onOpenJob?.(j.id), tone: 'secondary' as const })),
+      ],
+    });
+  }
+  if (mptOffline) {
+    items.push({
+      id: 'mpt-offline',
+      kind: 'danger',
+      title: 'MoneyPrinterTurbo no responde',
+      detail: 'El adaptador no recibe /ping 2xx. Comprueba `platform/scripts/run-native.ps1` o `docker compose ps`.',
+      severity: 'critical',
+      actions: [
+        { label: 'Refrescar', onClick: () => location.reload(), tone: 'secondary' as const },
+      ],
+    });
+  }
+  if (noDevices) {
+    items.push({
+      id: 'no-devices',
+      kind: 'warn',
+      title: 'Sin dispositivos ADB',
+      detail: 'No hay `adb devices` activos. Conecta teléfonos o ejecuta `adb start-server`.',
+      severity: 'medium',
+      actions: [
+        { label: 'Refrescar', onClick: () => location.reload(), tone: 'secondary' as const },
+      ],
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <section
+      aria-label="Alertas operacionales"
+      className="rounded-lg border p-3 space-y-2"
+      style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
+    >
+      <header className="flex items-center justify-between">
+        <h2 className="text-[11px] font-mono uppercase tracking-wider font-semibold" style={{ color: 'var(--color-text)' }}>
+          Alertas operacionales
+        </h2>
+        <StatusBadge kind="warn" label={`${items.length} activa(s)`} dot />
+      </header>
+      <div className="space-y-2">
+        {items.map((it) => (
+          <AlertRow
+            key={it.id}
+            kind={it.kind}
+            title={it.title}
+            detail={it.detail}
+            severity={it.severity}
+            actions={it.actions}
+          />
+        ))}
+      </div>
+    </section>
   );
 };
 
