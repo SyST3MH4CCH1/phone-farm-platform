@@ -4,6 +4,14 @@ dist/
 coverage/
 .DS_Store
 *.log
+*.db
+*.sqlite
+*.sqlite3
+*.pem
+*.p12
+*.pfx
+*.zip
+SECRETS-LOCAL.md
 .env*
 !.env.example
 
@@ -52,3 +60,20 @@ e2e/.artifacts/
 e2e/test-results/
 playwright-report/
 test-results/
+
+# Capturas, planes y salidas locales de agentes (no forman parte del producto)
+.playwright-mcp/
+.sisyphus/
+tmp/
+IMG/
+resized/
+estructura.txt
+
+# Notas locales de ejecución y prompts de trabajo
+DASHBOARD_STATE.md
+SECTIONS_STATE.md
+IMPLEMENTATION_EXECUTION_REPORT.md
+TASK_LUNA_IMPLEMENTACION_EXACTA.md
+
+# Ruta de datos creada accidentalmente al ejecutar Flask desde platform/
+platform/platform/data/

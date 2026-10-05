@@ -1,0 +1,33 @@
+{
+  "dry_run": true,
+  "emergency_stop": true,
+  "ai_label_reviewed": false,
+  "platforms": {
+    "instagram": {
+      "official_daily_publish_limit": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "daily_ceiling": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "safety_margin": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "min_gap_minutes": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "graduation_days": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "graduation_successes": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "window_utc": {"start": "09:00", "end": "18:00", "status": "A_CONFIRMAR"},
+      "phases": [
+        {"name": "initial", "day_start": 1, "day_end": 7, "daily_limit": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""}},
+        {"name": "steady", "day_start": 8, "day_end": 30, "daily_limit": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""}}
+      ]
+    },
+    "tiktok": {
+      "official_daily_publish_limit": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "daily_ceiling": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "safety_margin": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "min_gap_minutes": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "graduation_days": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "graduation_successes": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""},
+      "window_utc": {"start": "09:00", "end": "18:00", "status": "A_CONFIRMAR"},
+      "phases": [
+        {"name": "initial", "day_start": 1, "day_end": 7, "daily_limit": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""}},
+        {"name": "steady", "day_start": 8, "day_end": 30, "daily_limit": {"value": null, "status": "A_CONFIRMAR", "source": "", "checkedAt": ""}}
+      ]
+    }
+  }
+}

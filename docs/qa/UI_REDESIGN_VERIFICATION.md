@@ -50,7 +50,7 @@ tokens indefinidos ...................... 0
 ## 2. Evidencia por requisito
 
 ### §2 Backup — ✅
-`C:\Users\haxth3\control-hub-backups\20261003-100319\`
+`%USERPROFILE%\control-hub-backups\20261003-100319\`
 (`BACKUP_MANIFEST.md`, `control-hub-before-ui.bundle`, `working-tree.tar`,
 branch `backup/pre-ui-redesign-20261003-100319`). **Intacto**: no se ha escrito
 en esa ruta desde su creación.

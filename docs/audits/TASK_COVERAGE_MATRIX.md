@@ -26,7 +26,7 @@
 
 | Requisito | Estado | Evidencia | Archivos | Tests | Observaciones |
 |---|---|---|---|---|---|
-| §1.1 Capturar estado Git | **DONE** | `BACKUP_MANIFEST.md` §1 con toplevel/branch/HEAD/status/remote/log | `C:\Users\haxth3\control-hub-backups\20261003-100319\BACKUP_MANIFEST.md` | — | Ejecutado y verificado. |
+| §1.1 Capturar estado Git | **DONE** | `BACKUP_MANIFEST.md` §1 con toplevel/branch/HEAD/status/remote/log | `%USERPROFILE%\control-hub-backups\20261003-100319\BACKUP_MANIFEST.md` | — | Ejecutado y verificado. |
 | §1.2.A Rama backup-pre-ui-redes-* | **DONE** | `git branch --list` muestra rama | repo git | — | `backup/pre-ui-redesign-20261003-100319` apunta a `b6995e5`. |
 | §1.2.B Bundle Git restaurable | **DONE** | bundle 2.97 MB SHA-256 `86381AA9…B` | `…/control-hub-before-ui.bundle` | — | `git bundle create … --all`. |
 | §1.2.C Snapshot working-tree | **DONE** | tar 841 MB SHA-256 `889B2D39…D` | `…/working-tree.tar` | — | Excluye node_modules, .venv, etc. |

@@ -2,7 +2,9 @@
 
 **Phone Farm Control Center** — panel de control para granjas de teléfonos Android (ADB): gestión de cuentas de redes sociales, proxies SOCKS5, cola de generación de contenido con IA (MoneyPrinterTurbo + Gemini) y logs en vivo.
 
-> ⚠️ **Estado:** integración **real** (sin mocks). El backend Flask (`platform/`) es la fuente de verdad; este panel React es la interfaz de operación. Ver [docs/AUDIT.md](docs/AUDIT.md) para seguridad y [docs/INTERCONEXION.md](docs/INTERCONEXION.md) para el mapa completo de cómo se conectan todos los procesos.
+> **Estado verificado el 2026-10-05:** el panel y Flask usan datos persistidos, pero el flujo completo de generación/publicación no está listo: MoneyPrinterTurbo no responde en el host auditado y no se ha verificado una publicación real. Algunas vistas muestran ejemplos o estados sin telemetría. Consulte [el informe de lanzamiento](docs/LAUNCH_READINESS_2026-10-05.md) y [el sistema de rampa](WARMUP_SYSTEM.md) antes de operar.
+
+> **GitHub:** el remoto ya es público. La preparación del árbol actual y el riesgo de capturas/datos presentes en el historial anterior están documentados en [Preparación para GitHub](docs/GITHUB_PUBLICATION_2026-10-05.md).
 
 ## Stack
 
@@ -96,7 +98,7 @@ Toda la API (`/api/*`) exige sesión: cookie `httpOnly` `pf_session` o `Authoriz
 
 ## MCP Server (agentes)
 
-El **MCP real** vive en el backend Python: `platform/phonefarm/mcp_server.py` expone Streamable HTTP en **`http://127.0.0.1:5001/mcp`** (loopback, sin auth — confía en que solo procesos locales del host lo llaman).
+El servidor MCP vive en `platform/phonefarm/mcp_server.py`; está desactivado por defecto y, si se habilita, usa tokens con scopes. Compruebe configuración y acceso antes de exponerlo fuera de loopback.
 
 ```bash
 # Cliente MCP de ejemplo (TypeScript/Node):

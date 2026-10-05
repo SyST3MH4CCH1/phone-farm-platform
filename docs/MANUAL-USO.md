@@ -31,7 +31,7 @@ Mini PC (Windows)
 powershell -ExecutionPolicy Bypass -File platform\scripts\run-native.ps1
 
 # Terminal 2 — panel React (:3000)
-cd "C:\Users\haxth3\Documents\phone-farm-platform (1)"
+cd "%USERPROFILE%\Documents\phone-farm-platform (1)"
 npx tsx server.ts
 ```
 

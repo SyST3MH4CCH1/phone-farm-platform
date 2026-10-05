@@ -2,6 +2,7 @@
 import { motion } from 'motion/react';
 import { useFocusTrap } from '../a11y';
 import { Account, ProxyItem, QueueJob } from '../types';
+import { AccountWarmupControl } from './AccountWarmupControl';
 
 interface AccountDetailModalProps {
   account: Account | null;
@@ -21,7 +22,6 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
   proxies,
   queue,
   onClose,
-  onToggleBot,
   onOpenMoneyPrinterForAccount
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'posts' | 'warmup' | 'proxy'>('overview');
@@ -41,19 +41,10 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
   const followsToday = account.follows_today;
   const commentsToday = account.comments_today;
 
-  const getWarmupProgress = () => {
-    const pct = Math.min((account.warmup_day / 30) * 100, 100);
-    let color = 'ok';
-    if (account.warmup_day > 20) color = 'danger';
-    else if (account.warmup_day > 10) color = 'warn';
-    return { pct, color };
-  };
-  const warmup = getWarmupProgress();
-
   const tabs = [
     { id: 'overview' as const, label: 'Resumen' },
     { id: 'posts' as const, label: `Publicaciones (${accountJobs.length})` },
-    { id: 'warmup' as const, label: `Warmup (Día ${account.warmup_day})` },
+    { id: 'warmup' as const, label: 'Rampa de publicación' },
     { id: 'proxy' as const, label: 'Proxy & ADB' },
   ];
 
@@ -160,23 +151,7 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
                 </div>
               </div>
 
-              {/* Bot Controller */}
-              <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
-                <div>
-                  <h4 className="font-bold font-mono" style={{ color: 'var(--color-text)' }}>
-                    Taktik Bot — Warmup Día {account.warmup_day}
-                  </h4>
-                  <p className="text-[11px] font-sans mt-0.5" style={{ color: 'var(--color-muted)' }}>
-                    Automatiza scroll humano y engagement orgánico según fase del algoritmo.
-                  </p>
-                </div>
-                <button
-                  onClick={() => onToggleBot?.(account.id)}
-                  className={account.bot_active ? 'btn-danger px-5 py-2 text-[11px]' : 'btn-brand px-5 py-2 text-[11px]'}
-                >
-                  {account.bot_active ? 'Detener Taktik Bot' : 'Iniciar Taktik Bot'}
-                </button>
-              </div>
+              <AccountWarmupControl account={account}/>
 
               {/* Account Technical Details */}
               <div className="p-4 space-y-2" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
@@ -248,33 +223,7 @@ export const AccountDetailModal: React.FC<AccountDetailModalProps> = ({
             </div>
           )}
 
-          {activeTab === 'warmup' && (
-            <div className="space-y-4">
-              <div className="p-4 space-y-3" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-line)', borderRadius: '6px' }}>
-                <h4 className="font-bold uppercase text-[11px]" style={{ color: 'var(--color-text)' }}>
-                  Progreso Warmup — Día {account.warmup_day} de 30
-                </h4>
-                <p className="text-[11px] font-sans" style={{ color: 'var(--color-muted)' }}>
-                  El protocolo incrementa paulatinamente la tasa de interacción para evitar flags.
-                </p>
-
-                {/* Progress bar instead of grid */}
-                <div className="space-y-2">
-                  <div className="progress-bar">
-                    <div
-                      className={`progress-bar-fill ${warmup.color}`}
-                      style={{ width: `${warmup.pct}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] font-mono" style={{ color: 'var(--color-muted-2)' }}>
-                    <span>Inicio</span>
-                    <span>Día {account.warmup_day}</span>
-                    <span>Día 30</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {activeTab === 'warmup' && <AccountWarmupControl account={account}/>}
 
           {activeTab === 'proxy' && (
             <div className="space-y-4">

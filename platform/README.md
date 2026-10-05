@@ -1,6 +1,6 @@
 # Phone Farm Platform — Backend Python (real)
 
-Backend **real** de la Phone Farm: generación de Reels con **MoneyPrinterTurbo**, publicación con **instagrapi**, engagement con **taktik-bot**, proxies SOCKS5 **DataImpulse** y control ADB — todo orquestado desde un Mini PC Windows con **Docker**.
+Backend Flask de la Phone Farm. Parte de este documento conserva planes históricos: `taktik-bot` fue retirado y el publicador actual usa `instagrapi`, una API no oficial. El servicio MoneyPrinterTurbo no respondió en la comprobación local de 2026-10-05. Para el estado comprobado y los bloqueos de lanzamiento, consulte [el informe de lanzamiento](../docs/LAUNCH_READINESS_2026-10-05.md) y [la rampa de APIs oficiales](../WARMUP_SYSTEM.md).
 
 > Reemplaza los mocks del servidor Express (`server.ts`). El dashboard React del repo puede apuntar a esta API (`bridge_config → 127.0.0.1:5000`).
 

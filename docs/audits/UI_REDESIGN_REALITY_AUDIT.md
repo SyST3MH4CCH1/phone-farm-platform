@@ -306,7 +306,7 @@ Estado del proyecto: **adaptable al TASK sin reescritura mayor**, ya que el fron
 ## 10. Procedimiento para reproducir este audit
 
 ```powershell
-cd C:\Users\haxth3\Documents\phone-farm-platform
+cd %USERPROFILE%\Documents\phone-farm-platform
 git rev-parse HEAD
 ls src/components
 ls platform/phonefarm

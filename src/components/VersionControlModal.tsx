@@ -35,24 +35,25 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
   // la rama actual en git; el operador puede usar git checkout / git reset
   // por su cuenta, pero NO exponemos botones que simulen esa operación.
   const [selectedVersion, setSelectedVersion] = useState<'current' | 'export'>('current');
+  const [exportOpen, setExportOpen] = useState(false);
+  const [passphrase, setPassphrase] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [exportError, setExportError] = useState('');
+  const [exportMessage, setExportMessage] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const handleExportEncrypted = async () => {
-    const passphrase = window.prompt('Passphrase del backup (>=12 chars, se pedirá al restaurar):');
-    if (!passphrase || passphrase.length < 12) {
-      window.alert('Passphrase requerida (>=12 caracteres). Exportación cancelada.');
-      return;
-    }
-    const password = window.prompt('Reautenticación: password del panel (admin):');
-    if (!password) return;
+    if (passphrase.length < 12 || !adminPassword) { setExportError('Introduce una frase de al menos 12 caracteres y la contraseña del administrador.'); return; }
+    setExportError(''); setExportMessage(''); setExporting(true);
     try {
       const res = await apiFetch('/api/backups/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passphrase, password }),
+        body: JSON.stringify({ passphrase, password: adminPassword }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        window.alert(`Exportación fallida: ${data?.error || res.status}`);
+        setExportError(`Exportación fallida: ${data?.error || res.status}`);
         return;
       }
       const blob = await res.blob();
@@ -64,9 +65,12 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      window.alert('Backup cifrado (.pfbackup) descargado. Guarda la passphrase: es necesaria para restaurar.');
+      setExportMessage('Backup cifrado descargado. Conserva la frase: es necesaria para restaurar.');
+      setExportOpen(false);
     } catch (err) {
-      window.alert(`Error de red: ${err instanceof Error ? err.message : String(err)}`);
+      setExportError(`Error de red: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setAdminPassword(''); setPassphrase(''); setExporting(false);
     }
   };
 
@@ -85,7 +89,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
         transition={{ duration: 0.18 }}
         role="dialog"
         aria-modal="true"
-        className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="ref-popup-shell w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
       >
         {/* Header — sin "TH3F4Rm3R" fake */}
         <div className="bg-[#232528] px-6 py-4 border-b border-[#2A2C30] flex items-center justify-between">
@@ -191,7 +195,7 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={handleExportEncrypted}
+                onClick={() => { setExportOpen(true); setExportError(''); setExportMessage(''); }}
                 className="px-3 py-1.5 bg-[#33363A] hover:bg-[#3A3D42] border border-[#A1A6AE]/30 text-[#A1A6AE] rounded-lg font-bold flex items-center gap-1.5"
                 title="Exporta un backup CIFRADO (.pfbackup) con passphrase — nunca JSON en claro"
               >
@@ -205,6 +209,14 @@ export const VersionControlModal: React.FC<VersionControlModalProps> = ({
               </button>
             </div>
           </div>
+          {exportOpen && <form className="ref-backup-form" onSubmit={event => { event.preventDefault(); void handleExportEncrypted(); }}>
+            <div><span className="ref-dialog-kicker">EXPORTACIÓN SEGURA</span><h4>Crear backup cifrado</h4><p>La frase no se guarda en esta aplicación. Necesitarás la misma para restaurar.</p></div>
+            <label>Frase del backup<input type="password" autoComplete="new-password" minLength={12} value={passphrase} onChange={event => setPassphrase(event.target.value)} required/></label>
+            <label>Contraseña del administrador<input type="password" autoComplete="current-password" value={adminPassword} onChange={event => setAdminPassword(event.target.value)} required/></label>
+            {exportError && <p role="alert" className="ref-warmup-error">{exportError}</p>}
+            <footer><button type="button" className="ref-dialog-secondary" onClick={() => { setExportOpen(false); setPassphrase(''); setAdminPassword(''); }}>Cancelar</button><button type="submit" className="ref-blue-button" disabled={exporting}>{exporting ? 'Exportando…' : 'Descargar cifrado'}</button></footer>
+          </form>}
+          {exportMessage && <p role="status" className="ref-backup-message">{exportMessage}</p>}
 
           {/* Sin historial ficticio (TASK §30). */}
           <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4">

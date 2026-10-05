@@ -31,7 +31,7 @@ previos de `chore/update-third-party`).
 ## 2. Cobertura por requisito
 
 ### §1 BACKUP — **DONE**
-`C:\Users\haxth3\control-hub-backups\20261003-100319\`: `BACKUP_MANIFEST.md`,
+`%USERPROFILE%\control-hub-backups\20261003-100319\`: `BACKUP_MANIFEST.md`,
 `control-hub-before-ui.bundle` (2.97 MB), `working-tree.tar` (841 MB), branch
 `backup/pre-ui-redesign-20261003-100319`. **No se ha modificado desde entonces.**
 

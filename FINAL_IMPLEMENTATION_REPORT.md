@@ -1,6 +1,6 @@
 # FINAL IMPLEMENTATION REPORT — TASK_UI_UX_REAL_CONTROL_HUB_V1
 
-**Repositorio:** `C:\Users\haxth3\Documents\phone-farm-platform`
+**Repositorio:** `%USERPROFILE%\Documents\phone-farm-platform`
 **Branch:** `feat/ui-ops-control-hub-v2` (commits de este TASK enumerados uno a uno en §3)
 **Baseline del TASK:** `b6995e5` (`chore/update-third-party`, 2026-10-03 09:51)
 **`main`:** `ccf432e` — **sin modificar** (último commit 2026-09-15, anterior al TASK)
@@ -36,7 +36,7 @@ Todo lo anterior está reproducido por comandos, no por declaración.
 
 ## 2. Baseline y recuperación
 
-- **Backup:** `C:\Users\haxth3\control-hub-backups\20261003-100319\`
+- **Backup:** `%USERPROFILE%\control-hub-backups\20261003-100319\`
   - `BACKUP_MANIFEST.md`
   - `control-hub-before-ui.bundle` (2.97 MB, SHA-256 `86381AA9…B`)
   - `working-tree.tar` (841 MB, SHA-256 `889B2D39…D`)
@@ -293,7 +293,7 @@ Ninguno de estos huecos se rellena con datos inventados.
 ## 13. Cómo verificar esto tú mismo
 
 ```bash
-cd C:\Users\haxth3\Documents\phone-farm-platform
+cd %USERPROFILE%\Documents\phone-farm-platform
 
 # tipos, unit, python
 npx tsc --noEmit
@@ -369,4 +369,4 @@ git cherry-pick b6995e5..feat/ui-ops-control-hub-v2
 
 **Ninguna se ha ejecutado.** La branch queda lista para revisión; `main` sigue
 en `ccf432e`. Si algo no encaja, el rollback es `git reset --hard b6995e5` y el
-backup externo sigue en `C:\Users\haxth3\control-hub-backups\20261003-100319\`.
+backup externo sigue en `%USERPROFILE%\control-hub-backups\20261003-100319\`.

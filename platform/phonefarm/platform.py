@@ -233,13 +233,13 @@ def _script_job(job: dict[str, Any]) -> None:
         logger.info("[%s] Generando guión para keyword=%r (nicho=%s)",
                     job_id, job.get("keyword"), job.get("niche_id") or "general")
         profile = content.get_profile(job.get("niche_id"))
-        script = content.build_script(job.get("keyword", ""), profile, job.get("script"))
+        script = content.build_script(job.get("keyword", ""), profile, job.get("script"), job.get("custom_prompt"))
         job["script"] = script
         job["caption"] = content.build_caption(job.get("keyword", ""), profile)
         job["hashtags"] = content.suggest_hashtags(job.get("keyword", ""), profile)
         job["terms"] = content.generate_terms(job.get("keyword", ""), profile)
-        job["voice_name"] = profile.get("voice_name", "es-ES-AlvaroNeural")
-        job["video_aspect"] = profile.get("video_aspect", "9:16")
+        job["voice_name"] = job.get("voice_name") or profile.get("voice_name", "es-ES-AlvaroNeural")
+        job["video_aspect"] = job.get("video_aspect") or profile.get("video_aspect", "9:16")
         job["niche_id"] = profile.get("id", "general")
         _sync_job(job)
 
@@ -280,6 +280,8 @@ def _generate_video(job: dict[str, Any]) -> None:
             job.get("keyword", ""), job_id,
             script=job.get("script", ""),
             terms=job.get("terms"),
+            voice_name=job.get("voice_name"),
+            video_aspect=job.get("video_aspect"),
         )
         job["video_path"] = video_path
         job["progress"] = 50
@@ -320,6 +322,7 @@ def _publish_job(job: dict[str, Any]) -> None:
         media_id = publisher.publish_video(account_id, video_path, caption)
         job["media_id"] = media_id
         job["status"] = "published"
+        job["published_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         job["progress"] = 100
         logger.info("[%s] Publicado OK (media_id=%s)", job_id, media_id)
 
@@ -577,8 +580,8 @@ def api_accounts_create():
     proxy_id = (body.get("proxy_id") or "").strip()
     warmup_day = int(body.get("warmup_day", 1))
 
-    if not username or not password or not device_serial:
-        return jsonify({"error": "username, password y device_serial son obligatorios"}), 400
+    if not username or not device_serial:
+        return jsonify({"error": "username y device_serial son obligatorios"}), 400
     if "XXXXX" in device_serial:
         return jsonify({"error": "device_serial es un placeholder; usa el serial real (adb devices)"}), 400
     if proxy_id and not any(p.get("id") == proxy_id for p in load_proxies()):
@@ -706,6 +709,96 @@ def api_proxies_verify():
     return jsonify(verdict)
 
 
+# --- Rampa de publicación oficial: control local, sin despacho social --------
+
+@app.get("/api/warmup/status")
+def api_warmup_status():
+    from phonefarm import warmup
+    from phonefarm.platform_data import _conn
+
+    config = warmup.load_config()
+    rows = {row["account_id"]: dict(row) for row in _conn().execute("SELECT account_id,platform,state,phase_day,successes,incidents,paused_until,emergency_stop FROM warmup_accounts")}
+    completed = {}
+    for step_row in _conn().execute("SELECT account_id,step FROM warmup_steps"):
+        completed.setdefault(step_row["account_id"], []).append(step_row["step"])
+    accounts = []
+    for account in load_accounts():
+        row = rows.get(account["id"])
+        accounts.append({
+            "account_id": account["id"],
+            "state": row["state"] if row else "NOT_REGISTERED",
+            "platform": row["platform"] if row else None,
+            "registered": row is not None,
+            "account_emergency_stop": bool(row["emergency_stop"]) if row else False,
+            "successes": row["successes"] if row else 0,
+            "incidents": row["incidents"] if row else 0,
+            "phase_day": row["phase_day"] if row else None,
+            "remaining_today": None,
+            "paused_until": row["paused_until"] if row else None,
+            "checklist": warmup.checklist(row["state"] if row else "NEW"),
+            "completed_steps": completed.get(account["id"], []),
+        })
+    return jsonify({"dry_run": config.get("dry_run", True), "emergency_stop": config.get("emergency_stop", True), "real_enabled": False, "accounts": accounts})
+
+
+@app.post("/api/warmup/accounts/<account_id>/register")
+@require_role("admin")
+def api_warmup_register(account_id: str):
+    from phonefarm import warmup
+    from phonefarm.platform_data import _conn
+
+    account = next((item for item in load_accounts() if item.get("id") == account_id), None)
+    if account is None:
+        return jsonify({"error": "cuenta no encontrada"}), 404
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict) or set(body) != {"platform"} or body["platform"] not in ("instagram", "tiktok"):
+        return jsonify({"error": "Selecciona instagram o tiktok"}), 400
+    existing = _conn().execute("SELECT platform FROM warmup_accounts WHERE account_id=?", (account_id,)).fetchone()
+    if existing and existing["platform"] != body["platform"]:
+        return jsonify({"error": "La plataforma registrada no se puede cambiar sin una revisión manual"}), 409
+    warmup.register(_conn(), account_id, body["platform"])
+    _audit("warmup.register", account_id, {"platform": body["platform"]})
+    return api_warmup_status()
+
+
+@app.post("/api/warmup/accounts/<account_id>/emergency-stop")
+@require_role("admin")
+def api_warmup_emergency_stop(account_id: str):
+    from phonefarm import warmup
+    from phonefarm.platform_data import _conn
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict) or set(body) != {"stopped"} or type(body["stopped"]) is not bool:
+        return jsonify({"error": "stopped debe ser booleano"}), 400
+    if not _conn().execute("SELECT 1 FROM warmup_accounts WHERE account_id=?", (account_id,)).fetchone():
+        return jsonify({"error": "cuenta sin rampa registrada"}), 404
+    warmup.set_emergency_stop(_conn(), account_id, body["stopped"], actor=request.headers.get("X-Actor") or "admin")
+    _audit("warmup.emergency_stop", account_id, {"stopped": body["stopped"]})
+    return api_warmup_status()
+
+
+@app.post("/api/warmup/accounts/<account_id>/step")
+@require_role("admin")
+def api_warmup_step(account_id: str):
+    from phonefarm.platform_data import _conn
+
+    body = request.get_json(silent=True) or {}
+    allowed = {"ownership", "profile", "security", "content", "oauth"}
+    if (not isinstance(body, dict) or set(body) != {"step", "completed"}
+            or body.get("step") not in allowed or type(body.get("completed")) is not bool):
+        return jsonify({"error": "Paso o estado inválido"}), 400
+    if not _conn().execute("SELECT 1 FROM warmup_accounts WHERE account_id=?", (account_id,)).fetchone():
+        return jsonify({"error": "Registra primero la rampa de esta cuenta"}), 404
+    actor = (request.headers.get("X-Actor") or "admin")[:64]
+    with _conn():
+        if body["completed"]:
+            _conn().execute("INSERT INTO warmup_steps(account_id,step,completed_at,actor) VALUES(?,?,?,?) ON CONFLICT(account_id,step) DO UPDATE SET completed_at=excluded.completed_at,actor=excluded.actor", (account_id, body["step"], int(time.time()), actor))
+        else:
+            _conn().execute("DELETE FROM warmup_steps WHERE account_id=? AND step=?", (account_id, body["step"]))
+    _audit("warmup.step", account_id, {"step": body["step"], "completed": body["completed"]})
+    return api_warmup_status()
+
+
 # --- Queue (pipeline de contenido v2) -----------------------------------------
 
 @app.get("/api/queue")
@@ -761,6 +854,9 @@ def api_queue_create():
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "progress": 0,
         "script": body.get("script") or "",
+        "custom_prompt": body.get("custom_prompt") or "",
+        "voice_name": body.get("voice_name") or "",
+        "video_aspect": body.get("video_aspect") or "",
         "version": 1,
         # programación: "2026-08-03T12:00:00Z" o timestamp
         "scheduled_ts": _parse_schedule(body.get("scheduled_time")),

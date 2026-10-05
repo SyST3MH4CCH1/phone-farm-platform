@@ -1,0 +1,10 @@
+# Preguntas abiertas
+
+| ID | Falta, fuente esperada y responsable | Afecta | Trabajo independiente ya aplicado | No asumir; condición de desbloqueo |
+|---|---|---|---|---|
+| Q-001 | Assets originales, tipografía/tokens aprobados y capturas de estados móvil/hover/focus; propietario del diseño | DSG-001, 002, 012; TASK-001 | Shell y responsive básico | No afirmar igualdad de píxeles ni inventar un breakpoint aprobado. Desbloquea una fuente editable o capturas adicionales. |
+| Q-002 | Contrato y datos reales para series históricas, país de proxy, ETA/prioridad, alcance e interacción de cuentas, métricas API y miniaturas; responsable del backend/producto | DSG-003, 004, 005, 008, 011; TASK-002 | KPIs y listas con datos actuales reales | No copiar cifras de IMG-1/2/5/8/9 como producción. Desbloquea endpoints o dataset real/fixture autorizado. |
+| Q-003 | Salidas de MPT y medios originales para miniaturas/vista previa; estado del servicio MPT; responsable de MPT/producto | DSG-006; TASK-003 | Creador y acción real de generación | No simular video generado. Desbloquea MPT online y outputs accesibles. |
+| Q-004 | Dispositivos ADB conectados y contrato para leases/operadores/eventos; responsable de infraestructura | DSG-007; TASK-004 | Tarjetas y vista de estado sin señal | No mostrar pantallas ficticias de Instagram/TikTok. Desbloquea al menos un dispositivo de prueba y endpoints definidos. |
+| Q-005 | Autorización y contrato para exponer/editar/ejecutar scripts Python; responsable de seguridad/backend | DSG-009; TASK-005 | Árbol/editor en lectura y error honesto | No activar `EXPOSE_SOURCE` ni implementar ejecución arbitraria por inferencia. Desbloquea decisión de acceso y API aprobada. |
+| Q-006 | Fuente oficial de entornos, migraciones, despliegues, incidentes y rollback; responsable de despliegue/backend | DSG-010; TASK-006 | Tarjetas de entornos y versiones actuales conocidas | No atribuir `0.1.0` a producción ni crear historial ficticio. Desbloquea contrato y datos verificables. |

@@ -30,6 +30,9 @@ interface ScheduleModalProps {
    * (dashboard) y no se quiere permitir crear nuevas publicaciones desde ahí.
    */
   hideForm?: boolean;
+  /** Filtro de cuenta controlado por la página de calendario. */
+  externalAccountFilter?: string;
+  hideFilterControls?: boolean;
 }
 
 type View = 'month' | 'week' | 'day' | 'agenda';
@@ -57,7 +60,7 @@ const fmtTime = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', mi
 /** Calendario de programación estilo Google Calendar — hecho a mano (sin librerías):
  *  vista mes (píldoras), semana y día (tramos de horas), agenda, filtros por cuenta/terminal.
  *  Drag & drop: arrastra píldoras entre días/horas para reprogramar. */
-export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, onClose, onScheduleJob, onRescheduleJob, onRefresh, embedded = false, onSelectScheduledJob, hideForm = false }) => {
+export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, onClose, onScheduleJob, onRescheduleJob, onRefresh, embedded = false, onSelectScheduledJob, hideForm = false, externalAccountFilter, hideFilterControls = false }) => {
   const now = new Date();
   const [view, setView] = useState<View>('month');
   const [cursor, setCursor] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -89,13 +92,14 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
     .map(j => ({ job: j, date: tsToDate(j.scheduled_ts) }))
     .filter((x): x is { job: QueueJob; date: Date } => x.date !== null)
     .filter(({ job }) => {
+      if (externalAccountFilter && externalAccountFilter !== 'all') return job.target_account === externalAccountFilter || accountOf(job)?.id === externalAccountFilter;
       if (filterType === 'all') return true;
       if (filterType === 'account') return job.target_account === filterValue;
       if (filterType === 'terminal') return accountOf(job)?.device_serial === filterValue;
       if (filterType === 'platform') return accountOf(job)?.platform === filterValue;
       if (filterType === 'status') return job.status === filterValue;
       return true;
-    }), [queue, filterType, filterValue]);
+    }), [queue, filterType, filterValue, externalAccountFilter]);
 
   const byDay = (d: Date) => scheduled.filter(({ date }) => sameDay(date, d));
 
@@ -236,8 +240,8 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
     <button
       key={v}
       onClick={() => setView(v)}
-      className={`px-3 py-1 rounded-full text-[12px] border transition-colors ${
-        view === v ? 'bg-[#8ab4f8] text-[#202124] border-[#8ab4f8] font-semibold' : 'bg-[#3c4043] text-[#E8EAED] border-[#3c4043] hover:bg-[#4a4d51]'
+      className={`px-3 py-1 rounded text-[11px] font-mono transition-colors ${
+        view === v ? 'bg-[#0284c7] text-white font-semibold shadow-sm' : 'bg-[var(--color-surface-3)] text-[#9aafc5] hover:text-white'
       }`}
     >
       {label}
@@ -247,114 +251,126 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({ queue, accounts, o
   // Cuerpo del calendario (toolbar + filtros + grid + form) — compartido entre
   // el modo modal (con overlay) y el modo embebido (panel de pestaña).
   const body = (
-    <div className="flex-1 overflow-y-auto p-4">
-          {/* Toolbar estilo Google */}
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <button onClick={goToday} className="px-4 py-1.5 rounded-full text-[13px] bg-[#3c4043] text-[#E8EAED] border border-[#3c4043] hover:bg-[#4a4d51]">Hoy</button>
-            <button onClick={() => nav(-1)} className="px-3 py-1.5 rounded-full text-[14px] bg-[#3c4043] text-[#E8EAED] border border-[#3c4043] hover:bg-[#4a4d51]">←</button>
-            <button onClick={() => nav(1)} className="px-3 py-1.5 rounded-full text-[14px] bg-[#3c4043] text-[#E8EAED] border border-[#3c4043] hover:bg-[#4a4d51]">→</button>
-            <span className="text-[22px] text-[#E8EAED] capitalize ml-2 font-normal">
-              {view === 'month' ? `${MONTHS[cursor.getMonth()]} ${cursor.getFullYear()}` : weekLabel}
-            </span>
-            <div className="ml-auto flex items-center gap-1.5">{viewBtn('month', 'Mes')}{viewBtn('week', 'Semana')}{viewBtn('day', 'Día')}{viewBtn('agenda', 'Agenda')}</div>
+    <div className="flex-1 overflow-y-auto p-3" style={{ background: 'var(--color-surface)' }}>
+          {/* Toolbar estilo Dashboard */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b" style={{ borderColor: 'var(--color-line)' }}>
+            <div className="flex items-center gap-1.5">
+              <button onClick={goToday} className="px-3 py-1 rounded text-xs bg-[var(--color-surface-3)] text-gray-200 border border-[var(--color-line)] hover:bg-[var(--color-surface-4)] font-mono">Hoy</button>
+              <button onClick={() => nav(-1)} className="px-2 py-1 rounded text-xs bg-[var(--color-surface-3)] text-gray-200 border border-[var(--color-line)] hover:bg-[var(--color-surface-4)] font-mono">←</button>
+              <button onClick={() => nav(1)} className="px-2 py-1 rounded text-xs bg-[var(--color-surface-3)] text-gray-200 border border-[var(--color-line)] hover:bg-[var(--color-surface-4)] font-mono">→</button>
+              <span className="text-sm font-bold text-white capitalize ml-2 font-mono">
+                {view === 'month' ? `${MONTHS[cursor.getMonth()]} ${cursor.getFullYear()}` : weekLabel}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">{viewBtn('month', 'Mes')}{viewBtn('week', 'Semana')}{viewBtn('day', 'Día')}{viewBtn('agenda', 'Agenda')}</div>
           </div>
 
           {/* Filtros */}
-          <div className="flex flex-wrap items-center gap-3 mb-3 text-[11px] font-mono">
-            <span className="text-[#6B7076] uppercase tracking-wider">Ver:</span>
-            <select value={filterType} onChange={(e) => { setFilterType(e.target.value as any); setFilterValue(''); }} className="input px-2 py-1 text-[11px]">
-              <option value="all">Global (todas las cuentas)</option>
-              <option value="account">Por cuenta</option>
-              <option value="terminal">Por terminal</option>
-              <option value="platform">Por plataforma</option>
-              <option value="status">Por estado</option>
-            </select>
-            {filterType === 'account' && (
-              <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
-                <option value="">— selecciona —</option>
-                {accounts.map(a => <option key={a.id} value={a.id}>@{a.username}</option>)}
+          {!hideForm && !hideFilterControls && (
+            <div className="flex flex-wrap items-center gap-3 mb-3 text-[11px] font-mono">
+              <span className="text-[#6B7076] uppercase tracking-wider">Ver:</span>
+              <select value={filterType} onChange={(e) => { setFilterType(e.target.value as any); setFilterValue(''); }} className="input px-2 py-1 text-[11px]">
+                <option value="all">Global (todas las cuentas)</option>
+                <option value="account">Por cuenta</option>
+                <option value="terminal">Por terminal</option>
+                <option value="platform">Por plataforma</option>
+                <option value="status">Por estado</option>
               </select>
-            )}
-            {filterType === 'terminal' && (
-              <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
-                <option value="">— selecciona —</option>
-                {terminals.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            )}
-            {filterType === 'platform' && (
-              <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
-                <option value="">— selecciona —</option>
-                <option value="instagram">Instagram</option>
-                <option value="tiktok">TikTok</option>
-                <option value="both">Instagram + TikTok</option>
-              </select>
-            )}
-            {filterType === 'status' && (
-              <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
-                <option value="">— selecciona —</option>
-                <option value="pending">Queued</option>
-                <option value="scripting">Scripting</option>
-                <option value="generating">Generating</option>
-                <option value="awaiting_approval">Awaiting approval</option>
-                <option value="awaiting_preview">Awaiting preview</option>
-                <option value="ready_for_publish">Ready</option>
-                <option value="publishing">Publishing</option>
-                <option value="published">Published</option>
-                <option value="failed">Failed</option>
-                <option value="rejected">Rejected</option>
-                <option value="awaiting_manual_upload">Manual upload</option>
-              </select>
-            )}
-          </div>
+              {filterType === 'account' && (
+                <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
+                  <option value="">— selecciona —</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>@{a.username}</option>)}
+                </select>
+              )}
+              {filterType === 'terminal' && (
+                <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
+                  <option value="">— selecciona —</option>
+                  {terminals.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              )}
+              {filterType === 'platform' && (
+                <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
+                  <option value="">— selecciona —</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="tiktok">TikTok</option>
+                  <option value="both">Instagram + TikTok</option>
+                </select>
+              )}
+              {filterType === 'status' && (
+                <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="input px-2 py-1 text-[11px]">
+                  <option value="">— selecciona —</option>
+                  <option value="pending">Queued</option>
+                  <option value="scripting">Scripting</option>
+                  <option value="generating">Generating</option>
+                  <option value="awaiting_approval">Awaiting approval</option>
+                  <option value="awaiting_preview">Awaiting preview</option>
+                  <option value="ready_for_publish">Ready</option>
+                  <option value="publishing">Publishing</option>
+                  <option value="published">Published</option>
+                  <option value="failed">Failed</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="awaiting_manual_upload">Manual upload</option>
+                </select>
+              )}
+            </div>
+          )}
 
           {/* ============ VISTA MES ============ */}
           {view === 'month' && (
-            <div className="border border-[#3c4043] rounded-lg overflow-hidden bg-[#292a2d]">
-              <div className="grid grid-cols-7 border-b border-[#3c4043] bg-[#292a2d]">
-                {DOW.map(d => <div key={d} className="py-2 text-center text-[11px] text-[#9aa0a6] uppercase">{d}</div>)}
+            <div className="border rounded-lg overflow-hidden" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
+              <div className="grid grid-cols-7 border-b text-[11px] font-semibold text-[#64748b] uppercase text-center py-1.5" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface-2)' }}>
+                {DOW.map(d => <div key={d} className="py-1">{d}</div>)}
               </div>
               <div className="grid grid-cols-7">
                 {monthCells.map((day, i) => day === null ? (
-                  <div key={`e${i}`} className="min-h-[96px] bg-[#202124] border-b border-r border-[#3c4043] last:border-r-0" />
+                  <div key={`e${i}`} className="min-h-[46px] border-b border-r opacity-20" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }} />
                 ) : (
                   <div
                     key={day.toISOString()}
                     onClick={() => { setSelectedDay(day); setFormDate(`${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}T12:00`); }}
                     onDragOver={(e) => handleDragOverDay(e, dayKey(day))}
                     onDrop={(e) => handleDropOnDay(e, day)}
-                    className={`min-h-[96px] p-1.5 border-b border-r border-[#3c4043] last:border-r-0 cursor-pointer transition-colors relative ${
-                      sameDay(day, now) ? 'bg-[#323639]' : 'bg-[#292a2d] hover:bg-[#2f3033]'
-                    } ${dragOverDate === dayKey(day) ? '!bg-[#1a3a5c] ring-2 ring-[#8ab4f8]' : ''}`}
+                    className={`min-h-[46px] p-1 border-b border-r cursor-pointer transition-colors relative ${
+                      sameDay(day, now) ? 'bg-[#132338]' : 'hover:bg-[var(--color-surface-2)]'
+                    } ${dragOverDate === dayKey(day) ? '!bg-[#1a3a5c] ring-2 ring-[#0284c7]' : ''}`}
+                    style={{ borderColor: 'var(--color-line)' }}
                   >
                     {dragOverDate === dayKey(day) && (
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <span className="text-[11px] text-[#8ab4f8] font-bold bg-[#1a3a5c] px-2 py-1 rounded">Soltar aquí</span>
+                        <span className="text-[11px] text-[#0284c7] font-bold bg-[#1a3a5c] px-2 py-1 rounded">Soltar aquí</span>
                       </div>
                     )}
-                    <div className="text-right mb-1">
-                      <span className={`inline-flex w-[26px] h-[26px] items-center justify-center rounded-full text-[12px] ${
-                        sameDay(day, now) ? 'bg-[#8ab4f8] text-[#202124] font-semibold' : 'text-[#E8EAED]'
+                    <div className="flex items-center justify-between">
+                      <span className={`inline-flex w-5 h-5 items-center justify-center rounded-full text-[11px] font-mono ${
+                        sameDay(day, now) ? 'bg-[#0284c7] text-white font-bold' : 'text-[#9aafc5]'
                       }`}>
                         {day.getDate()}
                       </span>
+                      {byDay(day).length > 0 && (
+                        <span className="flex items-center gap-1" aria-label={`${byDay(day).length} publicaciones programadas`}>
+                          {byDay(day).slice(0, 3).map(({ job }) => <span key={job.id} className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: colorOf(job) }} />)}
+                          {byDay(day).length > 3 && <span className="text-[10px] font-mono text-gray-300 font-semibold">+{byDay(day).length - 3}</span>}
+                        </span>
+                      )}
                     </div>
-                    <div className="space-y-0.5">
-                      {byDay(day).slice(0, 3).map(({ job, date }) => (
-                        <div
-                          key={job.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, job.id)}
-                          onDragEnd={handleDragEnd}
-                          onClick={() => onSelectScheduledJob?.(job.id)}
-                          className="truncate rounded px-1.5 py-0.5 text-[10px] font-medium text-[#E8EAED] border-l-[4px] cursor-grab active:cursor-grabbing"
-                          style={{ background: `${colorOf(job)}1F`, borderLeftColor: colorOf(job) }}
-                          title={`${job.id} · ${job.keyword} · ${fmtTime(date)} — arrastrar para reprogramar, click para abrir en sección Calendario`}
-                        >
-                          {fmtTime(date)} {job.keyword}
-                        </div>
-                      ))}
-                      {byDay(day).length > 3 && <div className="text-[10px] text-[#8ab4f8] px-1">+{byDay(day).length - 3} más</div>}
-                    </div>
+                    {!hideForm && (
+                      <div className="space-y-0.5 mt-1">
+                        {byDay(day).slice(0, 2).map(({ job, date }) => (
+                          <div
+                            key={job.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, job.id)}
+                            onDragEnd={handleDragEnd}
+                            onClick={() => onSelectScheduledJob?.(job.id)}
+                            className="truncate rounded px-1.5 py-0.5 text-[9px] font-medium text-[#E8EAED] border-l-[3px] cursor-grab active:cursor-grabbing"
+                            style={{ background: `${colorOf(job)}1F`, borderLeftColor: colorOf(job) }}
+                            title={`${job.id} · ${job.keyword} · ${fmtTime(date)}`}
+                          >
+                            {fmtTime(date)} {job.keyword}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

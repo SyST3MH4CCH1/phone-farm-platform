@@ -5,7 +5,7 @@ longitudes máximas, sin caracteres de control (CR/LF/NUL) ni `=` en config.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Literal
 
 from flask import jsonify, request
 from pydantic import BaseModel, Field, StrictBool, field_validator
@@ -36,14 +36,17 @@ class QueueCreate(BaseModel):
     niche_id: str = Field(default="general", max_length=64)
     scheduled_time: str = Field(default="", max_length=64)
     script: str = Field(default="", max_length=4000)
+    custom_prompt: str = Field(default="", max_length=2000)
+    voice_name: str = Field(default="", max_length=64, pattern=r"^[A-Za-z0-9-]*$")
+    video_aspect: Literal["9:16", "16:9", "1:1", ""] = ""
     # StrictBool: "false" como STRING se rechaza (nada de coerción silenciosa)
     auto_approve: StrictBool | None = None
-    _controls = field_validator("keyword", "target_account", "niche_id", "scheduled_time", "script")(_no_controls)
+    _controls = field_validator("keyword", "target_account", "niche_id", "scheduled_time", "script", "custom_prompt")(_no_controls)
 
 
 class AccountCreate(BaseModel):
     username: str = Field(min_length=1, max_length=64)
-    password: str = Field(min_length=1, max_length=512)
+    password: str = Field(default="", max_length=512)
     device_serial: str = Field(min_length=1, max_length=128)
     proxy_id: str = Field(default="", max_length=64)
     warmup_day: int = Field(default=1, ge=1, le=365)

@@ -17,7 +17,7 @@ import { SessionStore, safeEqual, newSessionToken, SESSION_COOKIE, SESSION_MAX_A
 import { verifyPassword, hashPassword, needsRehash } from "./passwords";
 import { LoginRateLimiter, CostLimiter } from "./rate-limit";
 import { safeFetchInternal, guardInternalUrl, EgressError, INTERNAL_HOSTS } from "./net";
-import { validate, loginSchema, queueCreateSchema, accountCreateSchema, proxyCreateSchema, mptSettingsSchema, adbTouchSchema, adbMirrorSchema, proxyVerifySchema, accountPatchSchema } from "./schemas";
+import { validate, loginSchema, queueCreateSchema, accountCreateSchema, proxyCreateSchema, mptSettingsSchema, adbTouchSchema, adbMirrorSchema, proxyVerifySchema, accountPatchSchema, warmupRegisterSchema, warmupStopSchema, warmupStepSchema } from "./schemas";
 import { buildOpenApiDocument, appGuarded, tag } from "./openapi";
 
 // --- Dependencias inyectables (tests) ---
@@ -505,6 +505,10 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
 
   // 2. Accounts (solo admin para mutaciones)
   app.get("/api/accounts", (req, res) => flask(req, res, "GET", "/api/accounts"));
+  app.get("/api/warmup/status", (req, res) => flask(req, res, "GET", "/api/warmup/status"));
+  app.post("/api/warmup/accounts/:id/register", requireRole("admin"), validate(warmupRegisterSchema), (req, res) => flask(req, res, "POST", `/api/warmup/accounts/${encodeURIComponent(req.params.id)}/register`, req.body));
+  app.post("/api/warmup/accounts/:id/emergency-stop", requireRole("admin"), validate(warmupStopSchema), (req, res) => flask(req, res, "POST", `/api/warmup/accounts/${encodeURIComponent(req.params.id)}/emergency-stop`, req.body));
+  app.post("/api/warmup/accounts/:id/step", requireRole("admin"), validate(warmupStepSchema), (req, res) => flask(req, res, "POST", `/api/warmup/accounts/${encodeURIComponent(req.params.id)}/step`, req.body));
   app.post("/api/accounts", requireRole("admin"), validate(accountCreateSchema), (req, res) => flask(req, res, "POST", "/api/accounts", req.body));
   // EXP-08: params de ruta encodados (endpoint confusion en Flask si un id
   // trae %2F/%23 decodificado por Express).
@@ -634,7 +638,7 @@ export function createApp(config: AppConfig, deps: AppDeps): express.Express {
 
   // Generar reel = crear job real en Flask (solo admin). Sin auto_approve:
   // el job pasa SIEMPRE por aprobación humana (paso 5).
-  app.post("/api/moneyprinter/generate", requireRole("admin"), (req, res) => {
+  app.post("/api/moneyprinter/generate", requireRole("admin"), validate(queueCreateSchema), (req, res) => {
     const { auto_approve: _removed, ...body } = req.body || {};
     return flask(req, res, "POST", "/api/queue", body);
   });

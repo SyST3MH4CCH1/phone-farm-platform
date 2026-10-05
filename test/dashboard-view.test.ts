@@ -69,8 +69,8 @@ describe("DashboardView — contrato estático (paso final, sin fake data)", () 
   });
 
   it("diskPercent se calcula desde stats (no se hardcodea)", () => {
-    // El código hace `(stats as any).disk_percent` — derivado del backend.
-    expect(src).toMatch(/\(stats as any\)\.disk_percent/);
+    // La propiedad tipada procede del backend.
+    expect(src).toMatch(/stats\.disk_percent/);
     // Y la rama '—' cuando no hay dato:
     expect(src).toMatch(/typeof diskPercent === 'number'\s*\?\s*`\$\{diskPercent\}%`\s*:\s*'—'/);
   });

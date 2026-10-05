@@ -20,12 +20,15 @@ export const queueCreateSchema = z.object({
   niche_id: z.string().max(64).optional().default("general"),
   scheduled_time: z.string().max(64).optional().default(""),
   script: z.string().max(4000).optional().default(""),
+  custom_prompt: z.string().max(2000).refine(noControls).optional().default(""),
+  voice_name: z.string().max(64).regex(/^[A-Za-z0-9-]*$/).optional().default(""),
+  video_aspect: z.enum(["9:16", "16:9", "1:1", ""]).optional().default(""),
   auto_approve: z.boolean().optional(), // paso 5: si llega true, Flask lo rechaza
 }).strict();
 
 export const accountCreateSchema = z.object({
   username: z.string().min(1).max(64).refine(noControls),
-  password: z.string().min(1).max(512),
+  password: z.string().max(512).optional().default(""),
   device_serial: z.string().min(1).max(128).refine(noControls),
   proxy_id: z.string().max(64).optional().default(""),
   warmup_day: z.number().int().min(1).max(365).optional(),
@@ -81,6 +84,10 @@ export const accountPatchSchema = z.object({
 }).strict().refine((d) => d.status !== undefined || d.enabled !== undefined, {
   message: "PATCH vacío: al menos uno de {status, enabled} requerido",
 });
+
+export const warmupRegisterSchema = z.object({ platform: z.enum(["instagram", "tiktok"]) }).strict();
+export const warmupStopSchema = z.object({ stopped: z.boolean() }).strict();
+export const warmupStepSchema = z.object({ step: z.enum(["ownership", "profile", "security", "content", "oauth"]), completed: z.boolean() }).strict();
 
 /** Middleware: valida req.body; 400 con detalle si falla.
  *  El esquema se etiqueta en el handler para que la introspección de

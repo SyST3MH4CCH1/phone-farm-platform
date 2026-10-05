@@ -1,5 +1,7 @@
 # Plan de implementación visual — Phone Farm
 
+> Plan histórico. La implementación y comprobación actual del 3 oct 2026 se registran en [`docs/audit/README.md`](audit/README.md). Las tareas y estados anteriores no se aceptaron sin nueva verificación.
+
 ## Objetivo
 
 Adaptar las nueve secciones de las capturas de 3 de octubre de 2026 a la aplicación React existente. `main-farmphone.png` representa el estado anterior del dashboard. Las capturas son referencias de escritorio a 1672 × 941 px; las cifras ilustradas no sustituyen los datos reales del servidor.

@@ -5,36 +5,36 @@ interface PostPreviewModalProps {
   draft: DraftPost | null;
   accounts: Account[];
   onClose: () => void;
-  onApproveAndPublish: (draftId: string, updatedCaption: string, platform: 'instagram' | 'tiktok' | 'both') => void;
+  onAdvance: () => Promise<string | null>;
 }
 
 export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
   draft,
   accounts,
   onClose,
-  onApproveAndPublish
+  onAdvance
 }) => {
   // Hooks SIEMPRE antes del return condicional (regla de hooks de React)
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [caption, setCaption] = useState(draft?.caption || '');
-  const [platform, setPlatform] = useState<'instagram' | 'tiktok' | 'both'>(draft?.platform || 'instagram');
-  const [hashtagsStr, setHashtagsStr] = useState((draft?.hashtags || []).join(' '));
-  const [isPublishing, setIsPublishing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   if (!draft) return null;
 
   const targetAccount = accounts.find(a => a.id === draft.target_account_id) || accounts[0];
 
-  const handlePublish = async () => {
-    setIsPublishing(true);
-    const parsedHashtags = hashtagsStr.split(' ').map(h => h.trim()).filter(h => h.startsWith('#'));
-    await onApproveAndPublish(draft.id, `${caption}\n\n${parsedHashtags.join(' ')}`, platform);
-    setIsPublishing(false);
+  const actionLabel = draft.job_status === 'awaiting_approval' ? 'Aprobar guión y generar vídeo'
+    : draft.job_status === 'awaiting_preview' ? 'Marcar vídeo listo para publicar'
+    : draft.job_status === 'ready_for_publish' ? 'Confirmar publicación' : '';
+  const handleAdvance = async () => {
+    setIsSubmitting(true);
+    setError('');
+    try { setError((await onAdvance()) || ''); }
+    finally { setIsSubmitting(false); }
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 font-mono">
-      <div className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="ref-popup-shell w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Top Header */}
         <div className="bg-[#232528] px-6 py-4 border-b border-[#2A2C30] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -42,13 +42,13 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-[#E5E5E5] uppercase tracking-wider flex items-center gap-2">
-                Previsualizador de Publicaciones & Reels
+                Vista previa del trabajo
                 <span className="text-[10px] bg-[#8A8F98]/10 text-[#8A8F98] border border-[#8A8F98]/30 px-2 py-0.5 rounded-full font-sans">
-                  MoneyPrinterTurbo 9:16 Frame
+                  {draft.job_status}
                 </span>
               </h3>
               <p className="text-[11px] text-[#9CA1A8] font-sans">
-                Inspecciona y edita el vídeo, guión, hashtags y cuenta antes de enviar la orden a ADB
+                Revisa el guión o el vídeo generado antes de avanzar el trabajo
               </p>
             </div>
           </div>
@@ -84,7 +84,7 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
                 ) : (
                   <div className="text-center text-[#6B7076] font-mono text-[11px] space-y-2">
                     <div className="w-14 h-14 rounded-full bg-[#232528] border border-[#2A2C30] flex items-center justify-center mx-auto">
-                      {isPlaying ? '▶' : '▶'}
+                      ▶
                     </div>
                     <p>Vídeo aún no generado</p>
                     <p className="text-[10px]">Se generará al aprobar el guión (etapa 2 del pipeline)</p>
@@ -118,18 +118,17 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
               <div className="mt-auto z-20 space-y-1 text-left text-[#E5E5E5] drop-shadow-md">
                 <div className="flex items-center gap-1.5 font-bold text-[11px]">
                   <span className="text-[#8A8F98]">@{targetAccount?.username || 'cuenta'}</span>
-                  <span className="text-[9px] bg-[#8A8F98]/20 text-[#8A8F98] border border-[#8A8F98]/30 px-1 rounded">Verificado ADB</span>
                 </div>
                 <p className="text-[10px] text-[#E5E5E5] line-clamp-2 font-sans leading-snug">
-                  {caption}
+                  {draft.caption}
                 </p>
                 <div className="text-[9px] text-[#A1A6AE] font-mono truncate">
-                  {hashtagsStr}
+                  {draft.hashtags.join(' ')}
                 </div>
               </div>
             </div>
             <p className="text-[10px] text-[#6B7076] mt-2 font-sans">
-              Vista previa fiel al renderizado final en pantalla de teléfono Android
+              {draft.video_url ? 'Archivo generado. Comprueba el vídeo antes de publicar.' : 'No hay vídeo generado todavía.'}
             </p>
           </div>
 
@@ -139,42 +138,9 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
               {/* Target Platform Selection */}
               <div className="bg-[#1A1C1E] border border-[#2A2C30] rounded-xl p-4 space-y-2">
                 <label className="block text-[#A1A6AE] font-bold uppercase text-[10px] tracking-wide">
-                  Red Social de Publicación Destino
+                  Plataforma de publicación
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPlatform('instagram')}
-                    className={`px-3 py-2 rounded-lg border font-bold flex items-center justify-center gap-1.5 transition-all ${
-                      platform === 'instagram'
-                        ? 'bg-pink-600/20 border-pink-500 text-pink-300'
-                        : 'bg-[#1E2023] border-[#2A2C30] text-[#9CA1A8] hover:text-[#E5E5E5]'
-                    }`}
-                  > Instagram
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPlatform('tiktok')}
-                    className={`px-3 py-2 rounded-lg border font-bold flex items-center justify-center gap-1.5 transition-all ${
-                      platform === 'tiktok'
-                        ? 'bg-[#A1A6AE]/20 border-[#A1A6AE] text-[#A1A6AE]'
-                        : 'bg-[#1E2023] border-[#2A2C30] text-[#9CA1A8] hover:text-[#E5E5E5]'
-                    }`}
-                  > TikTok
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPlatform('both')}
-                    className={`px-3 py-2 rounded-lg border font-bold flex items-center justify-center gap-1.5 transition-all ${
-                      platform === 'both'
-                        ? 'bg-[#8A8F98]/20 border-[#8A8F98] text-[#8A8F98]'
-                        : 'bg-[#1E2023] border-[#2A2C30] text-[#9CA1A8] hover:text-[#E5E5E5]'
-                    }`}
-                  > Ambos (Multi-ADB)
-                  </button>
-                </div>
+                <p className="text-[#E5E5E5]">Instagram</p>
               </div>
 
               {/* Caption & Description Editor */}
@@ -182,28 +148,17 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="text-[#A1A6AE] font-bold uppercase text-[10px] tracking-wide flex items-center gap-1.5"> Texto de Publicación / Caption
                   </label>
-                  <span className="text-[10px] text-[#6B7076]">{caption.length} caracteres</span>
+                  <span className="text-[10px] text-[#6B7076]">{draft.caption.length} caracteres</span>
                 </div>
 
                 <textarea
                   rows={4}
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  placeholder="Escribe el texto descriptivo del Reel..."
+                  value={draft.caption}
+                  readOnly
                   className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg p-3 text-[#E5E5E5] focus:outline-none focus:border-[#8A8F98] font-sans text-xs leading-relaxed"
                 />
 
-                <div>
-                  <label className="block text-[#9CA1A8] mb-1 uppercase text-[10px]">
-                    Hashtags Virales (Separados por espacio)
-                  </label>
-                  <input
-                    type="text"
-                    value={hashtagsStr}
-                    onChange={(e) => setHashtagsStr(e.target.value)}
-                    className="w-full bg-[#1E2023] border border-[#2A2C30] rounded-lg px-3 py-2 text-[#A1A6AE] focus:outline-none focus:border-[#8A8F98] text-xs font-mono"
-                  />
-                </div>
+                <p className="text-[10px] text-[#9CA1A8]">El texto se muestra tal como está guardado en el trabajo.</p>
               </div>
 
               {/* Generated Script Summary */}
@@ -218,6 +173,7 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
             </div>
 
             {/* Bottom Actions */}
+            {error && <p role="alert" className="text-red-400">{error}</p>}
             <div className="flex items-center justify-between border-t border-[#2A2C30] pt-4 mt-2">
               <button
                 type="button"
@@ -227,22 +183,14 @@ export const PostPreviewModal: React.FC<PostPreviewModalProps> = ({
                 Cancelar
               </button>
 
-              <button
+              {actionLabel && <button
                 type="button"
-                onClick={handlePublish}
-                disabled={isPublishing}
+                onClick={handleAdvance}
+                disabled={isSubmitting || (draft.job_status === 'awaiting_preview' && !draft.video_url)}
                 className="bg-[#8A8F98] hover:bg-[#8A8F98]/90 text-[#1E2023] font-bold px-6 py-2.5 rounded-lg flex items-center gap-2 transition-all disabled:opacity-50"
               >
-                {isPublishing ? (
-                  <>
-                    <span>Publicando en Dispositivo ADB...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Aprobar & Publicar Ahora</span>
-                  </>
-                )}
-              </button>
+                {isSubmitting ? 'Procesando...' : actionLabel}
+              </button>}
             </div>
           </div>
         </div>

@@ -1,0 +1,16 @@
+# Cambios implementados y comprobados
+
+| DSG ID | Desviación previa | Archivos modificados | Corrección implementada | Validación realizada | Resultado |
+|---|---|---|---|---|---|
+| 001–002 | Shell y Dashboard anteriores no reproducían la jerarquía de las capturas | `src/App.tsx`, `src/components/Header.tsx`, `src/reference.css`, `test/dashboard-view.test.ts` | Menú técnico ordenado, cabecera adaptable, Dashboard de tres paneles sin tarjetas adicionales | Navegador local; prueba estructural; typecheck y build | Estructura aplicada; fidelidad exacta pendiente |
+| 003 | Cuentas no tenía detalle y filtros equivalentes | `src/components/ReferenceViews.tsx`, `src/components/AccountReferenceDetail.tsx`, `src/reference.css` | KPIs, filtros, tabla y detalle a partir de cuentas y jobs reales | Inspección en navegador con 2 cuentas | Parcial por datos y assets ausentes |
+| 004 | Cola sin panel lateral comparable | `src/components/ReferenceViews.tsx`, `src/components/QueueReferenceDetail.tsx`, `src/reference.css` | Pipeline, filtros, tabla extendida y detalle del job | Inspección en navegador con 4 jobs | Parcial por ETA/prioridad no disponibles |
+| 005 | Calendario carecía de paneles inferiores | `src/App.tsx`, `src/components/CalendarInsights.tsx`, `src/reference.css` | Heatmap, borradores y fechas normalizadas | Inspección en navegador | Parcial por volumen de datos/miniaturas |
+| 006 | MoneyPrinter era un resumen | `src/components/MoneyPrinterReferenceWorkbench.tsx`, `src/components/ReferenceViews.tsx`, `src/reference.css` | Plantillas, creador, ganchos y salidas en tres columnas con acción real de generación | Inspección en navegador; MPT offline observado | Parcial |
+| 007 | Panda no mostraba teléfonos en la página | `src/components/PandaReferenceGrid.tsx`, `src/components/ReferenceViews.tsx`, `src/reference.css` | Tarjetas de dispositivos, capturas ADB cuando existen, detalle y recursos | Inspección en navegador; 0 dispositivos en línea | Parcial |
+| 008 | cURL estaba limitado a resumen/modal | `src/components/ApiReferenceWorkbench.tsx`, `src/components/ReferenceViews.tsx`, `src/App.tsx`, `src/reference.css` | Playground de tres columnas a partir de OpenAPI; solicitud GET y respuesta | GET `/api/accounts` desde la UI: 2 cuentas; 53 operaciones | Parcial por diferencias de contenido visual |
+| 009 | Python era resumen/modal | `src/components/PythonReferenceWorkbench.tsx`, `src/components/ReferenceViews.tsx`, `src/App.tsx`, `src/reference.css` | Árbol, lector, panel de ejecución, consola real e historial vacío explícito | `/api/source`: HTTP 404, flag deshabilitado; E2E navegó la vista | Bloqueado para mostrar código y ejecutar |
+| 010 | Versiones era resumen/modal | `src/components/VersionsReferenceWorkbench.tsx`, `src/components/ReferenceViews.tsx`, `src/reference.css` | Entornos, versiones conocidas y salud | Inspección en navegador | Parcial |
+| 011 | Proxies carecía de paneles comparables | `src/components/ProxyReferenceWorkbench.tsx`, `src/components/ReferenceViews.tsx`, `src/reference.css` | Gráfica actual, estado, tabla y ajustes | Inspección en navegador con 4 proxies | Parcial |
+
+No se añadió ninguna dependencia. No se hizo commit. Las carpetas preexistentes sin seguimiento `.playwright-mcp/`, `.sisyphus/`, `platform/platform/` y `tmp/` no se modificaron como parte de este trabajo.

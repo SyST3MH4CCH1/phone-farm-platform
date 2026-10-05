@@ -17,7 +17,6 @@ interface HeaderProps {
   onOpenCodeViewer: () => void;
   onOpenVersionControl: () => void;
   onDownloadAllZip: () => void;
-  onToggleMaster: () => void;
   onLogout: () => void;
   /** Legacy prop — dark-only, onToggleTheme removed */
   theme?: never;
@@ -38,7 +37,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCodeViewer,
   onOpenVersionControl,
   onDownloadAllZip,
-  onToggleMaster,
   onLogout,
 }) => {
   const onlineProxies = proxies.filter(p => p.status === 'online').length;
@@ -52,7 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="ref-brand flex items-center gap-4">
         {/* Logo PF + nombre */}
         <span className="ref-brand-mark font-bold tracking-wide" style={{ color: 'var(--color-text)' }}>PF</span>
-        <span className="hidden md:inline ref-brand-name" style={{ color: 'var(--color-text)' }}>Phone<br/>Farm</span>
+        <span className="hidden md:inline ref-brand-name" style={{ color: 'var(--color-text)' }}>Phone Farm</span>
       </div>
 
       {/* Pestañas de acceso rápido */}
@@ -111,25 +109,24 @@ export const Header: React.FC<HeaderProps> = ({
           className="hover:bg-[var(--color-surface-3)] px-2 py-1 rounded-md transition-colors"
           title="Abrir Panda (pantallas en vivo) en otra ventana"
         >
-          Panda: <span style={{ color: deviceCount > 0 ? 'var(--color-text)' : 'var(--color-muted-2)' }}>{deviceCount > 0 ? `${deviceCount} conectado${deviceCount !== 1 ? 's' : ''}` : 'sin dispositivos'}</span>
+          Panda: <span style={{ color: deviceCount > 0 ? 'var(--color-text)' : 'var(--color-muted-2)' }}>{deviceCount > 0 ? `${deviceCount} dispositivo${deviceCount !== 1 ? 's' : ''}` : 'sin dispositivos'}</span>
         </button>
 
         {/* Bots + Master Toggle */}
-        <span className="flex items-center gap-1">
-          Bots: <span style={{ color: botsActive ? 'var(--color-ok)' : 'var(--color-muted-2)' }}>{stats.active_bots || 0} activo{(stats.active_bots || 0) !== 1 ? 's' : ''}</span>
-          {/* Real switch */}
-          <button
-            onClick={onToggleMaster}
-            className="ml-1 flex items-center gap-1 px-2 py-0.5 rounded transition-colors"
+        <span className="ref-header-bots">
+          <span className="ref-header-bots-copy">Bots: <span style={{ color: botsActive ? 'var(--color-ok)' : 'var(--color-muted-2)' }}>{stats.active_bots || 0} activo{(stats.active_bots || 0) !== 1 ? 's' : ''}</span></span>
+          <span
+            className="ref-header-bots-state flex items-center gap-1 px-2 py-0.5 rounded"
             style={{
-              background: botsActive ? 'var(--color-danger)' : 'var(--color-ok)',
+              background: botsActive ? 'var(--color-ok)' : 'var(--color-danger)',
               color: '#0A0A0B',
             }}
-            title={botsActive ? 'Detener todos los bots' : 'Iniciar bots taktik'}
+            role="status"
+            aria-label={`Bots ${botsActive ? 'activos' : 'inactivos'}`}
           >
             <Power size={12} />
-            <span className="text-[10px] font-bold">{botsActive ? 'OFF' : 'ON'}</span>
-          </button>
+            <span className="text-[10px] font-bold">{botsActive ? 'ON' : 'OFF'}</span>
+          </span>
         </span>
 
         {/* Proxies */}
@@ -139,7 +136,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* CPU/RAM */}
         <span className="hidden xl:inline font-mono tabular-nums">
-          CPU/RAM: <span style={{ color: 'var(--color-text)' }}>{stats.cpu_percent}% / {stats.ram_percent}%</span>
+          CPU/RAM: <span style={{ color: 'var(--color-text)' }}>{stats.cpu_percent}%</span>
           <span className="ref-header-meter"><i style={{ width: `${Math.min(100,Math.max(0,stats.cpu_percent))}%` }}/></span>
         </span>
 
@@ -154,8 +151,10 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         {/* Date */}
-        <span className="hidden sm:inline" style={{ color: 'var(--color-muted-2)' }}>
+        <span className="hidden sm:inline" style={{ color: 'var(--color-muted-2)', lineHeight: '16px' }}>
           {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          {' '}
+          {new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
         </span>
 
         {/* Logout como icono */}

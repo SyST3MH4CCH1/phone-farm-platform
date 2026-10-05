@@ -255,8 +255,9 @@ _SCRIPT_FALLBACK = (
 )
 
 
-def build_script(keyword: str, profile: dict[str, Any], script_hint: str | None = None) -> str:
-    """Guión del reel: hint del usuario > LLM (con tono del nicho) > plantilla.
+def build_script(keyword: str, profile: dict[str, Any], script_hint: str | None = None,
+                 guidance: str | None = None) -> str:
+    """Guión del reel: guión explícito > LLM con indicaciones > plantilla.
 
     Paso 11: sin secretos en los prompts, límites de longitud y salida
     validada antes de devolverla.
@@ -266,6 +267,11 @@ def build_script(keyword: str, profile: dict[str, Any], script_hint: str | None 
         raise ValueError(f"keyword inválida (1..{MAX_KEYWORD_LEN} chars)")
     if _has_secret(keyword):
         raise ValueError("keyword parece contener un secreto (bloqueado)")
+    guidance = (guidance or "").strip()
+    if len(guidance) > 2000 or re.search(r"[\x00-\x1f\x7f]", guidance):
+        raise ValueError("custom_prompt inválido")
+    if guidance and _has_secret(guidance):
+        raise ValueError("custom_prompt parece contener un secreto (bloqueado)")
 
     if script_hint and script_hint.strip():
         hint = script_hint.strip()
@@ -279,12 +285,16 @@ def build_script(keyword: str, profile: dict[str, Any], script_hint: str | None 
     # El tono es configuración del operador (no texto externo); el keyword va
     # SOLO en el mensaje de usuario (separación instrucciones/datos).
     system = _SYSTEM_SCRIPT_PROMPT.format(tone=tone)
-    llm_script = _llm_chat(system, f"Crea el guión de un reel viral sobre: {keyword}")
+    request = f"Crea el guión de un reel viral sobre: {keyword}"
+    if guidance:
+        request += f"\nIndicaciones del operador: {guidance}"
+    llm_script = _llm_chat(system, request)
     if llm_script and validate_script(llm_script) is None:
         return llm_script
 
     kw_tag = re.sub(r"[^a-z0-9]", "", keyword.lower())[:20]
-    return _SCRIPT_FALLBACK.format(keyword=keyword[:60], kw_tag=kw_tag)
+    fallback_topic = f"{keyword}: {guidance}" if guidance else keyword
+    return _SCRIPT_FALLBACK.format(keyword=fallback_topic[:60], kw_tag=kw_tag)
 
 
 # ---------------------------------------------------------------------------

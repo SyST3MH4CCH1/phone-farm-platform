@@ -9,6 +9,7 @@ import { EmptyState } from './design/EmptyState';
 import { ErrorState } from './design/ErrorState';
 import { Skeleton } from './design/Skeleton';
 import { StatusBadge, type StatusBadgeKind } from './design/StatusBadge';
+import { ConfirmActionDialog } from './ConfirmActionDialog';
 
 interface CurlTesterModalProps {
   isOpen: boolean;
@@ -52,6 +53,7 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
   const [result, setResult] = useState<ExecutionState>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   useFocusTrap(containerRef, onClose);
@@ -101,17 +103,10 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
     ? active.path.replace(/\{([^}]+)\}/g, (_m, name: string) => pathValues[name] ?? `<${name}>`)
     : '';
 
-  const handleRun = async () => {
+  const handleRun = async (confirmed = false) => {
     if (!active) return;
-    // Las mutaciones y borrados se confirmanan: esta herramienta usa la
-    // sesión real del operador.
-    if (active.methodKind !== 'read') {
-      const ok = window.confirm(
-        `¿Ejecutar ${active.method} ${concretePath} con tu sesión actual?\n` +
-        `Clasificación: ${METHOD_LABEL[active.methodKind]}. La acción puede no ser reversible.`,
-      );
-      if (!ok) return;
-    }
+    if (active.methodKind !== 'read' && !confirmed) { setConfirming(true); return; }
+    setConfirming(false);
     setLoading(true);
     setResult(null);
     try {
@@ -198,6 +193,7 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 font-mono">
+      {confirming && active && <ConfirmActionDialog title={`Ejecutar ${active.method}`} detail={`${concretePath} usará tu sesión actual. Clasificación: ${METHOD_LABEL[active.methodKind]}. La acción puede no ser reversible.`} confirmLabel="Ejecutar solicitud" dangerous={active.methodKind === 'destroy'} onCancel={() => setConfirming(false)} onConfirm={() => void handleRun(true)}/>}
       <motion.div
         ref={containerRef}
         initial={{ opacity: 0, scale: 0.97 }}
@@ -334,7 +330,7 @@ export const CurlTesterModal: React.FC<CurlTesterModalProps> = ({
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={handleRun}
+                    onClick={() => void handleRun()}
                     disabled={loading}
                     className="bg-[var(--color-brand)] hover:opacity-90 text-white font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
                   >

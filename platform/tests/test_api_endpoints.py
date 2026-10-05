@@ -64,6 +64,88 @@ def _hdr(role: str = "admin") -> dict[str, str]:
     return {"X-Internal-Auth": "test-internal-token", "X-Role": role}
 
 
+def test_warmup_account_controls_are_persistent_and_role_limited(flask_client):
+    from phonefarm.platform_data import save_accounts
+
+    save_accounts([{"id": "a-warmup", "username": "owner", "password": "test-secret", "device_serial": "device-1"}])
+    path = "/api/warmup/accounts/a-warmup"
+    assert flask_client.post(f"{path}/register", json={"platform": "instagram"}, headers=_hdr("operator")).status_code == 403
+    assert flask_client.post(f"{path}/register", json={"platform": "both"}, headers=_hdr()).status_code == 400
+    registered = flask_client.post(f"{path}/register", json={"platform": "instagram"}, headers=_hdr())
+    assert registered.status_code == 200, registered.get_data(as_text=True)
+    row = registered.get_json()["accounts"][0]
+    assert row["registered"] and row["platform"] == "instagram"
+    assert not row["completed_steps"]
+    assert flask_client.post(f"{path}/register", json={"platform": "tiktok"}, headers=_hdr()).status_code == 409
+    checked = flask_client.post(f"{path}/step", json={"step": "profile", "completed": True}, headers=_hdr())
+    assert checked.status_code == 200
+    assert checked.get_json()["accounts"][0]["completed_steps"] == ["profile"]
+    stopped = flask_client.post(f"{path}/emergency-stop", json={"stopped": True}, headers=_hdr())
+    assert stopped.status_code == 200
+    assert stopped.get_json()["accounts"][0]["account_emergency_stop"] is True
+    assert stopped.get_json()["real_enabled"] is False
+    persisted = flask_client.get("/api/warmup/status", headers=_hdr()).get_json()["accounts"][0]
+    assert persisted["completed_steps"] == ["profile"] and persisted["account_emergency_stop"]
+    assert flask_client.post(f"{path}/step", json={"step": "profile", "completed": "yes"}, headers=_hdr()).status_code == 400
+
+
+def test_queue_generation_options_are_validated_and_persisted(flask_client):
+    payload = {
+        "keyword": "organizar un escritorio pequeño",
+        "custom_prompt": "Mostrar tres pasos prácticos",
+        "voice_name": "es-ES-ElviraNeural",
+        "video_aspect": "16:9",
+    }
+    created = flask_client.post("/api/queue", json=payload, headers=_hdr())
+    assert created.status_code == 201, created.get_data(as_text=True)
+    job = created.get_json()
+    for field in ("custom_prompt", "voice_name", "video_aspect"):
+        assert job[field] == payload[field]
+    listed = flask_client.get("/api/queue", headers=_hdr())
+    assert listed.status_code == 200
+    saved = next(item for item in listed.get_json() if item["id"] == job["id"])
+    assert saved["custom_prompt"] == payload["custom_prompt"]
+    assert saved["voice_name"] == payload["voice_name"]
+    assert saved["video_aspect"] == payload["video_aspect"]
+    bad = flask_client.post("/api/queue", json={**payload, "video_aspect": "4:3"}, headers=_hdr())
+    assert bad.status_code == 400
+
+
+def test_mpt_request_receives_voice_and_aspect(monkeypatch):
+    from phonefarm import generator, net
+
+    captured = {}
+
+    class Response:
+        ok = True
+        def json(self):
+            return {"data": {"task_id": "test-task"}}
+
+    def fake_post(url, *, json, headers, timeout):
+        captured.update(json)
+        return Response()
+
+    monkeypatch.setattr(generator, "_check_disk_quota", lambda: None)
+    monkeypatch.setattr(net, "safe_post", fake_post)
+    result = generator._submit_task("habitación", "guión", ["decoración"], "es-ES-ElviraNeural", "16:9")
+    assert result == "test-task"
+    assert captured["voice_name"] == "es-ES-ElviraNeural"
+    assert captured["video_aspect"] == "16:9"
+
+
+def test_warmup_status_honest_and_without_credentials(flask_client):
+    from phonefarm.platform_data import save_accounts
+
+    save_accounts([{"id": "a1", "username": "operator-owned", "password": "secret-test-value", "device_serial": "test-device"}])
+    response = flask_client.get("/api/warmup/status", headers=_hdr())
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["dry_run"] is True and body["real_enabled"] is False
+    assert body["accounts"][0]["state"] == "NOT_REGISTERED"
+    assert body["accounts"][0]["remaining_today"] is None
+    assert "secret-test-value" not in response.get_data(as_text=True)
+
+
 # ---------------------------------------------------------------------------
 # /api/stats — disk_percent añadido al payload
 # ---------------------------------------------------------------------------

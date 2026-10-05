@@ -119,7 +119,7 @@ export const CodeViewerModal: React.FC<CodeViewerModalProps> = ({
         transition={{ duration: 0.18 }}
         role="dialog"
         aria-modal="true"
-        className="bg-[#1E2023] border border-[#2A2C30] rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
+        className="ref-popup-shell w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
       >
         {/* Modal Header */}
         <div className="bg-[#232528] px-5 py-4 border-b border-[#2A2C30] flex items-center justify-between">

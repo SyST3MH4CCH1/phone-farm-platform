@@ -1,8 +1,13 @@
 # Gate Secretos — T1 Report
 
+> Informe histórico del 2026-09-13. Para el estado comprobado antes de publicar,
+> consulte [GITHUB_PUBLICATION_2026-10-05.md](GITHUB_PUBLICATION_2026-10-05.md).
+> Los estados de credenciales, rotación y archivos locales indicados abajo no se
+> han vuelto a verificar y no deben interpretarse como estado actual.
+
 **Fecha:** 2026-09-13
 **Tarea:** T1 Gate secretos — verificar .env/.gitignore/gitleaks/INTERNAL_TOKEN/ADMIN_PASSWORD≥16
-**Repo:** `C:\Users\haxth3\Documents\phone-farm-platform`
+**Repo:** `%USERPROFILE%\Documents\phone-farm-platform`
 **Rama:** `main` (git log: `02efbda` fix test fixtures, `4fe4720` security purge)
 
 > ⚠️ **ROTACIÓN NO EJECUTADA — requiere confirmación operador.**
@@ -92,7 +97,7 @@
 | `*.adbkey` | ✅ Sí | Puede existir en `%USERPROFILE%\.android\` (fuera del repo) |
 | `platform/accounts.json` | ✅ Sí | Puede existir (datos runtime) |
 | `platform/proxies.json` | ✅ Sí | Puede existir (datos runtime) |
-| `SECRETS-LOCAL.md` | ⚠️ **NO explícitamente** — `*.md` no está ignorado, pero `SECRETS-LOCAL.md` es untracked (no existe aún en git index) | Archivo local existe — **ya funciona como esperado** (no se rastreará porque es untracked) |
+| `SECRETS-LOCAL.md` | ✅ Ignorado explícitamente desde 2026-10-05 | No se vuelve a comprobar el archivo local en este informe histórico |
 
 ---
 
@@ -111,7 +116,7 @@
 
 | Aspecto | Estado |
 |---|---|
-| `.gitleaks.toml` existe | ✅ `C:\Users\haxth3\Documents\phone-farm-platform\.gitleaks.toml` |
+| `.gitleaks.toml` existe | ✅ `%USERPROFILE%\Documents\phone-farm-platform\.gitleaks.toml` |
 | `extend.useDefault = true` | ✅ Gitleaks usa reglas default + allowlist |
 | Allowlist paths | ✅ Fixtures en `test/`, presets UI en `src/components/` |
 | Historial git | ⚠️ Hallazgos previos en commits `9da8a66`/`d5abdfe` (placeholders `admin123`, `Pass123!`) — purga pendiente decisión operador |
@@ -123,7 +128,7 @@
 
 | Elemento | Detalle |
 |---|---|
-| Directorio existe | ✅ `C:\Users\haxth3\Documents\phone-farm-platform\backups\legacy` (timestamp: 17/08/2026) |
+| Directorio existe | ✅ `%USERPROFILE%\Documents\phone-farm-platform\backups\legacy` (timestamp: 17/08/2026) |
 | Archivos dentro | **vacío** — ningún `.zip` ni otro archivo |
 | Recomendación T2 | Listar contenido previo; si `phonefarm-export-20260811-1137.zip` fue movido a cuarentena fuera del repo, documentar la ubicación en el reporte de T2 |
 

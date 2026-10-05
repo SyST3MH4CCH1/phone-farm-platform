@@ -12,7 +12,7 @@ Se ha aplicado el TASK_UI_UX_REAL_CONTROL_HUB_V1 al producto real `phone-farm-pl
 
 | Fase | Entregable | Estado |
 |---|---|---|
-| A.1 Backup | `C:\Users\haxth3\control-hub-backups\20261003-100319\` | ✅ |
+| A.1 Backup | `%USERPROFILE%\control-hub-backups\20261003-100319\` | ✅ |
 | A.2 Branch | `feat/ui-ops-control-hub-v2` | ✅ |
 | A.3 Audit | `docs/audits/UI_REDESIGN_REALITY_AUDIT.md` | ✅ |
 | A.4 Matriz REAL/PARCIAL/MOCK/NO_IMPLEMENTADA/RIESGOSA | en audit | ✅ |
@@ -141,12 +141,12 @@ Se ha aplicado el TASK_UI_UX_REAL_CONTROL_HUB_V1 al producto real `phone-farm-pl
 ## 7. Procedimiento de rollback
 
 ```powershell
-cd C:\Users\haxth3\Documents\phone-farm-platform
+cd %USERPROFILE%\Documents\phone-farm-platform
 git fetch origin    # получение backup branch
 git checkout backup/pre-ui-redesign-20261003-100319    # pre-redesign
 ```
 
-Restaurar working tree desde `C:\Users\haxth3\control-hub-backups\20261003-100319\working-tree.tar` (extract con `tar -xf`).
+Restaurar working tree desde `%USERPROFILE%\control-hub-backups\20261003-100319\working-tree.tar` (extract con `tar -xf`).
 
 ---
 

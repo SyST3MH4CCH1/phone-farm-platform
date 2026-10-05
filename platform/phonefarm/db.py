@@ -129,6 +129,35 @@ MIGRATIONS: list[Any] = [
     """,
     # --- v2: columna meta en proxies (solo si falta — compatibilidad v1) ---
     lambda conn: _ensure_column(conn, "proxies", "meta", "ALTER TABLE proxies ADD COLUMN meta TEXT"),
+    # --- v3: warm-up oficial, sin guardar tokens ni datos de ejemplo ---
+    """
+    CREATE TABLE warmup_accounts (
+        account_id TEXT PRIMARY KEY, platform TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'NEW', phase_day INTEGER NOT NULL DEFAULT 1,
+        started_at INTEGER, successes INTEGER NOT NULL DEFAULT 0,
+        incidents INTEGER NOT NULL DEFAULT 0, paused_until INTEGER,
+        emergency_stop INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE warmup_actions (
+        idempotency_key TEXT PRIMARY KEY, account_id TEXT NOT NULL,
+        action TEXT NOT NULL, scheduled_at INTEGER NOT NULL,
+        status TEXT NOT NULL, content_hash TEXT, created_at INTEGER NOT NULL
+    );
+    CREATE INDEX warmup_actions_account_time ON warmup_actions(account_id, scheduled_at);
+    CREATE INDEX warmup_actions_content ON warmup_actions(content_hash);
+    CREATE TABLE warmup_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, account_id TEXT,
+        ts INTEGER NOT NULL, event TEXT NOT NULL, detail TEXT NOT NULL
+    );
+    """,
+    # --- v4: progreso humano del checklist, sin datos sociales simulados ---
+    """
+    CREATE TABLE warmup_steps (
+        account_id TEXT NOT NULL, step TEXT NOT NULL,
+        completed_at INTEGER NOT NULL, actor TEXT NOT NULL,
+        PRIMARY KEY (account_id, step)
+    );
+    """,
 ]
 
 

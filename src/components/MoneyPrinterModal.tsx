@@ -66,6 +66,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [testingPexels, setTestingPexels] = useState(false);
   const [pexelsResult, setPexelsResult] = useState<{ valid: boolean; message: string } | null>(null);
 
@@ -81,7 +82,7 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({
 
   const handleSaveConfig = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    setSaving(true);
+    setSaving(true); setSaveError('');
     try {
       const res = await apiFetch('/api/moneyprinter/config', {
         method: 'POST',
@@ -92,10 +93,10 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({
         onRefreshData();
       } else {
         const data = await res.json().catch(() => ({}));
-        window.alert(`No se pudo guardar la configuración: ${data?.error || res.status}`);
+        setSaveError(`No se pudo guardar la configuración: ${data?.error || res.status}`);
       }
     } catch (err) {
-      window.alert(`No se pudo guardar la configuración: ${err instanceof Error ? err.message : String(err)}`);
+      setSaveError(`No se pudo guardar la configuración: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSaving(false);
     }
@@ -503,6 +504,8 @@ export const MoneyPrinterModal: React.FC<MoneyPrinterModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {saveError && <p role="alert" className="ref-warmup-error">{saveError}</p>}
 
             {genResult && genResult.error && (
               <div

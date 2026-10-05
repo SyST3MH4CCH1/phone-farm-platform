@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -82,7 +83,8 @@ def _check_disk_quota() -> None:
         raise GeneratorError(f"disco casi lleno: {free / 2**30:.1f} GB libres (mínimo {MIN_FREE_BYTES / 2**30:.0f} GB)")
 
 
-def _submit_task(keyword: str, script: str = "", terms: list[str] | None = None) -> str:
+def _submit_task(keyword: str, script: str = "", terms: list[str] | None = None,
+                 voice_name: str | None = None, video_aspect: str | None = None) -> str:
     """Crea una tarea de vídeo en MPT y devuelve el task_id.
 
     Si se proveen script y/o terms, MPT NO necesita su LLM propio
@@ -93,10 +95,10 @@ def _submit_task(keyword: str, script: str = "", terms: list[str] | None = None)
         "video_subject": keyword,
         "video_script": script,
         "video_terms": terms or [],
-        "video_aspect": VIDEO_ASPECT,
+        "video_aspect": video_aspect or VIDEO_ASPECT,
         "video_count": 1,
         "video_concat_mode": "random",
-        "voice_name": VOICE_NAME,
+        "voice_name": voice_name or VOICE_NAME,
         "subtitle_enabled": True,
         "bgm_type": MPT_BGM_TYPE,
         "bgm_volume": 0.2,
@@ -356,7 +358,8 @@ def _generate_demo_video(keyword: str, dest: Path) -> Path:
 # API pública
 # ---------------------------------------------------------------------------
 
-def generate_reel(keyword: str, job_id: str, script: str = "", terms: list[str] | None = None) -> str:
+def generate_reel(keyword: str, job_id: str, script: str = "", terms: list[str] | None = None,
+                  voice_name: str | None = None, video_aspect: str | None = None) -> str:
     """Genera un Reel 9:16 con MoneyPrinterTurbo y retorna la ruta absoluta del MP4.
 
     Args:
@@ -371,6 +374,11 @@ def generate_reel(keyword: str, job_id: str, script: str = "", terms: list[str] 
     Raises:
         GeneratorError: si MPT no responde, la tarea falla o el timeout se agota.
     """
+    if video_aspect and video_aspect not in ("9:16", "16:9", "1:1"):
+        raise GeneratorError("video_aspect no permitido")
+    if voice_name and not re.fullmatch(r"[A-Za-z0-9-]{1,64}", voice_name):
+        raise GeneratorError("voice_name no permitido")
+
     dest = VIDEOS_DIR / f"{job_id}.mp4"
     if dest.exists():
         logger.info("Vídeo %s ya existe; se reutiliza", dest)
@@ -379,7 +387,7 @@ def generate_reel(keyword: str, job_id: str, script: str = "", terms: list[str] 
     if DEMO_MODE and not mpt_health():
         return str(_generate_demo_video(keyword, dest))
 
-    task_id = _submit_task(keyword, script, terms)
+    task_id = _submit_task(keyword, script, terms, voice_name, video_aspect)
     logger.info("Tarea MPT creada: %s (keyword=%r)", task_id, keyword)
 
     _progress, uris, failed_stage = _poll_task(task_id)

@@ -94,6 +94,15 @@ describe("paso 5 — RBAC admin/operator", () => {
   const mut = (path: string, body: object, who: { sessionCookie: string; csrfCookie: string; csrf: string }) =>
     auth(who)(request(app).post(path)).send(body);
 
+  it("la rampa por cuenta exige admin, CSRF y cuerpos estrictos", async () => {
+    const base = "/api/warmup/accounts/acc_1";
+    expect((await mut(`${base}/register`, { platform: "instagram" }, operator)).status).toBe(403);
+    expect((await request(app).post(`${base}/step`).send({ step: "profile", completed: true })).status).toBe(401);
+    expect((await mut(`${base}/register`, { platform: "both" }, admin)).status).toBe(400);
+    expect((await mut(`${base}/step`, { step: "profile", completed: "yes" }, admin)).status).toBe(400);
+    expect((await mut(`${base}/emergency-stop`, { stopped: true }, admin)).status).toBe(200);
+  });
+
   it("operator NO puede publicar/aprobar/programar/engagement/credenciales (403)", async () => {
     for (const path of [
       "/api/queue/job_1/publish",

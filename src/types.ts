@@ -33,6 +33,8 @@ export interface Account {
 export interface DraftPost {
   id: string;
   job_id: string;
+  job_status: QueueJob['status'];
+  job_version?: number;
   title: string;
   keyword: string;
   target_account_id: string;
@@ -71,10 +73,13 @@ export interface QueueJob {
   version?: number;
   video_path: string | null;
   created_at: string;
+  published_at?: string | null;
   progress?: number;
   media_id?: string;
   script?: string;
   caption?: string;
+  video_aspect?: '9:16' | '16:9' | '1:1';
+  voice_name?: string;
   error?: string;
   scheduled_ts?: number | string | null;
 }
@@ -93,6 +98,7 @@ export interface SystemStats {
   errores: number;
   cpu_percent: number;
   ram_percent: number;
+  disk_percent?: number | null;
   active_bots: number;
   active_proxies: number;
   panda_grid_status: 'Connected' | 'Scanning' | 'Disconnected';

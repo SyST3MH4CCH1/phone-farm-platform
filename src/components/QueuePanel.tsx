@@ -18,6 +18,7 @@ interface QueuePanelProps {
   onMarkReady?: (jobId: string) => void;
   onRejectJob?: (jobId: string) => void;
   onDeleteJob?: (jobId: string) => void;
+  embedded?: boolean;
 }
 
 type StatusFilter = QueueJobStatus | 'all' | 'active';
@@ -32,6 +33,7 @@ const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
 export const QueuePanel: React.FC<QueuePanelProps> = ({
   queue, accounts, onAddJob, onProcessNextJob, isProcessing,
   onOpenPreview, onApproveJob, onPublishJob, onMarkReady, onRejectJob, onDeleteJob,
+  embedded = false,
 }) => {
   const [keywordInput, setKeywordInput] = useState('');
   const [targetAccount, setTargetAccount] = useState(accounts[0]?.id || '');
@@ -75,6 +77,148 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
     completed: { label: 'Completed', kind: 'ok' },
     failed: { label: 'Failed', kind: 'danger' },
   };
+
+  if (embedded) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-line)' }}>
+        {/* Panel Header */}
+        <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: 'var(--color-surface-3)', borderBottom: '1px solid var(--color-line)' }}>
+          <h2 className="text-[11px] font-bold uppercase tracking-wider font-mono text-white">
+            Cola <span style={{ color: 'var(--color-muted)' }}>({queue.length})</span>
+          </h2>
+          <button
+            onClick={onProcessNextJob}
+            disabled={isProcessing}
+            className="btn-brand text-[10px] px-2.5 py-1 font-semibold flex items-center gap-1"
+          >
+            {isProcessing ? 'Generando...' : 'Generar Siguiente'}
+          </button>
+        </div>
+
+        {/* Input Bar */}
+        <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface-2)' }}>
+          <form onSubmit={handleSubmit} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={keywordInput}
+              onChange={(e) => setKeywordInput(e.target.value)}
+              placeholder="keyword para el reel"
+              className="flex-1 bg-[var(--color-surface)] border border-[var(--color-line)] rounded px-2.5 py-1 text-xs text-white placeholder-gray-500 font-mono focus:outline-none focus:border-[#3b82f6]"
+            />
+            <select
+              value={targetAccount}
+              onChange={(e) => setTargetAccount(e.target.value)}
+              className="bg-[var(--color-surface)] border border-[var(--color-line)] rounded px-2 py-1 text-xs text-gray-300 font-mono focus:outline-none"
+            >
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>@{a.username}</option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="px-3 py-1 rounded text-xs font-mono font-medium border border-[var(--color-line)] bg-[var(--color-surface-3)] text-gray-200 hover:bg-[var(--color-surface-4)] flex items-center gap-1 shrink-0"
+            >
+              Encolar ▾
+            </button>
+          </form>
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b text-[10px] font-mono uppercase tracking-wider text-[#64748b]" style={{ borderColor: 'var(--color-line)' }}>
+                <th className="py-2 px-3 font-semibold">JOB</th>
+                <th className="py-2 px-2 font-semibold">KEYWORD</th>
+                <th className="py-2 px-2 font-semibold">CUENTA</th>
+                <th className="py-2 px-2 font-semibold text-center">ESTADO</th>
+                <th className="py-2 px-3 font-semibold text-right">PROGRESO</th>
+              </tr>
+            </thead>
+            <tbody>
+              {queue.map((job) => {
+                const isReview = job.status === 'awaiting_approval' || job.status === 'awaiting_preview' || job.status === 'ready_for_publish';
+                const isGenerating = job.status === 'generating' || job.status === 'scripting';
+                const isPublished = job.status === 'published';
+                const isFallback = job.status === 'awaiting_manual_upload';
+                const statusBadge = isReview ? (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-[#2a2008] text-[#fbbf24] border border-[#713f12]/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#fbbf24]" />
+                    revisión
+                  </span>
+                ) : isGenerating ? (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-[#0c2340] text-[#38bdf8] border border-[#0369a1]/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-pulse" />
+                    generando
+                  </span>
+                ) : isPublished ? (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-[#0a2916] text-[#22c55e] border border-[#14532d]/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
+                    publicado
+                  </span>
+                ) : isFallback ? (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] leading-[12px] font-mono bg-[#2b1805] text-[#fbbf24] border border-[#78350f]/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+                    <span>fallback<br />ADB</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-[#2b1805] text-[#f59e0b] border border-[#78350f]/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b]" />
+                    {job.status === 'pending' ? 'en cola' : job.status === 'failed' ? 'error' : job.status.replaceAll('_', ' ')}
+                  </span>
+                );
+
+                const progressPct = typeof job.progress === 'number' ? job.progress : (isPublished ? 100 : null);
+                const accountName = accounts.find((a) => a.id === job.target_account)?.username ?? job.target_account;
+
+                return (
+                  <tr
+                    key={job.id}
+                    className="border-b transition-colors hover:bg-[var(--color-surface-2)] text-xs font-mono"
+                    style={{ borderColor: 'var(--color-line)' }}
+                  >
+                    <td className="py-2.5 px-3 text-[#9aafc5] font-semibold whitespace-nowrap">
+                      {job.id.startsWith('job_') ? job.id : `job_${job.id}`}
+                    </td>
+                    <td className="py-2.5 px-2 text-white font-medium max-w-[130px] truncate" title={job.keyword || ''}>
+                      {job.keyword || '—'}
+                    </td>
+                    <td className="py-2.5 px-2 text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis" title={`@${accountName}`}>
+                      @{accountName}
+                    </td>
+                    <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                      {statusBadge}
+                    </td>
+                    <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-gray-300 font-semibold tabular-nums text-[11px]">{progressPct === null ? '—' : `${progressPct}%`}</span>
+                        <div className="w-16 h-1.5 rounded-full bg-[#1c2633] overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${progressPct ?? 0}%`,
+                              background: isFallback ? 'linear-gradient(to right, #d99000, #fbbf24)' : 'linear-gradient(to right, #2563eb, #38bdf8)'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {queue.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-xs text-[#9aafc5] font-mono">
+                    Cola vacía. Usa el formulario de arriba para encolar un reel.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-line)' }}>

@@ -80,6 +80,7 @@ export interface QueueJobDto {
   version?: number | null;
   video_path?: string | null;
   created_at?: string | null;
+  published_at?: string | null;
   progress?: number | null;
   media_id?: string | null;
   script?: string | null;

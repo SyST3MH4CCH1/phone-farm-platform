@@ -1,5 +1,7 @@
 # Tareas de diseño
 
+> **Estado histórico, revalidado el 3 oct 2026:** las marcas `DONE` siguientes pertenecen al trabajo anterior y **no acreditan fidelidad al diseño**. El estado vigente, las diferencias abiertas y las tareas ejecutables están en [`docs/audit/02-task-index.md`](audit/02-task-index.md) y [`docs/audit/01-design-traceability-matrix.md`](audit/01-design-traceability-matrix.md).
+
 ### [T-001] Tokens y fuentes
 - **Estado:** DONE
 - **Depende de:** ninguna

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { Bell, CircleGauge, Play, Clock3, CalendarDays } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import type { Account, ProxyItem, QueueJob, LogEntry, SystemStats, AuthUser, StackInfo, DraftPost } from './types';
 import { Header, ActiveTab } from './components/Header';
@@ -9,6 +10,7 @@ import { TerminalLogs } from './components/TerminalLogs';
 import { LoginScreen } from './components/LoginScreen';
 import { ScheduleModal } from './components/ScheduleModal';
 import { ReferenceViews, type ReferenceView } from './components/ReferenceViews';
+import { CalendarInsights } from './components/CalendarInsights';
 import { apiFetch } from './api';
 
 // TASK §28 — lazy-load de las superficies pesadas. El bundle inicial bajó de
@@ -43,69 +45,50 @@ const EMPTY_STATS: SystemStats = {
  * Soporta colores brand, OK/warn/danger y ring de progreso opcional.
  */
 const StatCard: React.FC<{
-  title: string;
-  value: string;
-  subtitle?: string;
-  hint?: string;
-  tone?: 'brand' | 'ok' | 'warn' | 'danger';
-  icon: React.ReactNode;
-  ring?: number; // 0-100; si está presente muestra un anillo SVG
-  bar?: number;  // 0-100; si está presente muestra barra horizontal
-  extra?: React.ReactNode;
-}> = ({ title, value, subtitle, hint, tone = 'brand', icon, ring, bar, extra }) => {
-  const accent = tone === 'ok' ? '#22C55E'
-    : tone === 'warn' ? '#F59E0B'
-    : tone === 'danger' ? '#EF4444'
-    : '#8ab4f8';
-  return (
-    <div
-      className="rounded-lg p-3 flex flex-col gap-1.5 min-w-0 border"
-      style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-[10px] font-mono uppercase tracking-wider font-semibold truncate" style={{ color: 'var(--color-muted-2)' }}>
-          {title}
-        </span>
-        <span className="shrink-0" style={{ color: accent }}>{icon}</span>
-      </div>
-      <div className="flex items-end gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="text-[22px] font-bold font-mono leading-none truncate" style={{ color: 'var(--color-text)' }}>{value}</div>
-          {subtitle && (
-            <div className="text-[10px] font-mono mt-1 truncate" style={{ color: 'var(--color-muted)' }}>{subtitle}</div>
-          )}
-          {hint && (
-            <div className="text-[10px] font-mono mt-0.5" style={{ color: accent }}>{hint}</div>
-          )}
-          {bar !== undefined && (
-            <div className="h-1.5 mt-2 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-3)' }}>
-              <div
-                className="h-full rounded-full transition-all"
-                style={{ width: `${Math.max(0, Math.min(100, bar))}%`, background: accent }}
-              />
-            </div>
-          )}
+    title: string;
+    value: string;
+    subtitle?: string;
+    hint?: string;
+    tone?: 'brand' | 'ok' | 'warn' | 'danger';
+    icon: React.ReactNode;
+    ring?: number; // 0-100; si está presente muestra un anillo SVG
+    bar?: number;  // 0-100; si está presente muestra barra horizontal
+    chart?: number[]; // para mini chart vertical (4-5 barras)
+    extra?: React.ReactNode;
+    variant?: 'success' | 'alerts';
+}> = ({ title, value, subtitle, hint, tone = 'brand', icon, ring, bar, chart, extra, variant }) => {
+    const accent = tone === 'ok' ? '#22C55E'
+      : tone === 'warn' ? '#F59E0B'
+      : tone === 'danger' ? '#EF4444'
+      : '#8ab4f8';
+    return (
+      <div className={`dash-kpi dash-kpi--${tone}${variant ? ` dash-kpi--${variant}` : ''}`}>
+        {variant === 'success' && ring !== undefined && <RingProgress percent={ring} color={accent} size={62} label={value === '—' ? 'Sin resultados' : undefined} />}
+        {variant !== 'success' && <span className="dash-kpi-icon" aria-hidden="true">{icon}</span>}
+        <div className="dash-kpi-copy">
+          <span className="dash-kpi-title">{title}</span>
+          <strong className="dash-kpi-value">{value}</strong>
+          {subtitle && <span className="dash-kpi-subtitle">{subtitle}</span>}
+          {hint && <span className="dash-kpi-hint">{hint}</span>}
+          {bar !== undefined && <div className="dash-kpi-bar"><i style={{ width: `${Math.max(0, Math.min(100, bar))}%`, background: accent }} /></div>}
         </div>
-        {ring !== undefined && (
-          <RingProgress percent={ring} color={accent} size={36} />
-        )}
+        {chart && chart.length > 0 && <div className="dash-kpi-chart" aria-hidden="true">{chart.map((val, idx) => <i key={idx} style={{ height: `${Math.max(10, Math.min(100, val * 2))}%` }} />)}</div>}
         {extra}
       </div>
-    </div>
-  );
-};
+    );
+  };
 
 /** Mini anillo SVG para ring de porcentaje. */
-const RingProgress: React.FC<{ percent: number; color: string; size?: number }> = ({ percent, color, size = 36 }) => {
-  const r = (size - 6) / 2;
+const RingProgress: React.FC<{ percent: number; color: string; size?: number; label?: string }> = ({ percent, color, size = 36, label }) => {
+  const r = (size - (size > 60 ? 10 : 6)) / 2;
   const c = 2 * Math.PI * r;
   const off = c * (1 - Math.max(0, Math.min(100, percent)) / 100);
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--color-surface-3)" strokeWidth="3" />
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0" role="img" aria-label={label ?? `${percent}%`}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--color-surface-3)" strokeWidth={size > 60 ? 8 : 3} />
       <circle
         cx={size/2} cy={size/2} r={r} fill="none"
-        stroke={color} strokeWidth="3" strokeLinecap="round"
+        stroke={color} strokeWidth={size > 60 ? 8 : 3} strokeLinecap="round"
         strokeDasharray={c} strokeDashoffset={off}
         transform={`rotate(-90 ${size/2} ${size/2})`}
       />
@@ -129,23 +112,39 @@ const MiniBar: React.FC<{ percent: number; color?: string; right?: string }> = (
  * `deviceCount` que llega del backend. Si el array llega vacío, estado vacío
  * real (no fake data).
  */
-const DevicesCard: React.FC<{ deviceCount: number }> = ({ deviceCount }) => (
-  <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
-    <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-      Dispositivos
-    </h3>
-    <div className="flex items-baseline gap-2 mb-2">
-      <span className="text-[28px] font-bold font-mono leading-none" style={{ color: '#22C55E' }}>{deviceCount}</span>
-      <span className="text-[11px] font-mono" style={{ color: 'var(--color-muted)' }}>conectados</span>
+type DashboardDevice = { serial: string; model?: string; state?: string; status?: string; battery_pct?: number | null };
+const DevicesCard: React.FC<{ devices: DashboardDevice[] }> = ({ devices }) => (
+  <div className="dash-bottom-card dash-devices" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
+    <div className="flex items-center justify-between mb-2">
+      <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold" style={{ color: 'var(--color-text)' }}>
+        Dispositivos ({devices.length})
+      </h3>
     </div>
-    <div className="text-[10px] font-mono" style={{ color: 'var(--color-muted-2)' }}>
-      {deviceCount === 0 ? (
-        <span style={{ color: 'var(--color-muted)' }}>
-          Sin dispositivos ADB detectados. Conecta un dispositivo y ejecuta `adb devices`.
-        </span>
-      ) : (
-        <span>Fuente: <code style={{ color: 'var(--color-text)' }}>/api/adb/devices</code></span>
-      )}
+    {devices.length === 0 ? (
+      <div className="text-[10px] font-mono py-4 text-center" style={{ color: 'var(--color-muted)' }}>
+        Sin dispositivos ADB detectados. Conecta un dispositivo y ejecuta `adb devices`.
+      </div>
+    ) : (
+      <div className="dash-device-grid">
+        {devices.slice(0, 4).map((device) => (
+          <div key={device.serial} className="dash-device-item">
+            <span className="dash-device-name" title={`${device.model || device.serial} · ${device.serial}`}>
+              <i style={{ background: device.status === 'device' || device.state === 'device' ? '#00e997' : '#ffb900' }} />
+              {device.model || device.serial}
+            </span>
+            <span className="dash-phone-screen">
+              <img src={`/api/adb/screenshot/${encodeURIComponent(device.serial)}`} alt={`Pantalla real de ${device.model || device.serial}`} loading="lazy" onError={e => { e.currentTarget.style.display = 'none'; }} />
+            </span>
+            <span className="dash-device-battery">
+              <i><b style={{ width: `${Math.max(0, Math.min(100, device.battery_pct ?? 0))}%`, background: (device.battery_pct ?? 0) >= 75 ? '#00e997' : '#289bff' }} /></i>
+              {device.battery_pct == null ? '—' : `${device.battery_pct}%`}
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
+    <div className="text-[10px] font-mono pt-1" style={{ color: 'var(--color-muted-2)' }}>
+      <span>Fuente: <code style={{ color: 'var(--color-text)' }}>/api/adb/devices</code></span>
     </div>
   </div>
 );
@@ -156,41 +155,44 @@ const DevicesCard: React.FC<{ deviceCount: number }> = ({ deviceCount }) => (
  * no está medido (null/undefined), se muestra '—' (sin fake data).
  */
 const ProxiesCard: React.FC<{ proxies: ProxyItem[] }> = ({ proxies }) => (
-  <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
-    <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-      Proxies
-    </h3>
-    <div className="flex items-baseline gap-2 mb-2">
-      <span className="text-[28px] font-bold font-mono leading-none" style={{ color: '#8ab4f8' }}>{proxies.length}</span>
-      <span className="text-[11px] font-mono" style={{ color: 'var(--color-muted)' }}>visibles</span>
+  <div className="dash-bottom-card dash-proxies" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
+    <div className="flex items-center justify-between mb-2">
+      <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold" style={{ color: 'var(--color-text)' }}>
+        Proxies ({proxies.length})
+      </h3>
     </div>
-    <div className="space-y-1.5">
+    <div className="space-y-1.5 my-1">
       {proxies.length === 0 ? (
-        <div className="text-[10px] font-mono" style={{ color: 'var(--color-muted)' }}>
+        <div className="text-[10px] font-mono py-4 text-center" style={{ color: 'var(--color-muted)' }}>
           Sin proxies configurados. Agrega uno en la pestaña Cuentas.
         </div>
       ) : (
         proxies.map((p) => {
-          const latency = (p as any).latency_ms;
+          const latency = p.latency_ms;
           const hasLatency = typeof latency === 'number' && Number.isFinite(latency);
-          const status = (p as any).status as string | undefined;
           const tone = hasLatency ? (latency < 200 ? 'ok' : latency < 500 ? 'warn' : 'danger') : 'warn';
           return (
-            <div key={p.id} className="flex items-center justify-between gap-2 text-[11px] font-mono">
-              <span className="truncate" style={{ color: 'var(--color-text)' }}>{p.host || p.id}</span>
+            <div key={p.id} className="dash-proxy-row" style={{ background: 'var(--color-surface-2)' }}>
+              <div className="dash-proxy-name">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.status === 'online' ? '#00e997' : '#f04e62' }} />
+                <span className="truncate" style={{ color: 'var(--color-text)' }}>{p.id}</span>
+              </div>
               <span
-                className="shrink-0 tabular-nums"
+                className="dash-proxy-latency tabular-nums font-medium"
                 style={{
                   color: tone === 'ok' ? '#22C55E' : tone === 'warn' ? '#F59E0B' : '#EF4444',
                 }}
               >
                 {hasLatency ? `${Math.round(latency)} ms` : '—'}
-                {status && <span style={{ color: 'var(--color-muted-2)' }}> · {status}</span>}
               </span>
+              <span className="dash-proxy-meter" aria-label={hasLatency ? `Latencia ${Math.round(latency)} milisegundos` : 'Latencia no medida'}><i style={{ width: hasLatency ? `${Math.max(5, 100 - latency / 6)}%` : '0%', background: tone === 'ok' ? '#00e997' : tone === 'warn' ? '#ffb900' : '#f04e62' }} /></span>
             </div>
           );
         })
       )}
+    </div>
+    <div className="text-[10px] font-mono pt-1" style={{ color: 'var(--color-muted-2)' }}>
+      <span>Fuente: <code style={{ color: 'var(--color-text)' }}>/api/proxies</code></span>
     </div>
   </div>
 );
@@ -205,8 +207,9 @@ const DashboardView: React.FC<{
   proxies: ProxyItem[];
   stats: SystemStats;
   deviceCount: number;
+  devices: DashboardDevice[];
   stack: StackInfo | null;
-  onAddAccount: (acc: Partial<Account>) => void;
+  onAddAccount: (acc: Partial<Account>) => Promise<string | null>;
   onDeleteAccount: (accountId: string) => void;
   onSelectAccountForDetail: (acc: Account) => void;
   onAddJob: (keyword: string, targetAccount: string) => void;
@@ -224,7 +227,7 @@ const DashboardView: React.FC<{
   onSelectScheduledJob: () => void;
 }> = (props) => {
   const {
-    accounts, queue, proxies, stats, deviceCount, stack,
+    accounts, queue, proxies, stats, deviceCount, devices, stack,
     onAddAccount, onDeleteAccount, onSelectAccountForDetail,
     onAddJob, onProcessNextJob, onOpenPreview, onApproveJob,
     onPublishJob, onMarkReady, onRejectJob, onDeleteJob, isProcessingJob,
@@ -234,24 +237,37 @@ const DashboardView: React.FC<{
   // está activa, onlineCount === 0 (no se simula con un fallback a accounts.length).
   const onlineCount = accounts.filter(a => a.status === 'active').length;
   const jobsRunning = queue.filter(j => j.status === 'generating' || j.status === 'publishing' || j.status === 'scripting').length;
-  const publishedToday = queue.filter(j => j.status === 'published').length;
-  const successRate = stats.errores === 0 ? 100 : Math.max(0, Math.round(100 - (stats.errores / Math.max(1, queue.length)) * 100));
-  const successTone: 'ok' | 'warn' | 'danger' = successRate >= 90 ? 'ok' : successRate >= 70 ? 'warn' : 'danger';
+  const todayKey = new Date().toDateString();
+  const publishedToday = queue.filter(j => j.status === 'published' && j.published_at && new Date(j.published_at).toDateString() === todayKey).length;
+  const publicationSparkline = Array.from({ length: 6 }, (_, i) => {
+    const day = new Date();
+    day.setDate(day.getDate() - 5 + i);
+    const key = day.toDateString();
+    return queue.filter(j => j.status === 'published' && j.published_at && new Date(j.published_at).toDateString() === key).length;
+  });
+  const sparklineMax = Math.max(...publicationSparkline, 0);
+  const runningCount = jobsRunning;
+  const completedCount = stats.videos_subidos + stats.errores;
+  const successRate = completedCount > 0 ? Math.floor(stats.videos_subidos / completedCount * 100) : null;
+  const successTone: 'ok' | 'warn' | 'danger' = successRate === null ? 'warn' : successRate >= 90 ? 'ok' : successRate >= 70 ? 'warn' : 'danger';
+  const successFraction = completedCount > 0 ? `${stats.videos_subidos}/${completedCount}` : '—';
   const alerts = stats.errores;
-  const diskPercent = (stats as any).disk_percent as number | null | undefined;
+  const diskPercent = stats.disk_percent;
+  const diskDisplay = typeof diskPercent === 'number' ? `${diskPercent}%` : '—';
   // Proxies reales del backend; si latency_ms no está medido, mostramos '—'.
   const realProxies = proxies.length > 0 ? proxies.slice(0, 4) : [];
   return (
-    <div className="p-3 space-y-3">
-      {/* Fila 1: 5 stat cards principales */}
+    <div className="dash-home">
+      {/* Fila 1: 6 stat cards principales */}
       <div
-        className="grid gap-3 ch-grid-kpi"
+        className="ch-grid-kpi"
       >
         <StatCard
           title="Dispositivos"
-          value={`${deviceCount}`}
-          subtitle={deviceCount > 0 ? "Online" : "Sin dispositivos ADB"}
+          value={deviceCount > 0 ? `${deviceCount} / ${deviceCount}` : '0 / 0'}
+          subtitle={deviceCount > 0 ? '● Online' : 'Sin dispositivos ADB'}
           tone={deviceCount > 0 ? "ok" : "warn"}
+          bar={deviceCount > 0 ? 100 : 0}
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>}
         />
         <StatCard
@@ -262,8 +278,8 @@ const DashboardView: React.FC<{
               ? `de ${accounts.length} registradas`
               : "Sin cuentas registradas"
           }
-          tone={onlineCount > 0 ? "brand" : "warn"}
-          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>}
+          tone="brand"
+          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="7" r="3.5"/><path d="M2.5 20v-2.5A5.5 5.5 0 0 1 8 12h2a5.5 5.5 0 0 1 5.5 5.5V20z"/><circle cx="17.5" cy="8" r="2.6"/><path d="M17 13.5h1a4 4 0 0 1 4 4V20h-4.5v-2.5a8 8 0 0 0-.5-4z"/></svg>}
           bar={
             accounts.length > 0
               ? Math.min(100, Math.round((onlineCount / accounts.length) * 100))
@@ -275,10 +291,11 @@ const DashboardView: React.FC<{
           value={`${jobsRunning}`}
           subtitle={`en cola: ${Math.max(0, queue.length - jobsRunning)}`}
           tone="brand"
+          bar={queue.length > 0 ? Math.round((jobsRunning / queue.length) * 100) : 0}
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>}
         />
         <StatCard
-          title="Publicaciones"
+          title="Publicaciones hoy"
           value={`${publishedToday}`}
           subtitle={
             stack
@@ -287,109 +304,34 @@ const DashboardView: React.FC<{
           }
           tone="ok"
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>}
-          ring={queue.length > 0 ? Math.round((publishedToday / queue.length) * 100) : 0}
+          chart={sparklineMax > 0 ? publicationSparkline.map(v => Math.round(v / sparklineMax * 50)) : undefined}
         />
         <StatCard
           title="Tasa de éxito"
-          value={`${successRate}%`}
-          subtitle={`${queue.length - stats.errores}/${queue.length}`}
+          value={successRate === null ? '—' : `${successRate}%`}
+          subtitle={successFraction}
           tone={successTone}
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="9 12 12 15 16 10"/></svg>}
-          ring={successRate}
+          ring={successRate ?? 0}
+          variant="success"
         />
         <StatCard
           title="Alertas"
           value={`${alerts}`}
-          subtitle={alerts > 0 ? 'Requieren acción' : 'Todo en orden'}
-          tone={alerts > 0 ? 'danger' : 'ok'}
-          icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>}
+          subtitle={`${alerts} activas`}
+          tone={alerts === 0 ? "ok" : "danger"}
+          variant={alerts > 0 ? 'alerts' : undefined}
+          extra={alerts > 0 ? <span className="dash-alert-action">Requieren acción</span> : undefined}
+          icon={<Bell size={25} strokeWidth={1.9} />}
         />
       </div>
 
-      {/* Fila 2: 4 stat cards de infraestructura */}
+      {/* Fila 2: Cuentas | Cola | Calendario (3 columnas principales) */}
       <div
-        className="grid gap-3 ch-grid-wide"
-      >
-        {/* Estadísticas de publicación */}
-        <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
-          <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-            Estadísticas de publicación
-          </h3>
-          <div className="grid grid-cols-3 gap-2">
-            <MiniStat label="Hoy" value={publishedToday.toString()} tone="brand" />
-            <MiniStat label="Tasa" value={`${successRate}%`} tone="ok" />
-            <MiniStat label="En cola" value={(queue.length - jobsRunning).toString()} tone="warn" />
-          </div>
-        </div>
-
-        {/* Uso del sistema */}
-        <div className="rounded-lg p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
-          <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-            Uso del sistema (servidor)
-          </h3>
-          <div className="flex items-center justify-around">
-            <div className="text-center">
-              <RingProgress percent={stats.cpu_percent} color="#8ab4f8" size={48} />
-              <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--color-muted)' }}>CPU</div>
-              <div className="text-[12px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>{stats.cpu_percent}%</div>
-            </div>
-            <div className="text-center">
-              <RingProgress percent={stats.ram_percent} color="#a855f7" size={48} />
-              <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--color-muted)' }}>RAM</div>
-              <div className="text-[12px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>{stats.ram_percent}%</div>
-            </div>
-            <div className="text-center">
-              <RingProgress percent={typeof diskPercent === 'number' ? diskPercent : 0} color="#22C55E" size={48} />
-              <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--color-muted)' }}>Disco</div>
-              <div className="text-[12px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>
-                {typeof diskPercent === 'number' ? `${diskPercent}%` : '—'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Dispositivos (resumen) — derivamos serial/battery de /api/adb/devices si llega */}
-        <DevicesCard deviceCount={deviceCount} />
-
-        {/* Proxies (resumen) — latencia real de /api/proxies; '—' si no medida */}
-        <ProxiesCard proxies={realProxies} />
-      </div>
-
-      {/* Fila 2.5 — Alertas accionables (TASK §9.4) */}
-      <AlertsRow
-        queue={queue}
-        deviceCount={deviceCount}
-        stack={stack}
-        onOpenJob={(jobId) => onOpenPreview?.(queue.find((q) => q.id === jobId)!)}
-        onApproveJob={onApproveJob}
-        onRejectJob={onRejectJob}
-        onRetryJob={onProcessNextJob}
-      />
-
-      {/* Fila 2.7 — Próximas publicaciones 24h (TASK §12) */}
-      <UpcomingPublications
-        queue={queue}
-        accounts={accounts}
-        onOpenJob={(jobId) => onOpenPreview?.(queue.find((q) => q.id === jobId)!)}
-      />
-
-      {/* Fila 2.8 — Fila analítica (TASK §9.3) */}
-      <AnalyticsRow
-        queue={queue}
-        accounts={accounts}
-        cpuPercent={stats.cpu_percent}
-        ramPercent={stats.ram_percent}
-        diskPercent={(stats as any).disk_percent ?? null}
-        deviceCount={deviceCount}
-      />
-
-      {/* Fila 3: Cuentas | Cola | mini Calendario */}
-      <div
-        className="grid gap-3 ch-grid-dashboard"
-        style={{ gridAutoRows: 'minmax(320px, auto)' }}
+        className="ch-grid-dashboard"
       >
         <section
-          className="flex flex-col rounded-lg overflow-hidden border min-h-[320px]"
+          className="dash-panel dash-accounts"
           style={{ borderColor: 'var(--color-line)' }}
         >
           <div className="flex-1 overflow-hidden">
@@ -403,11 +345,12 @@ const DashboardView: React.FC<{
           </div>
         </section>
         <section
-          className="flex flex-col rounded-lg overflow-hidden border min-h-[320px]"
+          className="dash-panel dash-queue"
           style={{ borderColor: 'var(--color-line)' }}
         >
           <div className="flex-1 overflow-hidden">
             <QueuePanel
+              embedded
               queue={queue}
               accounts={accounts}
               isProcessing={isProcessingJob}
@@ -423,7 +366,7 @@ const DashboardView: React.FC<{
           </div>
         </section>
         <section
-          className="flex flex-col rounded-lg overflow-hidden border min-h-[320px]"
+          className="dash-panel dash-calendar"
           style={{ borderColor: 'var(--color-line)' }}
         >
           <div className="flex-1 overflow-hidden">
@@ -440,6 +383,70 @@ const DashboardView: React.FC<{
             />
           </div>
         </section>
+      </div>
+
+      {/* Fila 3: 4 stat cards de infraestructura */}
+      <div
+        className="ch-grid-wide"
+      >
+        {/* Estadísticas de publicación */}
+        <div className="dash-bottom-card dash-publishing" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold" style={{ color: 'var(--color-text)' }}>
+              Estadísticas de publicación
+            </h3>
+            <span className="text-[10px] font-mono" style={{ color: 'var(--color-muted-2)' }}>Últimos 7 días</span>
+          </div>
+          <div className="grid grid-cols-4 gap-2 pt-1 pb-2">
+            <div>
+              <div className="text-[20px] font-bold font-mono leading-tight" style={{ color: 'var(--color-text)' }}>{publishedToday}</div>
+              <div className="text-[9px] font-mono uppercase tracking-wider" style={{ color: 'var(--color-muted-2)' }}>Publicaciones hoy</div>
+            </div>
+            <div>
+              <div className="dash-bottom-metric-line"><span className="dash-small-icon dash-small-icon--green" aria-hidden="true"><CircleGauge size={23} /></span><div className="text-[20px] font-bold font-mono leading-tight" style={{ color: 'var(--color-text)' }}>{successRate === null ? '—' : `${successRate}%`}</div></div>
+              <div className="text-[9px] font-mono uppercase tracking-wider" style={{ color: 'var(--color-muted-2)' }}>Tasa de éxito</div>
+              <div className="dash-bottom-detail" style={{ color: successTone === 'ok' ? '#00e997' : successTone === 'warn' ? '#ffb900' : '#f04e62' }}>{successFraction}</div>
+            </div>
+            <div>
+              <div className="dash-bottom-metric-line"><span className="dash-small-icon dash-small-icon--purple" aria-hidden="true"><Play size={23} /></span><div className="text-[20px] font-bold font-mono leading-tight" style={{ color: 'var(--color-text)' }}>{runningCount}</div></div>
+              <div className="text-[9px] font-mono uppercase tracking-wider" style={{ color: 'var(--color-muted-2)' }}>En ejecución</div>
+            </div>
+            <div>
+              <div className="dash-bottom-metric-line"><span className="dash-small-icon dash-small-icon--orange" aria-hidden="true"><Clock3 size={23} /></span><div className="text-[20px] font-bold font-mono leading-tight" style={{ color: 'var(--color-text)' }}>{queue.length}</div></div>
+              <div className="text-[9px] font-mono uppercase tracking-wider" style={{ color: 'var(--color-muted-2)' }}>En cola</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Uso del sistema */}
+        <div className="dash-bottom-card dash-system" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[11px] font-mono uppercase tracking-wider font-semibold" style={{ color: 'var(--color-text)' }}>
+              Uso del sistema (servidor)
+            </h3>
+            <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              {stack?.flask_online ? 'ONLINE' : 'OFFLINE'}
+            </span>
+          </div>
+          <div className="dash-gauges">
+            {([['CPU', stats.cpu_percent, '#4199ff'], ['RAM', stats.ram_percent, '#913cf5'], ['Disco', typeof diskPercent === 'number' ? diskPercent : null, '#00e997']] as const).map(([label, percent, color]) => (
+              <div className="dash-gauge" key={label}>
+                <RingProgress percent={percent ?? 0} color={color} size={82} />
+                <span><small>{label}</small><strong>{label === 'Disco' ? diskDisplay : `${percent}%`}</strong></span>
+              </div>
+            ))}
+          </div>
+          <div className="text-[10px] font-mono pt-1" style={{ color: 'var(--color-muted-2)' }}>
+            <span>Fuente: <code style={{ color: 'var(--color-text)' }}>/api/stats</code></span>
+          </div>
+        </div>
+
+        {/* Dispositivos (resumen) — derivamos serial/battery de /api/adb/devices si llega */}
+        <DevicesCard devices={devices} />
+
+        {/* Proxies (resumen) — latencia real de /api/proxies; '—' si no medida */}
+        <ProxiesCard proxies={realProxies} />
       </div>
     </div>
   );
@@ -859,6 +866,7 @@ const SidebarItem: React.FC<{
     onClick={onClick}
     title={title}
     aria-label={title}
+    aria-current={active ? 'page' : undefined}
     className="w-full px-3 py-2.5 flex items-center gap-3 transition-colors border-l-2 text-[12px]"
     style={{
       borderColor: active ? 'var(--color-brand)' : 'transparent',
@@ -886,6 +894,7 @@ export default function App() {
 
   const [stats, setStats] = useState<SystemStats>(EMPTY_STATS);
   const [deviceCount, setDeviceCount] = useState(0);
+  const [adbDevices, setAdbDevices] = useState<DashboardDevice[]>([]);
 
   // Stack real (procesos nativos + salud MPT/Flask) — ver /api/stack
   const [stack, setStack] = useState<StackInfo>({
@@ -903,6 +912,7 @@ export default function App() {
   // 'cuentas' = lista de cuentas, 'cola' = cola de jobs, 'calendario' =
   // calendario completo con formulario de programación.
   const [mainView, setMainView] = useState<'dashboard' | 'calendario' | ReferenceView>('dashboard');
+  const [calendarAccountFilter, setCalendarAccountFilter] = useState('all');
   // Sidebar izquierdo colapsado (reducido a iconos). Default expandido.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // TASK §20: por debajo de 1024px el sidebar deja de ser un dock fijo y pasa
@@ -944,6 +954,7 @@ export default function App() {
     if (narrowLayout) setNavOpen(false);
   };
   const openToolModal = (view: ReferenceView) => {
+    if (view === 'adb') setShowAdbModal(true);
     if (view === 'moneyprinter') setShowMoneyPrinterModal(true);
     if (view === 'panda') setShowPandaModal(true);
     if (view === 'curl') setShowCurlModal(true);
@@ -1002,6 +1013,7 @@ export default function App() {
     setQueue([]);
     setLogs([]);
     setDeviceCount(0);
+    setAdbDevices([]);
   };
 
   // FE-03: si cualquier fetch de refresco devuelve 401/403, la sesión expiró:
@@ -1032,13 +1044,17 @@ export default function App() {
     const accounts = val(accountsRes);
     const proxies = val(proxiesRes);
     const queue = val(queueRes);
-    const devices = val<{ devices?: { serial: string }[] }>(devicesRes);
+    const devices = val<{ devices?: DashboardDevice[] }>(devicesRes);
     if (stats) setStats(stats);
     if (accounts) setAccounts(accounts);
     if (proxies) setProxies(proxies);
     if (queue) setQueue(queue);
     // Contador REAL de terminales conectados por ADB (no cuentas configuradas).
-    if (devices?.devices) setDeviceCount(devices.devices.filter(d => d.serial).length);
+    if (devices?.devices) {
+      const connected = devices.devices.filter(d => d.serial);
+      setDeviceCount(connected.length);
+      setAdbDevices(connected);
+    }
   };
 
   useEffect(() => {
@@ -1098,9 +1114,7 @@ export default function App() {
   }, [currentUser]);
 
   // Account Operations
-  // handleToggleBot ELIMINADO en Fase A: no hay bots de engagement. El botón
-  // "Toggle bot" en AccountsPanel queda visualmente pero sin efecto hasta
-  // que se decida qué acción representa en el modelo de rampas (Fase D).
+  // Sin bots de engagement; la preparación manual se controla por cuenta.
 
   const handleAddAccount = async (newAcc: Partial<Account>) => {
     try {
@@ -1112,12 +1126,14 @@ export default function App() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         addLog('ERROR', 'PlatformServer', `Alta de cuenta rechazada: ${data?.error || res.status}`);
-        return;
+        return String(data?.error || `HTTP ${res.status}`);
       }
       addLog('INFO', 'PlatformServer', `Nueva cuenta creada: ${data?.id || ''}`);
       refreshBackendData();
+      return null;
     } catch (err) {
       addLog('ERROR', 'PlatformServer', `No se pudo crear la cuenta: ${err instanceof Error ? err.message : String(err)}`);
+      return err instanceof Error ? err.message : String(err);
     }
   };
 
@@ -1375,10 +1391,14 @@ export default function App() {
 
   const handleOpenPreviewForJob = async (job: QueueJob) => {
     const acc = accounts.find(a => a.id === job.target_account) || accounts[0];
+    if (!acc) {
+      addLog('ERROR', 'Queue', `No hay cuenta asociada al trabajo ${job.id}`);
+      return;
+    }
     let scriptTxt = job.script || '';
     let captionTxt = job.caption || '';
     // El vídeo REAL está disponible si el job lo tiene (awaiting_preview o publicado)
-    const jobHasVideo = Boolean(job.video_path) && (job.status === 'awaiting_preview' || job.status === 'published' || job.status === 'awaiting_manual_upload');
+    const jobHasVideo = Boolean(job.video_path) && (job.status === 'awaiting_preview' || job.status === 'ready_for_publish' || job.status === 'published' || job.status === 'awaiting_manual_upload');
     if (!scriptTxt && !jobHasVideo) {
       // No hay draft todavía; pedir a MPT un guión real (preview sin encolar)
       try {
@@ -1398,39 +1418,46 @@ export default function App() {
       ? `/videos/${job.video_path.split(/[\\/]/).pop()}`
       : undefined;
     const draft: DraftPost = {
-      id: `draft_${job.id}`, job_id: job.id, title: job.keyword, keyword: job.keyword,
+      id: `draft_${job.id}`, job_id: job.id, job_status: job.status, job_version: job.version, title: job.keyword, keyword: job.keyword,
       target_account_id: acc.id, target_account_username: acc.username,
       platform: 'instagram',
       video_url: videoUrl,
       script: scriptTxt || '(genera guión con MiniMax en el paso anterior)',
       caption: captionTxt || job.script || job.keyword,
-      hashtags: ['#reels','#viral','#fyp'],
+      hashtags: [],
       status: job.status === 'published' ? 'published' : 'draft',
-      created_at: job.created_at, aspect_ratio: '9:16', voice_tts: 'es-ES-AlvaroNeural',
+      created_at: job.created_at, aspect_ratio: job.video_aspect || '9:16', voice_tts: job.voice_name || 'Sin dato',
     };
     setActivePreviewDraft(draft);
   };
 
-  const handleApproveAndPublishDraft = async (draftId: string, updatedCaption: string, platform: 'instagram' | 'tiktok' | 'both') => {
-    if (!activePreviewDraft) return;
+  const handleAdvancePreviewDraft = async (): Promise<string | null> => {
+    if (!activePreviewDraft) return 'No hay trabajo seleccionado';
     const jobId = activePreviewDraft.job_id;
+    const status = activePreviewDraft.job_status;
+    const action = status === 'awaiting_approval' ? 'approve' : status === 'awaiting_preview' ? 'ready' : status === 'ready_for_publish' ? 'publish' : null;
+    if (!action) return `El trabajo está en estado ${status}; no admite esta acción`;
+    if (action === 'publish' && activePreviewDraft.job_version === undefined) return 'Falta la versión actual del trabajo. Actualiza la cola.';
     try {
-      const res = await apiFetch(`/api/queue/${jobId}/approve`, {
+      const res = await apiFetch(`/api/queue/${jobId}/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ caption: updatedCaption, platform })
+        body: JSON.stringify(action === 'publish' ? { confirm: true, expected_version: activePreviewDraft.job_version } : {})
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        addLog('ERROR', 'Publisher', `Aprobación rechazada (${jobId}): ${data?.error || res.status}`);
-      } else {
-        addLog('INFO', 'Publisher', `Draft ${jobId} aprobado -> generación+publicación iniciada (${platform.toUpperCase()})`);
+        const error = String(data?.error || `HTTP ${res.status}`);
+        addLog('ERROR', 'Queue', `${action} rechazado (${jobId}): ${error}`);
+        return error;
       }
+      addLog('INFO', 'Queue', `Trabajo ${jobId}: ${action} aceptado`);
       setActivePreviewDraft(null);
       refreshBackendData();
+      return null;
     } catch (err) {
-      addLog('ERROR', 'Publisher', `approve falló: ${err instanceof Error ? err.message : String(err)}`);
-      setActivePreviewDraft(null);
+      const error = err instanceof Error ? err.message : String(err);
+      addLog('ERROR', 'Queue', `${action} falló: ${error}`);
+      return error;
     }
   };
 
@@ -1449,8 +1476,15 @@ export default function App() {
     return <LoginScreen onLoginSuccess={(u) => setCurrentUser(u)} />;
   }
 
+  const today = new Date().toDateString();
+  const scheduledToday = queue.filter(job => {
+    if (!job.scheduled_ts) return false;
+    const date = typeof job.scheduled_ts === 'number' ? new Date(job.scheduled_ts * 1000) : new Date(job.scheduled_ts);
+    return date.toDateString() === today;
+  }).length;
+
   return (
-    <div className="theme-dark flex flex-col h-screen overflow-hidden font-sans">
+    <div className={`theme-dark app-shell flex flex-col h-screen overflow-hidden font-sans ${mainView === 'dashboard' ? 'dash-shell' : ''}`}>
       {/* TASK §20: en layout estrecho no hay dock, así que la navegación se
           abre desde aquí. En escritorio el botón no se renderiza. */}
       {narrowLayout && (
@@ -1478,18 +1512,17 @@ export default function App() {
         deviceCount={deviceCount}
         onOpenPandaGrid={() => window.open('/panda', '_blank', 'noopener,width=1100,height=760')}
         onOpenMoneyPrinter={() => navigateTool('moneyprinter')}
-        onOpenAdbBridge={() => openTab('adb', () => setShowAdbModal(true))}
+        onOpenAdbBridge={() => navigateTool('adb')}
         onOpenCurlTester={() => navigateTool('curl')}
         onOpenCodeViewer={() => navigateTool('code')}
         onOpenVersionControl={() => navigateTool('versions')}
         onDownloadAllZip={() => { window.location.href = '/api/download-zip'; }}
-        onToggleMaster={() => { /* Fase A: master ON/OFF inerte. */ }}
         onLogout={handleLogout}
       />
 
       {/* Stack: procesos nativos + salud MPT/Flask — texto plano */}
       <div
-        className="flex items-center gap-4 px-4 py-1 border-b text-[11px] font-mono overflow-x-auto whitespace-nowrap"
+        className="dash-stack flex items-center gap-4 px-4 py-1 border-b text-[11px] font-mono overflow-x-auto whitespace-nowrap"
         style={{ background: 'var(--color-stack-bg)', borderColor: 'var(--color-stack-border)' }}
       >
         <span className="font-bold tracking-wider text-[#9CA1A8]">STACK NATIVO</span>
@@ -1528,7 +1561,7 @@ export default function App() {
           className={
             narrowLayout
               ? `absolute inset-y-0 left-0 z-40 ${navOpen ? 'w-56' : 'w-0'} shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200`
-              : `${sidebarCollapsed ? 'w-14' : 'w-[212px]'} shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200`
+              : `${sidebarCollapsed ? 'w-14' : 'w-[213px]'} shrink-0 border-r flex flex-col font-mono text-[12px] overflow-hidden transition-all duration-200`
           }
           style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
         >
@@ -1544,7 +1577,7 @@ export default function App() {
           </div>
 
           {/* Navegación principal: Dashboard, Cuentas, Cola, Calendario */}
-          <nav id="ch-sidebar" aria-label="Navegación principal" className="flex-1 py-2">
+          <nav id="ch-sidebar" aria-label="Navegación principal" className="py-2">
             <SidebarItem
               collapsed={sidebarCollapsed}
               active={mainView === 'dashboard'}
@@ -1583,14 +1616,14 @@ export default function App() {
               onClick={() => { setMainView('calendario'); if (narrowLayout) setNavOpen(false); }}
               title="Calendario"
               label="Calendario"
-              badge={queue.filter(j => j.scheduled_ts).length}
+              badge={scheduledToday}
               icon={
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               }
             />
           </nav>
 
-          <nav aria-label="Navegación técnica">
+          <nav aria-label="Navegación técnica" className="mt-5 flex-1">
           {/* Separador + items secundarios (modales del header original).
               Segundo landmark: las superficies técnicas son navegacion, no
               parte del flujo operativo principal (TASK §8.1). */}
@@ -1605,7 +1638,8 @@ export default function App() {
             />
             <SidebarItem
               collapsed={sidebarCollapsed}
-              onClick={() => openTab('adb', () => setShowAdbModal(true))}
+              active={mainView === 'adb'}
+              onClick={() => navigateTool('adb')}
               title="ADB Bridge"
               label="ADB Bridge"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>}
@@ -1618,26 +1652,8 @@ export default function App() {
               label="Panda live"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="8" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/></svg>}
             />
-            <SidebarItem
-              collapsed={sidebarCollapsed}
-              active={mainView === 'proxies'}
-              onClick={() => navigateTool('proxies')}
-              title="Proxies"
-              label="Proxies"
-              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>}
-            />
           </div>
 
-          {/* Dev group — separador visible + etiqueta (TASK §8.1). */}
-          {!sidebarCollapsed && (
-            <div
-              className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest border-t"
-              style={{ color: 'var(--color-muted-2)', borderColor: 'var(--color-line)' }}
-              aria-label="Sección dev"
-            >
-              Dev
-            </div>
-          )}
           <div className="py-1">
             <SidebarItem
               collapsed={sidebarCollapsed}
@@ -1663,6 +1679,14 @@ export default function App() {
               label="Versiones"
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
             />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              active={mainView === 'proxies'}
+              onClick={() => navigateTool('proxies')}
+              title="Proxies"
+              label="Proxies"
+              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>}
+            />
           </div>
           </nav>
 
@@ -1687,16 +1711,53 @@ export default function App() {
         {/* Main — vista seleccionada por mainView */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Encabezado de página */}
-          {mainView === 'dashboard' && <div className="flex items-center justify-between border-b px-4 py-2.5" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
-            <h1 className="text-[13px] font-mono uppercase tracking-wider font-bold" style={{ color: 'var(--color-text)' }}>
-              Dashboard
-            </h1>
-            {mainView === 'dashboard' && (
-              <span className="text-[11px]" style={{ color: 'var(--color-muted-2)' }}>
-                Resumen general de tu Phone Farm
-              </span>
-            )}
-          </div>}
+          {mainView === 'dashboard' && (
+            <div className="dash-page-heading" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}>
+              <div className="dash-page-heading-copy">
+                <h1 style={{ color: 'var(--color-text)' }}>
+                  DASHBOARD
+                </h1>
+                <p style={{ color: 'var(--color-muted-2)' }}>
+                  Resumen general de tu Phone Farm
+                </p>
+              </div>
+              <div className="dash-page-actions">
+                <button
+                  type="button"
+                  onClick={() => setMainView('calendario')}
+                  className="dash-heading-today"
+                  style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface-2)', color: 'var(--color-text)' }}
+                >
+                  <CalendarDays size={15} aria-hidden="true" />
+                  Hoy
+                </button>
+                <div className="dash-heading-arrows" style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface-2)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setMainView('calendario')}
+                    className="px-2 py-1 text-[11px] hover:text-white"
+                    style={{ color: 'var(--color-muted)' }}
+                    title="Anterior"
+                  >
+                    &lt;
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMainView('calendario')}
+                    className="px-2 py-1 text-[11px] hover:text-white border-l"
+                    style={{ borderColor: 'var(--color-line)', color: 'var(--color-muted)' }}
+                    title="Siguiente"
+                  >
+                    &gt;
+                  </button>
+                </div>
+                <CalendarDays className="dash-heading-calendar-icon" size={20} aria-hidden="true" />
+                <span className="dash-heading-month" style={{ color: 'var(--color-text)' }}>
+                  {new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).replace(/^./, c => c.toUpperCase())}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/*
             * Cuerpo:
@@ -1713,6 +1774,7 @@ export default function App() {
                 proxies={proxies}
                 stats={stats}
                 deviceCount={deviceCount}
+                devices={adbDevices}
                 stack={stack}
                 onAddAccount={handleAddAccount}
                 onDeleteAccount={handleDeleteAccount}
@@ -1742,18 +1804,22 @@ export default function App() {
                 stats={stats}
                 stack={stack}
                 deviceCount={deviceCount}
+                devices={adbDevices}
+                logs={logs}
                 onSelectAccount={(acc) => setSelectedAccountForDetail(acc)}
                 onAddAccount={handleAddAccount}
                 onProcessNextJob={handleProcessNextJob}
                 onOpenTool={openToolModal}
                 onOpenPreview={handleOpenPreviewForJob}
                 onOpenCalendar={() => setMainView('calendario')}
+                onRunApi={handleRunEndpointTest}
+                onRefresh={refreshBackendData}
               />
             )}
 
             {mainView === 'calendario' && (
               <div className="ref-page ref-calendar-page">
-                <div className="ref-page-heading"><div><h1>Calendario</h1><p>Planifica y gestiona tus publicaciones en todas las cuentas</p></div><button className="ref-primary" onClick={() => document.getElementById('schedule-quick-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>+ Nueva publicación</button></div>
+                <div className="ref-page-heading"><div><h1>Calendario</h1><p>Planifica y gestiona tus publicaciones en todas las cuentas</p></div><div className="ref-calendar-heading-actions"><select aria-label="Filtrar calendario por cuenta" value={calendarAccountFilter} onChange={event => setCalendarAccountFilter(event.target.value)}><option value="all">◎ Todas las cuentas (Global)</option>{accounts.map(account => <option key={account.id} value={account.id}>@{account.username}</option>)}</select><button className="ref-primary" onClick={() => document.getElementById('schedule-quick-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>+ Nueva publicación</button></div></div>
                 <div className="ref-metrics">
                   <div className="ref-metric ref-tone-blue"><span className="ref-metric-icon">↗</span><div className="ref-metric-copy"><span>Publicaciones hoy</span><strong>{queue.filter(j => j.scheduled_ts && new Date(j.scheduled_ts).toDateString() === new Date().toDateString()).length}</strong><small>Programadas para hoy</small></div></div>
                   <div className="ref-metric ref-tone-purple"><span className="ref-metric-icon">▣</span><div className="ref-metric-copy"><span>Esta semana</span><strong>{queue.filter(j => j.scheduled_ts && Math.abs(new Date(j.scheduled_ts).getTime() - Date.now()) < 7*86400000).length}</strong><small>Publicaciones</small></div></div>
@@ -1764,6 +1830,8 @@ export default function App() {
                 <div className="h-full flex flex-col rounded-lg overflow-hidden border" style={{ borderColor: 'var(--color-line)' }}>
                   <ScheduleModal
                     embedded
+                    externalAccountFilter={calendarAccountFilter}
+                    hideFilterControls
                     queue={queue}
                     accounts={accounts}
                     onClose={() => { /* no-op en modo embebido */ }}
@@ -1773,6 +1841,7 @@ export default function App() {
                   />
                 </div>
                 </div><div className="ref-section ref-upcoming"><header className="ref-section-head"><h2>Próximas publicaciones</h2><span>Siguientes 24 horas</span></header>{queue.filter(j => j.scheduled_ts && new Date(j.scheduled_ts).getTime() >= Date.now()).sort((a,b) => new Date(a.scheduled_ts!).getTime() - new Date(b.scheduled_ts!).getTime()).slice(0,6).map(j => <button key={j.id} className="ref-upcoming-row" onClick={() => setMainView('cola')}><time>{new Date(j.scheduled_ts!).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</time><span>{j.keyword}<small>@{j.target_account}</small></span><b>{j.status}</b></button>)}{!queue.some(j => j.scheduled_ts && new Date(j.scheduled_ts).getTime() >= Date.now()) && <p className="ref-empty">No hay publicaciones próximas.</p>}</div></div>
+                <CalendarInsights queue={queue} accounts={accounts} onOpenPreview={handleOpenPreviewForJob} onSchedule={() => document.getElementById('schedule-quick-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}/>
               </div>
             )}
           </div>
@@ -1783,7 +1852,7 @@ export default function App() {
             *  - Colapsado: altura 60px, muestra los últimos 2 logs (slice(-2))
             * Toggle con flecha arriba/abajo en la cabecera del bloque.
             */}
-          <div
+          {(['dashboard', 'cola', 'proxies', 'code', 'versions'] as string[]).includes(mainView) && <div
             className="shrink-0 overflow-hidden border-t flex flex-col"
             style={{
               // TASK §20: en layout estrecho la consola arranca mostrando SOLO su
@@ -1837,7 +1906,7 @@ export default function App() {
                 />
               </div>
             </div>
-          </div>
+          </div>}
         </main>
 
       {/* Modals */}
@@ -1934,7 +2003,7 @@ export default function App() {
           draft={activePreviewDraft}
           accounts={accounts}
           onClose={() => setActivePreviewDraft(null)}
-          onApproveAndPublish={handleApproveAndPublishDraft}
+          onAdvance={handleAdvancePreviewDraft}
         />
       )}
 
