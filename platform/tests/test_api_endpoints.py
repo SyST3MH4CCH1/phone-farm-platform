@@ -150,18 +150,25 @@ def test_warmup_status_honest_and_without_credentials(flask_client):
 # /api/stats — disk_percent añadido al payload
 # ---------------------------------------------------------------------------
 
-def test_api_stats_incluye_disk_percent(flask_client):
+def test_api_stats_incluye_disk_percent(flask_client, monkeypatch):
     """El payload de /api/stats debe incluir disk_percent (float o None).
 
     En Windows sin shutil.disk_usage válido, debe devolver None (no tirar
     500). El campo debe estar presente aunque sea None — la UI del Dashboard
     distingue '—' (sin dato) de un porcentaje real.
     """
+    from phonefarm import proxy_manager
+
+    def missing_adb():
+        raise RuntimeError("ADB unavailable")
+
+    monkeypatch.setattr(proxy_manager, "adb_discover_devices", missing_adb)
     resp = flask_client.get("/api/stats", headers=_hdr())
     assert resp.status_code == 200, resp.get_data(as_text=True)
     body = resp.get_json()
     assert "disk_percent" in body, f"disk_percent ausente en /api/stats: {body}"
     assert body["disk_percent"] is None or isinstance(body["disk_percent"], (int, float))
+    assert body["panda_grid_status"] == "Disconnected"
     # Otros campos contractuales:
     for key in ("cpu_percent", "ram_percent", "errores", "videos_subidos"):
         assert key in body, f"{key} ausente en /api/stats"

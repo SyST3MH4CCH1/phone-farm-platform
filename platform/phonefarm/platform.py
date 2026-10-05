@@ -1181,6 +1181,11 @@ def api_stats():
         disk_percent = psutil.disk_usage("/").percent
     except Exception:
         disk_percent = None
+    try:
+        panda_connected = bool(proxy_manager.adb_discover_devices())
+    except RuntimeError:
+        # ADB is optional on CI and on hosts without attached devices.
+        panda_connected = False
     return jsonify({
         "videos_subidos": sum(1 for j in queue if j.get("status") == "published"),
         "acciones_hoy": sum(
@@ -1194,7 +1199,7 @@ def api_stats():
         "active_proxies": sum(1 for p in proxies if p.get("status") == "online"),
         # Panda Grid = rejilla de dispositivos ADB REALES (antes era una env var
         # con default "Connected" sin verificar nada -> cero fake).
-        "panda_grid_status": "Connected" if proxy_manager.adb_discover_devices() else "Disconnected",
+        "panda_grid_status": "Connected" if panda_connected else "Disconnected",
         "bridge_config": {
             "mini_pc_ip": "127.0.0.1",
             "mini_pc_port": PORT,

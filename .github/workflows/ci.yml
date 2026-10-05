@@ -156,17 +156,18 @@ jobs:
           sparse-checkout-cone-mode: false
       - name: Verificar platform/third_party.lock
         run: |
-          python -c "
-          import re, sys
-          lock = open('platform/third_party.lock').read()
+          python - <<'PY'
+          from pathlib import Path
+          import tomllib
+
+          lock = tomllib.loads(Path('platform/third_party.lock').read_text(encoding='utf-8'))
           expected = {'MoneyPrinterTurbo': 'cf5a3ae'}
-          for comp, sha in expected.items():
-              if not re.search(rf'^\[{comp}\].*?commit\s*=\s*[\"']?' + sha, lock, re.M | re.DOTALL):
-                  print(f'LOCK MISMATCH: {comp} sha {sha} not found in platform/third_party.lock')
-                  sys.exit(1)
-              print(f'{comp}: OK ({sha})')
-          print('platform/third_party.lock: PASS')
-          "
+          for component, commit_prefix in expected.items():
+              actual = lock.get(component, {}).get('commit', '')
+              if not actual.startswith(commit_prefix):
+                  raise SystemExit(f'LOCK MISMATCH: {component} expected {commit_prefix}')
+              print(f'{component}: OK ({actual})')
+          PY
 
   secret-scan:
     name: Secret scan (gitleaks — historial y árbol actual)
